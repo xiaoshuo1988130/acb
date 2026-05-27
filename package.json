@@ -29,6 +29,14 @@
     "coding-agent",
     "local-first"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiaoshuo1988130/acb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xiaoshuo1988130/acb/issues"
+  },
+  "homepage": "https://github.com/xiaoshuo1988130/acb#readme",
   "author": "xiaoshuo1988130",
   "license": "MIT",
   "engines": {
