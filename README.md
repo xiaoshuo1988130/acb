@@ -49,6 +49,7 @@ acb save --from <agent> --summary <text> --status <text> --note <text> --tag <ta
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
 acb save --from <agent> --summary <text> --diff
+acb diff-preview
 acb status
 acb latest
 acb show <packet-id>
@@ -75,6 +76,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb status` prints the current workspace handoff state and the next commands to copy or inspect the latest packet.
 
 `acb save --diff` stores a bounded tracked Git diff body and a lightweight Git snapshot. It is useful when the next agent needs to inspect current code changes.
+
+`acb diff-preview` prints or writes the same bounded Git diff body without saving a packet.
 
 `acb preview` writes the latest handoff prompt to a Markdown file for review. Add `--open` when you want ACB to open it with the system default app.
 

@@ -73,6 +73,7 @@ Use `--git` to attach a lightweight snapshot:
 ```bash
 acb save --summary "Ready for another agent" --git
 acb save --summary "Review current changes" --diff
+acb diff-preview --out ./handoff-diff.md
 ```
 
 ACB records:

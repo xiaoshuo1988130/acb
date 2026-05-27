@@ -235,6 +235,17 @@ test("save can attach a bounded git diff body", () => {
   assert.equal(prompt.status, 0);
   assert.match(prompt.stdout, /## Context Body/);
   assert.match(prompt.stdout, /```diff/);
+
+  const diffPreview = run(["diff-preview", "--workspace", workspace, "--diff-limit", "1000"], { env });
+  assert.equal(diffPreview.status, 0);
+  assert.match(diffPreview.stdout, /## Git Diff/);
+  assert.match(diffPreview.stdout, /changed line for handoff/);
+
+  const outPath = path.join(dir, "diff-preview.md");
+  const filePreview = run(["diff-preview", "--workspace", workspace, "--out", outPath], { env });
+  assert.equal(filePreview.status, 0);
+  assert.match(filePreview.stdout, /wrote diff preview/);
+  assert.match(fs.readFileSync(outPath, "utf8"), /changed line for handoff/);
 });
 
 test("save rejects git snapshot outside a git workspace", () => {
@@ -261,6 +272,10 @@ test("save rejects invalid body sources", () => {
   const badDiffLimit = run(["save", "--summary", "bad", "--diff", "--diff-limit", "nope"], { env });
   assert.equal(badDiffLimit.status, 2);
   assert.match(badDiffLimit.stderr, /--diff-limit must be/);
+
+  const diffOutsideGit = run(["diff-preview", "--workspace", dir], { env });
+  assert.equal(diffOutsideGit.status, 2);
+  assert.match(diffOutsideGit.stderr, /--diff requires a Git workspace/);
 });
 
 test("save requires useful handoff content", () => {

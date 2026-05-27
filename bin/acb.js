@@ -15,6 +15,7 @@ const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>]
+  acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
   acb latest [--workspace <path>] [--json]
   acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
@@ -46,6 +47,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "help" || command === "--help" || command === "-h") return print(usage);
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
   if (command === "save") return saveCommand(args);
+  if (command === "diff-preview") return diffPreviewCommand(args);
   if (command === "latest") return latestCommand(args);
   if (command === "status") return statusCommand(args);
   if (command === "show") return showCommand(args);
@@ -129,6 +131,25 @@ function createHandoffPacket({ from, workspace, summary = null, status = null, n
     body,
     git,
   };
+}
+
+function diffPreviewCommand(args) {
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const diffResult = readGitDiffBody(workspace, argValue(args, "--diff-limit"));
+  if (!diffResult.ok) {
+    console.error(diffResult.error);
+    return 2;
+  }
+  const outPath = argValue(args, "--out");
+  if (outPath) {
+    const resolved = path.resolve(outPath);
+    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    fs.writeFileSync(resolved, diffResult.body);
+    console.log(`[acb] wrote diff preview to ${resolved}`);
+    return 0;
+  }
+  process.stdout.write(diffResult.body);
+  return 0;
 }
 
 function latestCommand(args) {
