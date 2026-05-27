@@ -191,6 +191,7 @@ Initial tools:
 
 - `read_latest_handoff`: returns the newest handoff prompt for a workspace.
 - `save_handoff`: saves an explicit local handoff packet from an MCP-capable agent.
+- `update_handoff`: corrects an existing handoff packet while preserving its original creation time.
 - `read_handoff`: returns a specific handoff prompt by packet id.
 - `search_handoffs`: searches local handoff history.
 - `list_workspaces`: lists local workspaces with handoff history.

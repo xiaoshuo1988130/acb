@@ -667,6 +667,7 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.deepEqual(messages[0].result.capabilities, { tools: { listChanged: false } });
   assert.equal(messages[1].result.tools[0].name, "read_latest_handoff");
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "search_handoffs"));
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "update_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "list_workspaces"));
   assert.match(messages[2].result.content[0].text, /MCP handoff/);
   assert.equal(messages[2].result.structuredContent.packet.summary, "MCP handoff");
@@ -723,6 +724,74 @@ test("serve can save handoff packets over MCP stdio", () => {
   assert.deepEqual(latest.tags, ["mcp", "handoff"]);
 });
 
+test("serve can update handoff packets over MCP stdio", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: storePath };
+
+  run([
+    "save",
+    "--workspace",
+    workspace,
+    "--summary",
+    "MCP original",
+    "--note",
+    "old note",
+    "--tag",
+    "old",
+  ], { env });
+  const original = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+
+  const served = run(["serve"], {
+    env,
+    input: [
+      rpc("tools/call", {
+        name: "update_handoff",
+        arguments: {
+          id: original.id,
+          summary: "MCP updated",
+          status: "ready",
+          notes: ["new note"],
+          tags: ["new"],
+          body: "Updated from MCP client.",
+        },
+      }, 1),
+      rpc("tools/call", { name: "read_handoff", arguments: { id: original.id } }, 2),
+    ].join(""),
+  });
+  assert.equal(served.status, 0);
+  const messages = parseJsonLines(served.stdout);
+  assert.equal(messages[0].result.isError, false);
+  assert.match(messages[0].result.content[0].text, /Updated ACB handoff packet/);
+  assert.equal(messages[0].result.structuredContent.packet.created_at, original.created_at);
+  assert.match(messages[0].result.structuredContent.packet.updated_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(messages[0].result.structuredContent.packet.summary, "MCP updated");
+  assert.deepEqual(messages[0].result.structuredContent.packet.notes, ["old note", "new note"]);
+  assert.deepEqual(messages[0].result.structuredContent.packet.tags, ["old", "new"]);
+  assert.match(messages[1].result.content[0].text, /MCP updated/);
+  assert.match(messages[1].result.content[0].text, /Updated from MCP client/);
+
+  const reset = run(["serve"], {
+    env,
+    input: rpc("tools/call", {
+      name: "update_handoff",
+      arguments: {
+        id: original.id,
+        clear_notes: true,
+        notes: ["only"],
+        clear_tags: true,
+        tags: ["solo"],
+      },
+    }, 1),
+  });
+  assert.equal(reset.status, 0);
+  const [resetMessage] = parseJsonLines(reset.stdout);
+  assert.deepEqual(resetMessage.result.structuredContent.packet.notes, ["only"]);
+  assert.deepEqual(resetMessage.result.structuredContent.packet.tags, ["solo"]);
+});
+
 test("serve can save handoff packets with git diff over MCP stdio", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");
@@ -764,11 +833,12 @@ test("serve returns tool errors as tool results", () => {
     rpc("tools/call", { name: "save_handoff", arguments: { workspace: dir } }, 2),
     rpc("tools/call", { name: "search_handoffs", arguments: { query: "" } }, 3),
     rpc("tools/call", { name: "list_workspaces", arguments: { limit: 0 } }, 4),
+    rpc("tools/call", { name: "update_handoff", arguments: { id: "pkt_missing", summary: "x" } }, 5),
   ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
-  const [message, saveMessage, searchMessage, workspaceMessage] = parseJsonLines(served.stdout);
+  const [message, saveMessage, searchMessage, workspaceMessage, updateMessage] = parseJsonLines(served.stdout);
   assert.equal(message.result.isError, true);
   assert.match(message.result.content[0].text, /No handoff packet found/);
   assert.equal(saveMessage.result.isError, true);
@@ -777,6 +847,8 @@ test("serve returns tool errors as tool results", () => {
   assert.match(searchMessage.result.content[0].text, /query is required/);
   assert.equal(workspaceMessage.result.isError, true);
   assert.match(workspaceMessage.result.content[0].text, /limit must be/);
+  assert.equal(updateMessage.result.isError, true);
+  assert.match(updateMessage.result.content[0].text, /No handoff packet found/);
 });
 
 test("delete removes a single packet", () => {

@@ -148,14 +148,13 @@ function updateCommand(args) {
     return 2;
   }
 
-  const store = loadStore();
-  const index = store.packets.findIndex((packet) => packet.id === id);
-  if (index === -1) {
+  const existing = findPacket({ id });
+  if (!existing) {
     console.error(`No handoff packet found for id: ${id}`);
     return 1;
   }
 
-  const packet = { ...store.packets[index] };
+  const packet = { ...existing };
   if (argValue(args, "--summary") !== undefined) packet.summary = argValue(args, "--summary") || null;
   if (argValue(args, "--status") !== undefined) packet.status = argValue(args, "--status") || null;
 
@@ -186,8 +185,7 @@ function updateCommand(args) {
   }
 
   packet.updated_at = new Date().toISOString();
-  store.packets[index] = packet;
-  writeStore(store);
+  replacePacket(packet);
 
   if (args.includes("--json")) {
     process.stdout.write(`${JSON.stringify(packet, null, 2)}\n`);
@@ -948,7 +946,7 @@ function verifyMcpServer(name, server) {
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["read_latest_handoff", "save_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
+  const requiredTools = ["read_latest_handoff", "save_handoff", "update_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   report.ok = Object.values(report.checks).every(Boolean);
   if (!report.ok && !report.error) report.error = "MCP server did not expose the expected ACB tools.";
@@ -1258,6 +1256,65 @@ function mcpTools() {
       },
     },
     {
+      name: "update_handoff",
+      title: "Update Handoff",
+      description: "Update an existing local ACB handoff packet without changing its original created_at timestamp.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "Handoff packet id.",
+          },
+          summary: {
+            type: "string",
+            description: "Replacement short handoff summary.",
+          },
+          status: {
+            type: "string",
+            description: "Replacement current state or progress status.",
+          },
+          notes: {
+            type: "array",
+            items: { type: "string" },
+            description: "Notes to append, or replacement notes when clear_notes is true.",
+          },
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "Tags to append, or replacement tags when clear_tags is true.",
+          },
+          body: {
+            type: "string",
+            description: "Replacement longer handoff context body.",
+          },
+          clear_notes: {
+            type: "boolean",
+            description: "Clear existing notes before applying notes.",
+          },
+          clear_tags: {
+            type: "boolean",
+            description: "Clear existing tags before applying tags.",
+          },
+          include_git: {
+            type: "boolean",
+            description: "Refresh the lightweight Git snapshot when the packet workspace is a Git repository.",
+          },
+          include_diff: {
+            type: "boolean",
+            description: "Replace body with tracked staged and unstaged Git diff text and refresh Git snapshot.",
+          },
+          diff_limit: {
+            type: "integer",
+            minimum: 1,
+            description: "Maximum diff body characters when include_diff is true. Defaults to 20000.",
+          },
+        },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    {
       name: "search_handoffs",
       title: "Search Handoffs",
       description: "Search local ACB handoff packet summaries, notes, tags, body text, workspace paths, and lightweight Git metadata.",
@@ -1329,6 +1386,7 @@ function mcpCallTool(params) {
   const args = params?.arguments || {};
   if (name === "read_latest_handoff") return mcpReadLatestHandoff(args);
   if (name === "save_handoff") return mcpSaveHandoff(args);
+  if (name === "update_handoff") return mcpUpdateHandoff(args);
   if (name === "read_handoff") return mcpReadHandoff(args);
   if (name === "search_handoffs") return mcpSearchHandoffs(args);
   if (name === "list_workspaces") return mcpListWorkspaces(args);
@@ -1430,6 +1488,86 @@ function mcpReadHandoff(args) {
     structuredContent: { packet, prompt },
     isError: false,
   };
+}
+
+function mcpUpdateHandoff(args) {
+  const id = typeof args.id === "string" ? args.id : "";
+  if (!id) {
+    return {
+      content: [{ type: "text", text: "id is required." }],
+      isError: true,
+    };
+  }
+  const existing = findPacket({ id });
+  if (!existing) {
+    return {
+      content: [{ type: "text", text: `No handoff packet found for id: ${id}` }],
+      isError: true,
+    };
+  }
+  if (!hasMcpUpdateArgs(args)) {
+    return {
+      content: [{ type: "text", text: "update_handoff requires at least one update field." }],
+      isError: true,
+    };
+  }
+
+  const packet = { ...existing };
+  if (typeof args.summary === "string") packet.summary = args.summary.trim() ? args.summary : null;
+  if (typeof args.status === "string") packet.status = args.status.trim() ? args.status : null;
+
+  const notes = normalizeStringArray(args.notes);
+  if (args.clear_notes) packet.notes = [];
+  if (notes.length) packet.notes = [...(packet.notes || []), ...notes];
+
+  const tags = normalizeStringArray(args.tags);
+  if (args.clear_tags) packet.tags = [];
+  if (tags.length) packet.tags = uniqueStrings([...(packet.tags || []), ...tags]);
+
+  if (typeof args.body === "string") packet.body = args.body.trim() ? args.body : null;
+
+  if (args.include_diff) {
+    const diffResult = readGitDiffBody(packet.workspace, args.diff_limit);
+    if (!diffResult.ok) {
+      return {
+        content: [{ type: "text", text: diffResult.error }],
+        isError: true,
+      };
+    }
+    packet.body = diffResult.body;
+  }
+
+  if (args.include_git || args.include_diff) {
+    const gitResult = readGitSnapshot(packet.workspace);
+    if (!gitResult.ok) {
+      return {
+        content: [{ type: "text", text: gitResult.error }],
+        isError: true,
+      };
+    }
+    packet.git = gitResult.snapshot;
+  }
+
+  packet.updated_at = new Date().toISOString();
+  replacePacket(packet);
+
+  return {
+    content: [{ type: "text", text: `Updated ACB handoff packet: ${packet.id}` }],
+    structuredContent: { packet },
+    isError: false,
+  };
+}
+
+function hasMcpUpdateArgs(args) {
+  return typeof args.summary === "string"
+    || typeof args.status === "string"
+    || normalizeStringArray(args.notes).length > 0
+    || normalizeStringArray(args.tags).length > 0
+    || typeof args.body === "string"
+    || Boolean(args.clear_notes)
+    || Boolean(args.clear_tags)
+    || Boolean(args.include_git)
+    || Boolean(args.include_diff);
 }
 
 function normalizeStringArray(value) {
@@ -1586,6 +1724,15 @@ function findPacket({ workspace = null, id = null } = {}) {
     if (workspace && packet.workspace !== workspace) return false;
     return true;
   }) || null;
+}
+
+function replacePacket(packet) {
+  const store = loadStore();
+  const index = store.packets.findIndex((item) => item.id === packet.id);
+  if (index === -1) return false;
+  store.packets[index] = packet;
+  writeStore(store);
+  return true;
 }
 
 function loadStore() {
