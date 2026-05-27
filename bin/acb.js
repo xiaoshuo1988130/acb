@@ -21,7 +21,7 @@ Usage:
   acb latest [--workspace <path>] [--json]
   acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
-  acb resume [--workspace <path>] [--id <packet-id>] [--no-copy | --print-prompt | --json]
+  acb resume [--workspace <path>] [--id <packet-id>] [--no-copy | --print-prompt | --json | --preview] [--out <path>] [--open]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb preview [--workspace <path>] [--id <packet-id>] [--out <path>] [--open]
   acb list [--workspace <path>] [--limit <n>] [--json]
@@ -317,8 +317,9 @@ function showCommand(args) {
 }
 
 function resumeCommand(args) {
-  if (resumeOutputModes(args).length > 1) {
-    console.error("Use only one resume output mode: --no-copy, --print-prompt, or --json.");
+  const wantsPreview = resumeWantsPreview(args);
+  if (resumeOutputModes(args, wantsPreview).length > 1) {
+    console.error("Use only one resume output mode: --no-copy, --print-prompt, --json, or --preview.");
     return 2;
   }
 
@@ -331,6 +332,9 @@ function resumeCommand(args) {
   }
 
   const prompt = renderHandoffPrompt(packet);
+  if (wantsPreview) {
+    return writePromptPreview(packet, args);
+  }
   if (args.includes("--json")) {
     process.stdout.write(`${JSON.stringify({ packet, prompt }, null, 2)}\n`);
     return 0;
@@ -353,8 +357,15 @@ function resumeCommand(args) {
   return 0;
 }
 
-function resumeOutputModes(args) {
-  return ["--no-copy", "--print-prompt", "--json"].filter((flag) => args.includes(flag));
+function resumeWantsPreview(args) {
+  return args.includes("--preview") || args.includes("--open") || args.includes("--out");
+}
+
+function resumeOutputModes(args, wantsPreview = resumeWantsPreview(args)) {
+  return [
+    ...["--no-copy", "--print-prompt", "--json"].filter((flag) => args.includes(flag)),
+    ...(wantsPreview ? ["--preview"] : []),
+  ];
 }
 
 function promptCommand(args) {
@@ -394,6 +405,10 @@ function previewCommand(args) {
     return 1;
   }
 
+  return writePromptPreview(packet, args);
+}
+
+function writePromptPreview(packet, args) {
   const outPath = argValue(args, "--out") || defaultPreviewPath(packet);
   const resolved = path.resolve(outPath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });

@@ -322,11 +322,19 @@ test("resume is a downstream handoff entrypoint", () => {
   assert.equal(payload.packet.id, packet.id);
   assert.match(payload.prompt, /Resume shortcut/);
 
+  const previewPath = path.join(dir, "resume-preview.md");
+  const preview = run(["resume", "--id", packet.id, "--preview", "--out", previewPath], { env });
+  assert.equal(preview.status, 0);
+  assert.match(preview.stdout, /wrote prompt preview/);
+  const previewContent = fs.readFileSync(previewPath, "utf8");
+  assert.match(previewContent, /# ACB Handoff Prompt Preview/);
+  assert.match(previewContent, /Resume shortcut/);
+
   const missing = run(["resume", "--workspace", path.join(dir, "missing"), "--print-prompt"], { env });
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /No handoff packet found to resume/);
 
-  const invalid = run(["resume", "--id", packet.id, "--json", "--print-prompt"], { env });
+  const invalid = run(["resume", "--id", packet.id, "--json", "--preview"], { env });
   assert.equal(invalid.status, 2);
   assert.match(invalid.stderr, /Use only one resume output mode/);
 });

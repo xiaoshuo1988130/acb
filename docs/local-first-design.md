@@ -72,9 +72,10 @@ The downstream side uses `resume`:
 acb resume
 acb resume --workspace /path/to/workspace --print-prompt
 acb resume --id pkt_20260527123000_abc123 --json
+acb resume --id pkt_20260527123000_abc123 --preview --open
 ```
 
-`acb resume` copies the latest handoff prompt for the current workspace. It is a named entrypoint for the receiving side of the handoff; the older `acb prompt` command remains available.
+`acb resume` copies the latest handoff prompt for the current workspace. `--preview` writes the same Markdown review file as `acb preview`, and `--open` opens it. It is a named entrypoint for the receiving side of the handoff; the older `acb prompt` command remains available.
 
 Existing packets can be corrected without deleting and recreating them:
 

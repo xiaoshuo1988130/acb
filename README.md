@@ -79,6 +79,7 @@ acb latest
 acb show <packet-id>
 acb show <packet-id> --prompt
 acb resume
+acb resume --preview
 acb prompt
 acb preview
 acb list
@@ -105,7 +106,7 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 
 `acb handoff` is the primary one-step entrypoint. It behaves like `acb save --copy` by default. Use `--print-prompt` or `--json` for deterministic script output, or `--no-copy` when you want a two-step `save` then `resume` flow.
 
-`acb resume` is the downstream entrypoint. It copies the latest handoff prompt for the current workspace. Use `--print-prompt` to print it or `--json` to return both packet and prompt.
+`acb resume` is the downstream entrypoint. It copies the latest handoff prompt for the current workspace. Use `--print-prompt` to print it, `--json` to return both packet and prompt, or `--preview --open` to inspect the Markdown prompt before pasting.
 
 `acb save --copy` saves the packet and immediately copies its rendered prompt. `acb save --print-prompt` is the deterministic terminal-only version for scripts and tests. `acb save --json` returns the created packet for automation.
 
