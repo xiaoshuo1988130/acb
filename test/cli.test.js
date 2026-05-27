@@ -567,6 +567,46 @@ test("store path prints configured store", () => {
   assert.equal(result.stdout.trim(), storePath);
 });
 
+test("store backup copies the raw local store", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const backupPath = path.join(dir, "backups", "packets.backup.json");
+  const env = { ACB_STORE: storePath };
+
+  run(["save", "--summary", "backup me"], { env });
+  const backup = run(["store", "backup", "--out", backupPath, "--json"], { env });
+  assert.equal(backup.status, 0);
+  const report = JSON.parse(backup.stdout);
+  assert.equal(report.source, storePath);
+  assert.equal(report.destination, backupPath);
+  assert.equal(fs.readFileSync(backupPath, "utf8"), fs.readFileSync(storePath, "utf8"));
+
+  const duplicate = run(["store", "backup", "--out", backupPath], { env });
+  assert.equal(duplicate.status, 2);
+  assert.match(duplicate.stderr, /Backup already exists/);
+
+  const forced = run(["store", "backup", "--out", backupPath, "--force"], { env });
+  assert.equal(forced.status, 0);
+  assert.match(forced.stdout, /backed up store/);
+});
+
+test("store backup works for malformed stores and reports missing stores", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const backupPath = path.join(dir, "broken.backup.json");
+  const env = { ACB_STORE: storePath };
+  fs.writeFileSync(storePath, "{not valid json", "utf8");
+
+  const backup = run(["store", "backup", "--out", backupPath], { env });
+  assert.equal(backup.status, 0);
+  assert.equal(fs.readFileSync(backupPath, "utf8"), "{not valid json");
+
+  fs.rmSync(storePath);
+  const missing = run(["store", "backup"], { env });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /No ACB store found/);
+});
+
 test("config mcp prints a copyable MCP server snippet", () => {
   const config = run(["config", "mcp"]);
   assert.equal(config.status, 0);

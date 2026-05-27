@@ -35,6 +35,7 @@ Usage:
   acb verify mcp [--config <path>] [--name <server-name>] [--json]
   acb serve
   acb store path
+  acb store backup [--out <path>] [--force] [--json]
   acb --version
   acb help
 
@@ -872,12 +873,48 @@ function verifyCommand(args) {
 }
 
 function storeCommand(args) {
-  if (args[0] !== "path") {
-    console.error("Usage: acb store path");
+  if (args[0] === "path") {
+    console.log(storePath());
+    return 0;
+  }
+  if (args[0] === "backup") return storeBackupCommand(args.slice(1));
+  console.error("Usage: acb store path\n       acb store backup [--out <path>] [--force] [--json]");
+  return 2;
+}
+
+function storeBackupCommand(args) {
+  const source = storePath();
+  const outPath = argValue(args, "--out") || defaultStoreBackupPath(source);
+  const destination = path.resolve(outPath);
+  if (!fs.existsSync(source)) {
+    console.error(`No ACB store found at ${source}`);
+    return 1;
+  }
+  if (fs.existsSync(destination) && !args.includes("--force")) {
+    console.error(`Backup already exists: ${destination}`);
+    console.error("Use --force to overwrite it.");
     return 2;
   }
-  console.log(storePath());
+
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.copyFileSync(source, destination);
+  const report = {
+    source,
+    destination,
+    bytes: fs.statSync(destination).size,
+  };
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+  console.log(`[acb] backed up store to ${destination}`);
+  console.log(`[acb] bytes: ${report.bytes}`);
   return 0;
+}
+
+function defaultStoreBackupPath(source) {
+  const parsed = path.parse(source);
+  return path.join(parsed.dir, `${parsed.name}.${timestampForFile()}.backup${parsed.ext || ".json"}`);
 }
 
 function mcpServerConfig({ name, command, args }) {
@@ -1820,6 +1857,10 @@ function createPacketId() {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const random = Math.random().toString(36).slice(2, 8);
   return `pkt_${stamp}_${random}`;
+}
+
+function timestampForFile() {
+  return new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
 }
 
 function readSaveBody(args, workspace) {

@@ -86,6 +86,7 @@ acb config mcp --out ./mcp.json
 acb verify mcp --config ./mcp.json
 acb serve
 acb store path
+acb store backup --out ./acb-store.backup.json
 ```
 
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
@@ -115,6 +116,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb export` writes recent handoffs as Markdown or JSON for sharing, review, or a future viewer.
 
 `acb import` restores JSON exports into the local packet store. Duplicate packet ids are skipped unless `--replace` is used.
+
+`acb store backup` copies the raw local store file without parsing it. It is useful before cleanup or import, and it still works when the store is malformed.
 
 `acb config mcp` prints or writes a copyable stdio MCP server config for clients that support MCP.
 

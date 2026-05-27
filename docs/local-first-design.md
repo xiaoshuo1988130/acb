@@ -139,6 +139,15 @@ It does not copy anything to the clipboard and does not modify the packet store.
 
 If the local store is malformed, ACB fails closed: write commands do not overwrite the file. `acb doctor` reports `store_readable: no` and prints the parse or shape error so the user can inspect or restore the file manually.
 
+Use `acb store backup` before destructive maintenance:
+
+```bash
+acb store backup
+acb store backup --out ./acb-store.backup.json
+```
+
+The backup command copies the raw store file without parsing it, so it can still preserve a malformed store before manual repair.
+
 ## Terminal Timeline
 
 `acb workspaces` lists local workspaces that have handoff history:
