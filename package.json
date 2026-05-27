@@ -1,0 +1,27 @@
+{
+  "name": "acb",
+  "version": "0.0.1",
+  "description": "Local-first context handoff for coding agents.",
+  "type": "module",
+  "bin": {
+    "acb": "bin/acb.js"
+  },
+  "scripts": {
+    "lint": "node --check bin/acb.js",
+    "test": "node --test",
+    "verify": "npm run lint && npm test"
+  },
+  "keywords": [
+    "agent",
+    "context",
+    "handoff",
+    "mcp",
+    "coding-agent",
+    "local-first"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}
