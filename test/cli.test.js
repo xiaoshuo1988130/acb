@@ -12,6 +12,7 @@ function run(args, options = {}) {
     encoding: "utf8",
     env: { ...process.env, ...options.env },
     cwd: options.cwd || process.cwd(),
+    input: options.input,
   });
 }
 
@@ -70,6 +71,54 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(prompt.stdout, /You are taking over work from another local coding agent/);
   assert.match(prompt.stdout, /Implemented local handoff/);
   assert.match(prompt.stdout, /Do not publish yet/);
+});
+
+test("save reads handoff body from file", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const bodyPath = path.join(dir, "handoff.md");
+  fs.writeFileSync(bodyPath, "Changed files:\n- bin/acb.js\n- test/cli.test.js\n", "utf8");
+  const env = { ACB_STORE: storePath };
+
+  const saved = run(["save", "--summary", "Added file handoff", "--file", bodyPath], { env });
+  assert.equal(saved.status, 0);
+
+  const packet = JSON.parse(run(["latest", "--json"], { env }).stdout);
+  assert.equal(packet.summary, "Added file handoff");
+  assert.match(packet.body, /Changed files/);
+
+  const prompt = run(["prompt", "--id", packet.id, "--no-copy"], { env });
+  assert.equal(prompt.status, 0);
+  assert.match(prompt.stdout, /## Context Body/);
+  assert.match(prompt.stdout, /bin\/acb\.js/);
+});
+
+test("save reads handoff body from stdin", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const saved = run(["save", "--from", "opencode", "--stdin"], {
+    env,
+    input: "Last agent found a failing smoke test.\nNext: inspect proxy logs.\n",
+  });
+  assert.equal(saved.status, 0);
+
+  const packet = JSON.parse(run(["latest", "--json"], { env }).stdout);
+  assert.equal(packet.from, "opencode");
+  assert.match(packet.body, /failing smoke test/);
+});
+
+test("save rejects invalid body sources", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const both = run(["save", "--summary", "bad", "--file", "x", "--stdin"], { env, input: "x" });
+  assert.equal(both.status, 2);
+  assert.match(both.stderr, /either --file or --stdin/);
+
+  const missing = run(["save", "--file", path.join(dir, "missing.md")], { env });
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /Cannot read --file/);
 });
 
 test("save requires useful handoff content", () => {

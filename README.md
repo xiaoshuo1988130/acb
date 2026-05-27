@@ -19,10 +19,18 @@ acb prompt
 
 If clipboard access is unavailable, ACB prints the prompt instead.
 
+You can also hand off a real context body from a file or pipe:
+
+```bash
+acb save --from codex --summary "Proxy investigation context" --file ./handoff.md
+git diff -- README.md | acb save --from opencode --summary "README diff to review" --stdin
+```
+
 ## Commands
 
 ```bash
-acb save --from <agent> --summary <text> --status <text> --note <text> --tag <tag>
+acb save --from <agent> --summary <text> --status <text> --note <text> --tag <tag> --file <path>
+acb save --from <agent> --summary <text> --stdin
 acb latest
 acb prompt
 acb list

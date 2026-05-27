@@ -7,11 +7,12 @@ import path from "node:path";
 const VERSION = "0.0.1";
 const STORE_VERSION = 1;
 const DEFAULT_LIMIT = 10;
+const PROMPT_BODY_LIMIT = 12000;
 
 const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
-  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>]
+  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin]
   acb latest [--workspace <path>] [--json]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb list [--workspace <path>] [--limit <n>] [--json]
@@ -50,9 +51,15 @@ function saveCommand(args) {
   const notes = argValues(args, "--note");
   const tags = argValues(args, "--tag");
   const from = argValue(args, "--from") || process.env.ACB_AGENT || "unknown";
+  const bodyResult = readSaveBody(args);
 
-  if (!summary && !status && notes.length === 0) {
-    console.error("acb save needs at least --summary, --status, or --note.");
+  if (!bodyResult.ok) {
+    console.error(bodyResult.error);
+    return 2;
+  }
+
+  if (!summary && !status && notes.length === 0 && !bodyResult.body) {
+    console.error("acb save needs at least --summary, --status, --note, --file, or --stdin.");
     return 2;
   }
 
@@ -66,6 +73,7 @@ function saveCommand(args) {
     status: status || null,
     notes,
     tags,
+    body: bodyResult.body || null,
   };
 
   const store = loadStore();
@@ -211,6 +219,9 @@ function renderHandoffPrompt(packet) {
     lines.push("", "## Notes");
     for (const note of packet.notes) lines.push(`- ${note}`);
   }
+  if (packet.body) {
+    lines.push("", "## Context Body", "", truncatePromptBody(packet.body));
+  }
   lines.push(
     "",
     "## Requested Behavior",
@@ -231,6 +242,7 @@ function printPacket(packet) {
   if (packet.summary) console.log(`summary: ${packet.summary}`);
   if (packet.status) console.log(`status: ${packet.status}`);
   if (packet.tags?.length) console.log(`tags: ${packet.tags.join(", ")}`);
+  if (packet.body) console.log(`body: ${packet.body.length} chars`);
   if (packet.notes?.length) {
     console.log("notes:");
     for (const note of packet.notes) console.log(`- ${note}`);
@@ -273,6 +285,47 @@ function createPacketId() {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const random = Math.random().toString(36).slice(2, 8);
   return `pkt_${stamp}_${random}`;
+}
+
+function readSaveBody(args) {
+  const filePath = argValue(args, "--file");
+  const wantsStdin = args.includes("--stdin");
+
+  if (filePath && wantsStdin) {
+    return { ok: false, error: "Use either --file or --stdin, not both." };
+  }
+  if (filePath) return readBodyFile(filePath);
+  if (wantsStdin) return readBodyStdin();
+  return { ok: true, body: "" };
+}
+
+function readBodyFile(filePath) {
+  const resolved = path.resolve(filePath);
+  try {
+    const stat = fs.statSync(resolved);
+    if (!stat.isFile()) return { ok: false, error: `--file is not a file: ${resolved}` };
+    const body = fs.readFileSync(resolved, "utf8");
+    if (!body.trim()) return { ok: false, error: `--file is empty: ${resolved}` };
+    return { ok: true, body };
+  } catch (error) {
+    return { ok: false, error: `Cannot read --file ${resolved}: ${error.message}` };
+  }
+}
+
+function readBodyStdin() {
+  try {
+    const body = fs.readFileSync(0, "utf8");
+    if (!body.trim()) return { ok: false, error: "--stdin did not receive any content." };
+    return { ok: true, body };
+  } catch (error) {
+    return { ok: false, error: `Cannot read --stdin: ${error.message}` };
+  }
+}
+
+function truncatePromptBody(body) {
+  const normalized = String(body).replace(/\r\n/g, "\n").trimEnd();
+  if (normalized.length <= PROMPT_BODY_LIMIT) return normalized;
+  return `${normalized.slice(0, PROMPT_BODY_LIMIT).trimEnd()}\n\n[acb: context body truncated at ${PROMPT_BODY_LIMIT} characters]`;
 }
 
 function parseLimit(value) {

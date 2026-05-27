@@ -28,9 +28,25 @@ ACB_STORE=./tmp/acb-packets.json acb save --summary "..."
   "summary": "What changed",
   "status": "Current state",
   "notes": ["Risks, blockers, next steps"],
-  "tags": ["local", "handoff"]
+  "tags": ["local", "handoff"],
+  "body": "Optional longer context loaded from --file or --stdin"
 }
 ```
+
+## Context Body
+
+Short handoffs can live in `--summary`, `--status`, and repeated `--note` flags.
+
+Longer handoffs should use one explicit body source:
+
+```bash
+acb save --summary "Design handoff" --file ./handoff.md
+cat ./agent-output.txt | acb save --summary "Prior agent output" --stdin
+```
+
+`--file` and `--stdin` are mutually exclusive. ACB stores the body locally, and `acb prompt` includes it under `## Context Body`.
+
+Prompt rendering caps the body section so a very large log does not accidentally flood the next agent context. The local packet still keeps the original body.
 
 ## Clipboard
 
