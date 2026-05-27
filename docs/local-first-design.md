@@ -91,6 +91,7 @@ If clipboard access fails, ACB prints the prompt. Linux users may need to instal
 Initial tools:
 
 - `read_latest_handoff`: returns the newest handoff prompt for a workspace.
+- `read_handoff`: returns a specific handoff prompt by packet id.
 - `list_handoffs`: returns recent packet summaries without expanding full body text.
 
 This keeps ingestion explicit. A downstream agent must call the tool; ACB does not silently inject context into the model request.

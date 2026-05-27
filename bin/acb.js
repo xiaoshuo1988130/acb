@@ -15,6 +15,7 @@ const usage = `AgentContextBus (acb) ${VERSION}
 Usage:
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin] [--git]
   acb latest [--workspace <path>] [--json]
+  acb show <packet-id> [--json | --prompt]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb list [--workspace <path>] [--limit <n>] [--json]
   acb delete <packet-id>
@@ -36,6 +37,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
   if (command === "save") return saveCommand(args);
   if (command === "latest") return latestCommand(args);
+  if (command === "show") return showCommand(args);
   if (command === "prompt") return promptCommand(args);
   if (command === "list") return listCommand(args);
   if (command === "delete") return deleteCommand(args);
@@ -104,6 +106,29 @@ function latestCommand(args) {
   }
   if (args.includes("--json")) {
     process.stdout.write(`${JSON.stringify(packet, null, 2)}\n`);
+    return 0;
+  }
+  printPacket(packet);
+  return 0;
+}
+
+function showCommand(args) {
+  const id = args[0] || argValue(args, "--id");
+  if (!id) {
+    console.error("Usage: acb show <packet-id> [--json | --prompt]");
+    return 2;
+  }
+  const packet = findPacket({ id });
+  if (!packet) {
+    console.error(`No handoff packet found for id: ${id}`);
+    return 1;
+  }
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(packet, null, 2)}\n`);
+    return 0;
+  }
+  if (args.includes("--prompt")) {
+    process.stdout.write(renderHandoffPrompt(packet));
     return 0;
   }
   printPacket(packet);
@@ -338,6 +363,22 @@ function mcpTools() {
       },
     },
     {
+      name: "read_handoff",
+      title: "Read Handoff",
+      description: "Read a specific local ACB handoff packet by id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "Handoff packet id.",
+          },
+        },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    {
       name: "list_handoffs",
       title: "List Handoffs",
       description: "List recent local ACB handoff packets without expanding full context bodies.",
@@ -365,6 +406,7 @@ function mcpCallTool(params) {
   const name = params?.name;
   const args = params?.arguments || {};
   if (name === "read_latest_handoff") return mcpReadLatestHandoff(args);
+  if (name === "read_handoff") return mcpReadHandoff(args);
   if (name === "list_handoffs") return mcpListHandoffs(args);
   throw jsonRpcError(-32602, `Unknown tool: ${name}`);
 }
@@ -379,6 +421,29 @@ function mcpReadLatestHandoff(args) {
     };
   }
 
+  const prompt = renderHandoffPrompt(packet);
+  return {
+    content: [{ type: "text", text: prompt }],
+    structuredContent: { packet, prompt },
+    isError: false,
+  };
+}
+
+function mcpReadHandoff(args) {
+  const id = args.id;
+  if (!id) {
+    return {
+      content: [{ type: "text", text: "id is required." }],
+      isError: true,
+    };
+  }
+  const packet = findPacket({ id });
+  if (!packet) {
+    return {
+      content: [{ type: "text", text: `No handoff packet found for id: ${id}` }],
+      isError: true,
+    };
+  }
   const prompt = renderHandoffPrompt(packet);
   return {
     content: [{ type: "text", text: prompt }],

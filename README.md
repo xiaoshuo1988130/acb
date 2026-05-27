@@ -49,6 +49,8 @@ acb save --from <agent> --summary <text> --status <text> --note <text> --tag <ta
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
 acb latest
+acb show <packet-id>
+acb show <packet-id> --prompt
 acb prompt
 acb list
 acb delete <packet-id>

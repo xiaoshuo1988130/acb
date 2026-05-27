@@ -84,6 +84,19 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(prompt.stdout, /You are taking over work from another local coding agent/);
   assert.match(prompt.stdout, /Implemented local handoff/);
   assert.match(prompt.stdout, /Do not publish yet/);
+
+  const shown = run(["show", packet.id], { env });
+  assert.equal(shown.status, 0);
+  assert.match(shown.stdout, new RegExp(packet.id));
+  assert.match(shown.stdout, /Implemented local handoff/);
+
+  const shownJson = run(["show", packet.id, "--json"], { env });
+  assert.equal(shownJson.status, 0);
+  assert.equal(JSON.parse(shownJson.stdout).id, packet.id);
+
+  const shownPrompt = run(["show", packet.id, "--prompt"], { env });
+  assert.equal(shownPrompt.status, 0);
+  assert.match(shownPrompt.stdout, /You are taking over work/);
 });
 
 test("save reads handoff body from file", () => {
@@ -213,6 +226,16 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.match(messages[2].result.content[0].text, /MCP handoff/);
   assert.equal(messages[2].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[3].result.structuredContent.packets.length, 1);
+
+  const id = messages[3].result.structuredContent.packets[0].id;
+  const readById = run(["serve"], {
+    env,
+    input: rpc("tools/call", { name: "read_handoff", arguments: { id } }, 1),
+  });
+  assert.equal(readById.status, 0);
+  const [readMessage] = parseJsonLines(readById.stdout);
+  assert.equal(readMessage.result.structuredContent.packet.id, id);
+  assert.match(readMessage.result.content[0].text, /MCP handoff/);
 });
 
 test("serve returns tool errors as tool results", () => {
