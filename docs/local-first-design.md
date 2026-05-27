@@ -133,7 +133,7 @@ If clipboard access fails, ACB prints the prompt. Linux users may need to instal
 
 `acb status` is the quick workspace view.
 
-It reports the current workspace, packet count, latest packet summary, Git state, and the next concrete commands to resume or inspect the handoff prompt.
+It reports the current workspace, packet count, latest packet summary, Git state, and the next concrete CLI and MCP commands to resume, inspect, read, or save the handoff prompt.
 
 `acb latest` also defaults to the current workspace. Use `acb latest --all` only when you explicitly want the newest packet across every workspace.
 
@@ -228,7 +228,7 @@ Only JSON exports are importable. Markdown remains a human review format. By def
 
 Initial tools:
 
-- `get_workspace_status`: reports current packet count, latest handoff, Git state, and next commands for a workspace.
+- `get_workspace_status`: reports current packet count, latest handoff, Git state, and next CLI/MCP commands for a workspace.
 - `read_latest_handoff`: returns the newest handoff prompt for a workspace.
 - `save_handoff`: saves an explicit local handoff packet from an MCP-capable agent.
 - `update_handoff`: corrects an existing handoff packet while preserving its original creation time.

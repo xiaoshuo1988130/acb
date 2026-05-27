@@ -107,7 +107,7 @@ acb store backup --out ./acb-store.backup.json
 
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
 
-`acb status` prints the current workspace handoff state and the next commands to resume or inspect the latest packet.
+`acb status` prints the current workspace handoff state and the next CLI or MCP commands to resume, inspect, read, or save the latest packet.
 
 `acb latest` reads the newest handoff for the current workspace. Use `--all` when you intentionally want the newest packet across every workspace.
 

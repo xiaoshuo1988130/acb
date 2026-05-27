@@ -92,6 +92,8 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(statusReport.workspace_packets, 1);
   assert.equal(statusReport.next.resume, `acb resume --id ${packet.id}`);
   assert.equal(statusReport.next.copy_prompt, `acb prompt --id ${packet.id}`);
+  assert.equal(statusReport.next.mcp_status, "get_workspace_status");
+  assert.equal(statusReport.next.mcp_read_latest, "read_latest_handoff");
 
   const listed = run(["list", "--workspace", workspace], { env });
   assert.equal(listed.status, 0);
@@ -636,6 +638,13 @@ test("status reports an empty workspace without failing", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /latest_packet: none/);
   assert.match(result.stdout, /acb handoff --summary/);
+  assert.match(result.stdout, /next_mcp_save: save_handoff/);
+
+  const json = run(["status", "--workspace", workspace, "--json"], { env: { ACB_STORE: path.join(dir, "packets.json") } });
+  assert.equal(json.status, 0);
+  const report = JSON.parse(json.stdout);
+  assert.equal(report.next.mcp_status, "get_workspace_status");
+  assert.equal(report.next.mcp_save, "save_handoff");
 });
 
 test("preview reports missing packets", () => {
@@ -1002,6 +1011,7 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.match(messages[2].result.content[0].text, /ACB Status/);
   assert.equal(messages[2].result.structuredContent.report.workspace_packets, 1);
   assert.match(messages[2].result.structuredContent.report.next.resume, /^acb resume --id pkt_/);
+  assert.equal(messages[2].result.structuredContent.report.next.mcp_read_latest, "read_latest_handoff");
   assert.match(messages[3].result.content[0].text, /MCP handoff/);
   assert.equal(messages[3].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[4].result.structuredContent.packets.length, 1);

@@ -880,10 +880,13 @@ function buildStatusReport(workspace) {
       resume: `acb resume --id ${latest.id}`,
       copy_prompt: `acb prompt --id ${latest.id}`,
       show_prompt: `acb show ${latest.id} --prompt`,
-      mcp_pull: "Use acb to read the latest handoff for this workspace.",
+      mcp_status: "get_workspace_status",
+      mcp_read_latest: "read_latest_handoff",
     } : {
       handoff: "acb handoff --summary \"...\" --git",
       save: "acb save --summary \"...\" --git",
+      mcp_status: "get_workspace_status",
+      mcp_save: "save_handoff",
     },
   };
 }
@@ -909,6 +912,7 @@ function formatStatusReport(report) {
   if (!report.latest_packet) {
     lines.push("latest_packet: none");
     lines.push(`next: ${report.next.handoff}`);
+    lines.push(`next_mcp_save: ${report.next.mcp_save}`);
     return lines.join("\n");
   }
   lines.push(`latest_packet: ${report.latest_packet.id}`);
@@ -918,6 +922,7 @@ function formatStatusReport(report) {
   if (report.latest_packet.status) lines.push(`latest_status: ${report.latest_packet.status}`);
   lines.push(`next_resume: ${report.next.resume}`);
   lines.push(`next_show_prompt: ${report.next.show_prompt}`);
+  lines.push(`next_mcp_read_latest: ${report.next.mcp_read_latest}`);
   return lines.join("\n");
 }
 
