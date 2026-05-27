@@ -142,11 +142,12 @@ If the local store is malformed, ACB fails closed: write commands do not overwri
 Use `acb store backup` before destructive maintenance:
 
 ```bash
+acb store info
 acb store backup
 acb store backup --out ./acb-store.backup.json
 ```
 
-The backup command copies the raw store file without parsing it, so it can still preserve a malformed store before manual repair.
+`acb store info` prints path, readability, packet count, byte size, and modified time. The backup command copies the raw store file without parsing it, so it can still preserve a malformed store before manual repair.
 
 ## Terminal Timeline
 

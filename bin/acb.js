@@ -35,6 +35,7 @@ Usage:
   acb verify mcp [--config <path>] [--name <server-name>] [--json]
   acb serve
   acb store path
+  acb store info [--json]
   acb store backup [--out <path>] [--force] [--json]
   acb --version
   acb help
@@ -877,9 +878,43 @@ function storeCommand(args) {
     console.log(storePath());
     return 0;
   }
+  if (args[0] === "info") return storeInfoCommand(args.slice(1));
   if (args[0] === "backup") return storeBackupCommand(args.slice(1));
-  console.error("Usage: acb store path\n       acb store backup [--out <path>] [--force] [--json]");
+  console.error("Usage: acb store path\n       acb store info [--json]\n       acb store backup [--out <path>] [--force] [--json]");
   return 2;
+}
+
+function storeInfoCommand(args) {
+  const filePath = storePath();
+  const exists = fs.existsSync(filePath);
+  const stat = exists ? fs.statSync(filePath) : null;
+  const storeResult = readStore();
+  const report = {
+    path: filePath,
+    exists,
+    readable: storeResult.ok,
+    error: storeResult.ok ? null : storeResult.error,
+    version: storeResult.ok ? storeResult.store.version : null,
+    packets: storeResult.ok ? storeResult.store.packets.length : null,
+    bytes: stat?.size || 0,
+    modified_at: stat ? stat.mtime.toISOString() : null,
+  };
+
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+
+  console.log("ACB Store");
+  console.log(`path: ${report.path}`);
+  console.log(`exists: ${report.exists ? "yes" : "no"}`);
+  console.log(`readable: ${report.readable ? "yes" : "no"}`);
+  if (report.error) console.log(`error: ${report.error}`);
+  if (report.version !== null) console.log(`version: ${report.version}`);
+  if (report.packets !== null) console.log(`packets: ${report.packets}`);
+  console.log(`bytes: ${report.bytes}`);
+  if (report.modified_at) console.log(`modified_at: ${report.modified_at}`);
+  return report.readable ? 0 : 1;
 }
 
 function storeBackupCommand(args) {

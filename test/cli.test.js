@@ -567,6 +567,39 @@ test("store path prints configured store", () => {
   assert.equal(result.stdout.trim(), storePath);
 });
 
+test("store info reports local store metadata", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const env = { ACB_STORE: storePath };
+
+  const missing = run(["store", "info", "--json"], { env });
+  assert.equal(missing.status, 0);
+  const missingReport = JSON.parse(missing.stdout);
+  assert.equal(missingReport.path, storePath);
+  assert.equal(missingReport.exists, false);
+  assert.equal(missingReport.readable, true);
+  assert.equal(missingReport.packets, 0);
+
+  run(["save", "--summary", "store info"], { env });
+  const human = run(["store", "info"], { env });
+  assert.equal(human.status, 0);
+  assert.match(human.stdout, /ACB Store/);
+  assert.match(human.stdout, /exists: yes/);
+  assert.match(human.stdout, /packets: 1/);
+
+  fs.writeFileSync(storePath, "{not valid json", "utf8");
+  const broken = run(["store", "info", "--json"], { env });
+  assert.equal(broken.status, 0);
+  const brokenReport = JSON.parse(broken.stdout);
+  assert.equal(brokenReport.exists, true);
+  assert.equal(brokenReport.readable, false);
+  assert.match(brokenReport.error, /Cannot read ACB store/);
+
+  const brokenHuman = run(["store", "info"], { env });
+  assert.equal(brokenHuman.status, 1);
+  assert.match(brokenHuman.stdout, /readable: no/);
+});
+
 test("store backup copies the raw local store", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");
