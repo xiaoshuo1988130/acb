@@ -150,6 +150,10 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(prompt.stdout, /Implemented local handoff/);
   assert.match(prompt.stdout, /Do not publish yet/);
 
+  const scopedPrompt = run(["prompt", "--no-copy"], { env, cwd: workspace });
+  assert.equal(scopedPrompt.status, 0);
+  assert.match(scopedPrompt.stdout, /Implemented local handoff/);
+
   const previewPath = path.join(dir, "preview", "handoff.md");
   const preview = run(["preview", "--id", packet.id, "--out", previewPath], { env });
   assert.equal(preview.status, 0);
@@ -157,6 +161,11 @@ test("save, latest, list, and prompt use local store", () => {
   const previewContent = fs.readFileSync(previewPath, "utf8");
   assert.match(previewContent, /# ACB Handoff Prompt Preview/);
   assert.match(previewContent, /Implemented local handoff/);
+
+  const scopedPreviewPath = path.join(dir, "preview", "scoped-handoff.md");
+  const scopedPreview = run(["preview", "--out", scopedPreviewPath], { env, cwd: workspace });
+  assert.equal(scopedPreview.status, 0);
+  assert.match(fs.readFileSync(scopedPreviewPath, "utf8"), /Implemented local handoff/);
 
   const shown = run(["show", packet.id], { env });
   assert.equal(shown.status, 0);

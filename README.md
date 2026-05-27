@@ -116,7 +116,7 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 
 `acb update` edits an existing local packet. Use it to correct summary/status, append notes/tags, reset notes/tags with `--clear-notes` or `--clear-tags`, replace the context body with `--file`, `--stdin`, or `--diff`, or refresh the lightweight Git snapshot with `--git`.
 
-`acb preview` writes the latest handoff prompt to a Markdown file for review. Add `--open` when you want ACB to open it with the system default app.
+`acb preview` writes the current workspace handoff prompt to a Markdown file for review. Add `--id` to preview a specific packet, or `--open` when you want ACB to open it with the system default app.
 
 `acb search` finds older handoff packets by text in summaries, status, notes, tags, body, workspace, or lightweight Git metadata.
 

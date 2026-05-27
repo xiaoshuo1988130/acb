@@ -323,10 +323,7 @@ function resumeCommand(args) {
     return 2;
   }
 
-  const id = argValue(args, "--id");
-  const workspace = id
-    ? (args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null)
-    : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const { workspace, id } = resolveReadScope(args);
   const packet = findPacket({ workspace, id });
   if (!packet) {
     console.error(id ? `No handoff packet found for id: ${id}` : "No handoff packet found to resume.");
@@ -371,8 +368,7 @@ function resumeOutputModes(args, wantsPreview = resumeWantsPreview(args)) {
 }
 
 function promptCommand(args) {
-  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
-  const id = argValue(args, "--id");
+  const { workspace, id } = resolveReadScope(args);
   const packet = findPacket({ workspace, id });
   if (!packet) {
     console.error(id ? `No handoff packet found for id: ${id}` : "No handoff packet found.");
@@ -399,8 +395,7 @@ function promptCommand(args) {
 }
 
 function previewCommand(args) {
-  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
-  const id = argValue(args, "--id");
+  const { workspace, id } = resolveReadScope(args);
   const packet = findPacket({ workspace, id });
   if (!packet) {
     console.error(id ? `No handoff packet found for id: ${id}` : "No handoff packet found.");
@@ -408,6 +403,14 @@ function previewCommand(args) {
   }
 
   return writePromptPreview(packet, args);
+}
+
+function resolveReadScope(args) {
+  const id = argValue(args, "--id");
+  const workspace = id
+    ? (args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null)
+    : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  return { workspace, id };
 }
 
 function writePromptPreview(packet, args) {

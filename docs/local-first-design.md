@@ -87,7 +87,7 @@ acb update pkt_20260527123000_abc123 --file ./updated-handoff.md
 
 `acb update` preserves `created_at` and sets `updated_at`. Notes and tags are appended by default; use `--clear-notes` or `--clear-tags` when you intentionally want to replace those lists.
 
-`acb preview` writes the rendered handoff prompt to a Markdown file:
+`acb preview` writes the current workspace handoff prompt to a Markdown file:
 
 ```bash
 acb preview
