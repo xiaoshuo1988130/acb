@@ -1023,7 +1023,8 @@ function formatCommand(command, args) {
 }
 
 function buildDoctorReport(workspace) {
-  const store = loadStore();
+  const storeResult = readStore();
+  const store = storeResult.ok ? storeResult.store : { version: STORE_VERSION, packets: [] };
   const workspacePackets = store.packets.filter((packet) => packet.workspace === workspace);
   const clipboardCommands = clipboardCandidates().map(([command]) => ({
     command,
@@ -1035,14 +1036,15 @@ function buildDoctorReport(workspace) {
   const gitRoot = gitRootResult.status === 0 ? gitRootResult.stdout.trim() : null;
 
   return {
-    ok: true,
+    ok: storeResult.ok,
     store_path: storePath(),
+    store_error: storeResult.ok ? null : storeResult.error,
     total_packets: store.packets.length,
     workspace,
     workspace_packets: workspacePackets.length,
     latest_workspace_packet_id: workspacePackets[0]?.id || null,
     checks: {
-      store_readable: true,
+      store_readable: storeResult.ok,
       git_available: gitAvailable,
       git_workspace: Boolean(gitRoot),
       clipboard_command_available: clipboardCommands.some((item) => item.available),
@@ -1068,6 +1070,8 @@ function buildDoctorReport(workspace) {
 function printDoctorReport(report) {
   console.log("ACB Doctor");
   console.log(`store: ${report.store_path}`);
+  console.log(`store_readable: ${report.checks.store_readable ? "yes" : "no"}`);
+  if (report.store_error) console.log(`store_error: ${report.store_error}`);
   console.log(`total_packets: ${report.total_packets}`);
   console.log(`workspace: ${report.workspace}`);
   console.log(`workspace_packets: ${report.workspace_packets}`);
@@ -1769,11 +1773,32 @@ function replacePacket(packet) {
 }
 
 function loadStore() {
+  const result = readStore();
+  if (!result.ok) throw storeError(result.error);
+  return result.store;
+}
+
+function readStore() {
   const filePath = storePath();
-  if (!fs.existsSync(filePath)) return { version: STORE_VERSION, packets: [] };
-  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-  if (!Array.isArray(parsed.packets)) return { version: STORE_VERSION, packets: [] };
-  return { version: parsed.version || STORE_VERSION, packets: parsed.packets };
+  if (!fs.existsSync(filePath)) return { ok: true, store: { version: STORE_VERSION, packets: [] } };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, error: `ACB store is not a JSON object: ${filePath}` };
+    }
+    if (!Array.isArray(parsed.packets)) {
+      return { ok: false, error: `ACB store does not contain a packets array: ${filePath}` };
+    }
+    return { ok: true, store: { version: parsed.version || STORE_VERSION, packets: parsed.packets } };
+  } catch (error) {
+    return { ok: false, error: `Cannot read ACB store ${filePath}: ${error.message}` };
+  }
+}
+
+function storeError(message) {
+  const error = new Error(message);
+  error.code = "ACB_STORE_ERROR";
+  return error;
 }
 
 function writeStore(store) {
@@ -2014,6 +2039,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   Promise.resolve(main()).then((code) => {
     process.exitCode = code;
   }).catch((error) => {
+    if (error.code === "ACB_STORE_ERROR") {
+      console.error(error.message);
+      console.error("Run `acb doctor` to inspect the store before retrying. ACB did not modify the store.");
+      process.exitCode = 2;
+      return;
+    }
     console.error(error.stack || error.message);
     process.exitCode = 1;
   });

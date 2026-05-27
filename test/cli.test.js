@@ -687,6 +687,23 @@ test("doctor reports local store and workspace state", () => {
   assert.match(human.stdout, /mcp_config_command/);
 });
 
+test("doctor reports corrupt stores without overwriting them", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  fs.writeFileSync(storePath, "{not valid json", "utf8");
+  const env = { ACB_STORE: storePath };
+
+  const doctor = run(["doctor", "--workspace", dir], { env });
+  assert.equal(doctor.status, 1);
+  assert.match(doctor.stdout, /store_readable: no/);
+  assert.match(doctor.stdout, /store_error:/);
+
+  const save = run(["save", "--summary", "must not overwrite"], { env });
+  assert.equal(save.status, 2);
+  assert.match(save.stderr, /Cannot read ACB store/);
+  assert.equal(fs.readFileSync(storePath, "utf8"), "{not valid json");
+});
+
 test("serve exposes handoff tools over MCP stdio", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");

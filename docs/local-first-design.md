@@ -137,6 +137,8 @@ It reports:
 
 It does not copy anything to the clipboard and does not modify the packet store.
 
+If the local store is malformed, ACB fails closed: write commands do not overwrite the file. `acb doctor` reports `store_readable: no` and prints the parse or shape error so the user can inspect or restore the file manually.
+
 ## Terminal Timeline
 
 `acb workspaces` lists local workspaces that have handoff history:
