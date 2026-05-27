@@ -55,6 +55,7 @@ acb prompt
 acb list
 acb timeline
 acb export --format markdown --out ./handoffs.md
+acb import --file ./handoffs.json
 acb delete <packet-id>
 acb clear --workspace .
 acb clear --all
@@ -72,6 +73,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb timeline` prints a compact terminal view of recent handoffs. It is the first visualization layer before any optional web viewer.
 
 `acb export` writes recent handoffs as Markdown or JSON for sharing, review, or a future viewer.
+
+`acb import` restores JSON exports into the local packet store. Duplicate packet ids are skipped unless `--replace` is used.
 
 ## Boundaries
 

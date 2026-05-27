@@ -20,6 +20,7 @@ Usage:
   acb list [--workspace <path>] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--limit <n>] [--json]
   acb export [--workspace <path>] [--limit <n>] [--format markdown|json] [--out <path>]
+  acb import --file <path> [--replace]
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
@@ -45,6 +46,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "list") return listCommand(args);
   if (command === "timeline") return timelineCommand(args);
   if (command === "export") return exportCommand(args);
+  if (command === "import") return importCommand(args);
   if (command === "delete") return deleteCommand(args);
   if (command === "clear") return clearCommand(args);
   if (command === "doctor") return doctorCommand(args);
@@ -256,6 +258,49 @@ function exportCommand(args) {
   return 0;
 }
 
+function importCommand(args) {
+  const filePath = argValue(args, "--file");
+  const replace = args.includes("--replace");
+  if (!filePath) {
+    console.error("Usage: acb import --file <path> [--replace]");
+    return 2;
+  }
+
+  const parsed = readImportFile(filePath);
+  if (!parsed.ok) {
+    console.error(parsed.error);
+    return 2;
+  }
+
+  const packets = parsed.packets.map(normalizeImportedPacket);
+  const invalid = packets.find((packet) => !isValidPacket(packet));
+  if (invalid) {
+    console.error(`Import file contains an invalid packet: ${invalid.id || "(missing id)"}`);
+    return 2;
+  }
+
+  const store = loadStore();
+  const existingIds = new Set(store.packets.map((packet) => packet.id));
+  let imported = 0;
+  let skipped = 0;
+  for (const packet of packets) {
+    if (existingIds.has(packet.id)) {
+      if (!replace) {
+        skipped += 1;
+        continue;
+      }
+      store.packets = store.packets.filter((item) => item.id !== packet.id);
+    }
+    store.packets.unshift(packet);
+    existingIds.add(packet.id);
+    imported += 1;
+  }
+  store.packets.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  writeStore(store);
+  console.log(`[acb] imported ${imported} handoff packet(s), skipped ${skipped} duplicate(s).`);
+  return 0;
+}
+
 function deleteCommand(args) {
   const id = args[0] || argValue(args, "--id");
   if (!id) {
@@ -272,6 +317,50 @@ function deleteCommand(args) {
   writeStore(store);
   console.log(`[acb] deleted handoff packet: ${id}`);
   return 0;
+}
+
+function readImportFile(filePath) {
+  const resolved = path.resolve(filePath);
+  try {
+    const parsed = JSON.parse(fs.readFileSync(resolved, "utf8"));
+    const packets = Array.isArray(parsed) ? parsed : parsed.packets;
+    if (!Array.isArray(packets)) {
+      return { ok: false, error: "Import file must be a JSON array or an object with a packets array." };
+    }
+    return { ok: true, packets };
+  } catch (error) {
+    return { ok: false, error: `Cannot read import file ${resolved}: ${error.message}` };
+  }
+}
+
+function normalizeImportedPacket(packet) {
+  return {
+    id: packet?.id,
+    version: packet?.version || STORE_VERSION,
+    created_at: packet?.created_at,
+    from: packet?.from || "imported",
+    workspace: packet?.workspace,
+    summary: packet?.summary || null,
+    status: packet?.status || null,
+    notes: Array.isArray(packet?.notes) ? packet.notes : [],
+    tags: Array.isArray(packet?.tags) ? packet.tags : [],
+    body: packet?.body || null,
+    git: packet?.git || null,
+  };
+}
+
+function isValidPacket(packet) {
+  return Boolean(
+    packet
+    && typeof packet.id === "string"
+    && packet.id
+    && typeof packet.created_at === "string"
+    && packet.created_at
+    && typeof packet.workspace === "string"
+    && packet.workspace
+    && Array.isArray(packet.notes)
+    && Array.isArray(packet.tags),
+  );
 }
 
 function renderMarkdownExport(packets, { workspace = null } = {}) {

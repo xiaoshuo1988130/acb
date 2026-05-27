@@ -217,6 +217,49 @@ test("export validates requested format", () => {
   assert.match(result.stderr, /--format must be markdown or json/);
 });
 
+test("import restores JSON exports and skips duplicates", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const sourceStore = path.join(dir, "source.json");
+  const targetStore = path.join(dir, "target.json");
+  const exportPath = path.join(dir, "handoffs.json");
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+
+  const sourceEnv = { ACB_STORE: sourceStore };
+  run(["save", "--workspace", workspace, "--summary", "portable packet", "--note", "import me"], { env: sourceEnv });
+  const exported = run(["export", "--workspace", workspace, "--format", "json", "--out", exportPath], { env: sourceEnv });
+  assert.equal(exported.status, 0);
+
+  const targetEnv = { ACB_STORE: targetStore };
+  const imported = run(["import", "--file", exportPath], { env: targetEnv });
+  assert.equal(imported.status, 0);
+  assert.match(imported.stdout, /imported 1 handoff packet/);
+
+  const packets = JSON.parse(run(["list", "--json"], { env: targetEnv }).stdout);
+  assert.equal(packets.length, 1);
+  assert.equal(packets[0].summary, "portable packet");
+
+  const duplicate = run(["import", "--file", exportPath], { env: targetEnv });
+  assert.equal(duplicate.status, 0);
+  assert.match(duplicate.stdout, /skipped 1 duplicate/);
+  assert.equal(JSON.parse(run(["list", "--json"], { env: targetEnv }).stdout).length, 1);
+
+  const replaced = run(["import", "--file", exportPath, "--replace"], { env: targetEnv });
+  assert.equal(replaced.status, 0);
+  assert.match(replaced.stdout, /imported 1 handoff packet/);
+  assert.equal(JSON.parse(run(["list", "--json"], { env: targetEnv }).stdout).length, 1);
+});
+
+test("import validates JSON packet shape", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const invalidPath = path.join(dir, "bad.json");
+  fs.writeFileSync(invalidPath, JSON.stringify([{ id: "missing-required-fields" }]), "utf8");
+
+  const result = run(["import", "--file", invalidPath], { env: { ACB_STORE: path.join(dir, "packets.json") } });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /invalid packet/);
+});
+
 test("store path prints configured store", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "custom.json");

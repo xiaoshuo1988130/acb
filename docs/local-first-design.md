@@ -126,6 +126,15 @@ acb export --workspace . --format json --out ./handoffs.json
 
 Markdown export is for human review and copy/paste sharing. JSON export is for future viewers, scripts, or local analysis.
 
+`acb import` restores JSON exports:
+
+```bash
+acb import --file ./handoffs.json
+acb import --file ./handoffs.json --replace
+```
+
+Only JSON exports are importable. Markdown remains a human review format. By default, import skips duplicate packet ids; `--replace` overwrites existing packets with the imported version.
+
 ## MCP Pull
 
 `acb serve` exposes the local packet store as a stdio MCP server.
