@@ -16,6 +16,12 @@ The dashboard serves:
 
 It reads the current ACB store on each request, so refreshing the browser shows newer packets.
 
+The HTML view is a three-pane local audit workspace:
+
+- Packet list with search.
+- Packet detail tabs for overview, copyable commands, body preview, and Git snapshot.
+- Workspace metadata and raw `/api/state` inspection.
+
 ## Boundaries
 
 The dashboard is intentionally local and read-only:

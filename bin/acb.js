@@ -967,19 +967,27 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     workspace_count: new Set(scopedPackets.map((packet) => packet.workspace)).size,
     dirty_file_count: packets.reduce((sum, packet) => sum + (packet.git?.status?.length || 0), 0),
     body_chars: packets.reduce((sum, packet) => sum + (packet.body?.length || 0), 0),
-    latest_packet: packets[0] ? packetSummary(packets[0]) : null,
-    packets: packets.map(packetSummary),
+    latest_packet: packets[0] ? dashboardPacketSummary(packets[0]) : null,
+    packets: packets.map(dashboardPacketSummary),
     workspaces,
   };
 }
 
+function dashboardPacketSummary(packet) {
+  return {
+    ...packetSummary(packet),
+    notes: packet.notes || [],
+    body_preview: packet.body ? truncateText(packet.body, 2600) : "",
+    git: packet.git ? {
+      branch: packet.git.branch || null,
+      head: packet.git.head || null,
+      status: packet.git.status || [],
+    } : null,
+  };
+}
+
 function renderDashboardHtml(state) {
-  const cards = state.packets.length
-    ? state.packets.map(renderDashboardPacketCard).join("\n")
-    : `<section class="empty">No handoff packets matched this dashboard.</section>`;
-  const workspaces = state.workspaces.length
-    ? state.workspaces.map((item) => `<li><span>${escapeHtml(item.workspace)}</span><strong>${item.packets}</strong></li>`).join("\n")
-    : "<li><span>No workspaces yet</span><strong>0</strong></li>";
+  const stateJson = escapeScriptJson(JSON.stringify(state));
 
   return `<!doctype html>
 <html lang="en">
@@ -989,29 +997,20 @@ function renderDashboardHtml(state) {
   <title>ACB Dashboard</title>
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: #f6f8fa;
+      color-scheme: light;
+      --bg: #f4f6f8;
       --panel: #ffffff;
       --text: #1f2328;
       --muted: #59636e;
-      --line: #d0d7de;
-      --accent: #0969da;
+      --line: #d8dee4;
+      --soft: #eef2f6;
+      --accent: #0a7ea4;
+      --accent-strong: #075f7a;
       --good: #1a7f37;
       --warn: #9a6700;
+      --danger: #cf222e;
       --code: #f6f8fa;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0d1117;
-        --panel: #161b22;
-        --text: #e6edf3;
-        --muted: #8b949e;
-        --line: #30363d;
-        --accent: #58a6ff;
-        --good: #3fb950;
-        --warn: #d29922;
-        --code: #0d1117;
-      }
+      --shadow: 0 10px 30px rgba(31, 35, 40, 0.08);
     }
     * { box-sizing: border-box; }
     body {
@@ -1021,52 +1020,177 @@ function renderDashboardHtml(state) {
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.5;
     }
-    main { max-width: 1220px; margin: 0 auto; padding: 28px 20px 44px; }
-    header { display: flex; justify-content: space-between; gap: 18px; align-items: start; margin-bottom: 20px; }
-    h1 { margin: 0 0 6px; font-size: 31px; line-height: 1.15; letter-spacing: 0; }
-    h2 { margin: 0 0 10px; font-size: 18px; letter-spacing: 0; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .shell { max-width: 1440px; margin: 0 auto; padding: 20px; }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0 0 6px; font-size: 28px; line-height: 1.15; letter-spacing: 0; }
+    h2 { margin: 0; font-size: 16px; letter-spacing: 0; }
+    h3 { margin: 0; font-size: 15px; letter-spacing: 0; }
     p { margin: 0; color: var(--muted); }
-    .meta { color: var(--muted); font-size: 13px; }
-    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; margin: 18px 0; }
-    .stat, .panel, .packet, .empty {
+    .meta, .small { color: var(--muted); font-size: 12px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .btn, .tab {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 7px 10px;
+      min-height: 34px;
+    }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn:hover, .tab:hover { border-color: var(--accent); }
+    .stats { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .stat, .panel, .empty {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 14px;
+      box-shadow: var(--shadow);
     }
     .stat strong { display: block; font-size: 23px; line-height: 1.2; }
-    .stat span, .packet .sub { color: var(--muted); font-size: 13px; }
-    .packet { margin-bottom: 10px; }
-    .packet h3 { margin: 0 0 6px; font-size: 16px; letter-spacing: 0; }
-    .commands { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr) 320px;
+      gap: 14px;
+      align-items: start;
+    }
+    .panel { min-width: 0; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .search {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: var(--panel);
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+    .packet-list { display: grid; gap: 8px; max-height: calc(100vh - 260px); overflow: auto; padding-right: 2px; }
+    .packet-row {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 10px;
+      color: var(--text);
+    }
+    .packet-row.active { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); background: #f0f9fb; }
+    .packet-title { font-weight: 650; overflow-wrap: anywhere; }
+    .packet-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border: 1px solid var(--line);
+      background: var(--soft);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 12px;
+      max-width: 100%;
+    }
+    .badge.good { color: var(--good); border-color: rgba(26, 127, 55, 0.25); background: rgba(26, 127, 55, 0.08); }
+    .badge.warn { color: var(--warn); border-color: rgba(154, 103, 0, 0.25); background: rgba(154, 103, 0, 0.08); }
+    .detail-title { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .detail-title h2 { font-size: 22px; overflow-wrap: anywhere; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+    .kv {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: 7px 12px;
+      margin: 12px 0;
+      font-size: 13px;
+    }
+    .kv div:nth-child(odd) { color: var(--muted); }
+    .kv div:nth-child(even) { overflow-wrap: anywhere; }
+    .command-grid { display: grid; gap: 8px; margin-top: 10px; }
+    .command {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: var(--code);
+      border-radius: 8px;
+      padding: 8px;
+    }
     code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
       background: var(--code);
       border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 3px 8px;
+      border-radius: 8px;
+      padding: 12px;
+      max-height: 360px;
+      overflow: auto;
+      font-size: 12px;
     }
     ul { list-style: none; padding: 0; margin: 0; }
     li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
     li:last-child { border-bottom: 0; }
     li span { overflow-wrap: anywhere; color: var(--muted); font-size: 13px; }
     a { color: var(--accent); }
-    @media (max-width: 820px) {
-      header { display: block; }
-      .layout { grid-template-columns: 1fr; }
+    .hidden { display: none !important; }
+    .empty { color: var(--muted); }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      background: var(--text);
+      color: white;
+      padding: 9px 12px;
+      border-radius: 8px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 160ms ease, transform 160ms ease;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 300px minmax(0, 1fr); }
+      .side { grid-column: 1 / -1; }
+      .stats { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .shell { padding: 14px; }
+      .topbar { grid-template-columns: 1fr; }
+      .toolbar { justify-content: flex-start; }
+      .grid { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .packet-list { max-height: none; }
+      .kv { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <header>
+  <script id="acb-state" type="application/json">${stateJson}</script>
+  <main class="shell">
+    <header class="topbar">
       <div>
         <h1>ACB Dashboard</h1>
-        <p>${escapeHtml(state.workspace || "All workspaces")}</p>
+        <p>${escapeHtml(state.workspace || "All workspaces")} · read-only local control surface</p>
       </div>
-      <div class="meta">version ${escapeHtml(state.version)}<br>generated ${escapeHtml(state.generated_at)}<br><a href="/api/state">/api/state</a></div>
+      <div class="toolbar">
+        <button class="btn" id="refresh">Refresh</button>
+        <button class="btn" id="toggle-json">JSON</button>
+        <a class="btn primary" href="/api/state">/api/state</a>
+      </div>
     </header>
     <section class="stats" aria-label="summary">
       <div class="stat"><strong>${state.shown_packets}</strong><span>packets shown</span></div>
@@ -1075,31 +1199,207 @@ function renderDashboardHtml(state) {
       <div class="stat"><strong>${state.dirty_file_count}</strong><span>dirty files captured</span></div>
       <div class="stat"><strong>${state.body_chars}</strong><span>body chars shown</span></div>
     </section>
-    <section class="layout">
-      <div>${cards}</div>
+    <section class="grid">
       <aside class="panel">
-        <h2>Workspace History</h2>
-        <ul>${workspaces}</ul>
+        <div class="panel-header">
+          <h2>Packets</h2>
+          <span class="small" id="packet-count"></span>
+        </div>
+        <input class="search" id="search" type="search" placeholder="Search summary, status, tags, notes">
+        <div class="packet-list" id="packet-list"></div>
+      </aside>
+      <section class="panel" id="detail"></section>
+      <aside class="panel side">
+        <div class="panel-header">
+          <h2>Workspace</h2>
+          <span class="small">v${escapeHtml(state.version)}</span>
+        </div>
+        <div class="kv">
+          <div>scope</div><div>${escapeHtml(state.scope)}</div>
+          <div>generated</div><div>${escapeHtml(state.generated_at)}</div>
+          <div>store</div><div>${escapeHtml(state.store_path)}</div>
+          <div>limit</div><div>${escapeHtml(String(state.limit))}</div>
+        </div>
+        <h3>Workspace History</h3>
+        <ul id="workspace-list"></ul>
       </aside>
     </section>
+    <section class="panel hidden" id="json-panel" style="margin-top: 14px;">
+      <div class="panel-header"><h2>Raw State</h2><span class="small">read-only</span></div>
+      <pre id="raw-json"></pre>
+    </section>
   </main>
+  <div class="toast" id="toast">Copied</div>
+  <script>
+    const state = JSON.parse(document.getElementById("acb-state").textContent);
+    let selectedId = state.latest_packet ? state.latest_packet.id : null;
+    let activeTab = "overview";
+
+    const el = (id) => document.getElementById(id);
+    const fmt = (value) => value == null || value === "" ? "—" : String(value);
+    const escape = (value) => String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+    const packetTitle = (packet) => packet.summary || packet.status || packet.id;
+
+    function render() {
+      renderPackets();
+      renderDetail();
+      renderWorkspaces();
+      el("raw-json").textContent = JSON.stringify(state, null, 2);
+    }
+
+    function filteredPackets() {
+      const query = el("search").value.trim().toLowerCase();
+      if (!query) return state.packets;
+      return state.packets.filter((packet) => [
+        packet.id,
+        packet.from,
+        packet.workspace,
+        packet.summary,
+        packet.status,
+        (packet.tags || []).join(" "),
+        (packet.notes || []).join(" "),
+        packet.body_preview,
+      ].filter(Boolean).join("\\n").toLowerCase().includes(query));
+    }
+
+    function renderPackets() {
+      const packets = filteredPackets();
+      el("packet-count").textContent = packets.length + " shown";
+      if (!packets.length) {
+        el("packet-list").innerHTML = '<div class="empty">No packets match this filter.</div>';
+        return;
+      }
+      if (!packets.some((packet) => packet.id === selectedId)) selectedId = packets[0].id;
+      el("packet-list").innerHTML = packets.map((packet) => {
+        const tags = (packet.tags || []).slice(0, 3).map((tag) => '<span class="badge">' + escape(tag) + '</span>').join("");
+        const dirty = packet.git_dirty_files ? '<span class="badge warn">' + packet.git_dirty_files + ' dirty</span>' : '<span class="badge good">clean</span>';
+        return '<button class="packet-row ' + (packet.id === selectedId ? 'active' : '') + '" data-id="' + escape(packet.id) + '">' +
+          '<div class="packet-title">' + escape(packetTitle(packet)) + '</div>' +
+          '<div class="packet-sub">' + escape(packet.from) + ' · ' + escape(packet.created_at) + '</div>' +
+          '<div class="badge-row">' + dirty + tags + '</div>' +
+        '</button>';
+      }).join("");
+      for (const row of document.querySelectorAll(".packet-row")) {
+        row.addEventListener("click", () => {
+          selectedId = row.dataset.id;
+          activeTab = "overview";
+          render();
+        });
+      }
+    }
+
+    function renderDetail() {
+      const packet = state.packets.find((item) => item.id === selectedId);
+      if (!packet) {
+        el("detail").innerHTML = '<div class="empty">No handoff packet selected.</div>';
+        return;
+      }
+      const tabs = ["overview", "commands", "body", "git"];
+      const tabButtons = tabs.map((tab) => '<button class="tab ' + (tab === activeTab ? 'active' : '') + '" data-tab="' + tab + '">' + tab + '</button>').join("");
+      el("detail").innerHTML =
+        '<div class="detail-title">' +
+          '<div><h2>' + escape(packetTitle(packet)) + '</h2><p>' + escape(packet.id) + '</p></div>' +
+          '<button class="btn primary" data-copy="' + escape(packet.next_brief) + '">Copy brief command</button>' +
+        '</div>' +
+        '<div class="tabs">' + tabButtons + '</div>' +
+        '<div id="tab-content">' + renderTab(packet) + '</div>';
+      for (const tab of document.querySelectorAll(".tab")) {
+        tab.addEventListener("click", () => {
+          activeTab = tab.dataset.tab;
+          renderDetail();
+        });
+      }
+      wireCopyButtons();
+    }
+
+    function renderTab(packet) {
+      if (activeTab === "commands") {
+        return '<div class="command-grid">' + [
+          ["Brief", packet.next_brief],
+          ["Resume", packet.next_resume],
+          ["Show prompt", packet.next_show_prompt],
+          ["MCP full", packet.next_mcp_read],
+          ["MCP brief", packet.next_mcp_brief],
+        ].map(([label, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">Copy</button></div>').join("") + '</div>';
+      }
+      if (activeTab === "body") {
+        return packet.body_preview
+          ? '<pre>' + escape(packet.body_preview) + '</pre>'
+          : '<div class="empty">No body preview captured for this packet.</div>';
+      }
+      if (activeTab === "git") {
+        if (!packet.git) return '<div class="empty">No Git snapshot captured.</div>';
+        const status = packet.git.status && packet.git.status.length ? packet.git.status.join("\\n") : "No dirty files captured.";
+        return '<div class="kv"><div>branch</div><div>' + escape(fmt(packet.git.branch)) + '</div><div>head</div><div>' + escape(fmt(packet.git.head)) + '</div></div><pre>' + escape(status) + '</pre>';
+      }
+      const notes = packet.notes && packet.notes.length
+        ? '<ul>' + packet.notes.map((note) => '<li><span>' + escape(note) + '</span></li>').join("") + '</ul>'
+        : '<div class="empty">No notes.</div>';
+      const tags = packet.tags && packet.tags.length
+        ? '<div class="badge-row">' + packet.tags.map((tag) => '<span class="badge">' + escape(tag) + '</span>').join("") + '</div>'
+        : '<div class="empty">No tags.</div>';
+      return '<div class="kv">' +
+        '<div>from</div><div>' + escape(fmt(packet.from)) + '</div>' +
+        '<div>workspace</div><div>' + escape(fmt(packet.workspace)) + '</div>' +
+        '<div>created</div><div>' + escape(fmt(packet.created_at)) + '</div>' +
+        '<div>updated</div><div>' + escape(fmt(packet.updated_at)) + '</div>' +
+        '<div>status</div><div>' + escape(fmt(packet.status)) + '</div>' +
+        '<div>body chars</div><div>' + escape(fmt(packet.body_chars)) + '</div>' +
+        '</div><h3>Tags</h3>' + tags + '<h3 style="margin-top: 14px;">Notes</h3>' + notes;
+    }
+
+    function renderWorkspaces() {
+      if (!state.workspaces.length) {
+        el("workspace-list").innerHTML = '<li><span>No workspaces yet</span><strong>0</strong></li>';
+        return;
+      }
+      el("workspace-list").innerHTML = state.workspaces.map((item) =>
+        '<li><span>' + escape(item.workspace) + '</span><strong>' + escape(item.packets) + '</strong></li>'
+      ).join("");
+    }
+
+    function wireCopyButtons() {
+      for (const button of document.querySelectorAll("[data-copy]")) {
+        button.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy);
+            showToast("Copied");
+          } catch {
+            showToast("Copy failed");
+          }
+        });
+      }
+    }
+
+    function showToast(message) {
+      const toast = el("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 1200);
+    }
+
+    el("search").addEventListener("input", render);
+    el("refresh").addEventListener("click", () => window.location.reload());
+    el("toggle-json").addEventListener("click", () => el("json-panel").classList.toggle("hidden"));
+    render();
+  </script>
 </body>
 </html>
 `;
 }
 
-function renderDashboardPacketCard(packet) {
-  const title = packet.summary || packet.status || packet.id;
-  return `<article class="packet">
-    <h3>${escapeHtml(title)}</h3>
-    <div class="sub">${escapeHtml(packet.id)} - ${escapeHtml(packet.from)} - ${escapeHtml(packet.created_at)}</div>
-    <div class="sub">${escapeHtml(packet.workspace)}</div>
-    <div class="commands">
-      <code>${escapeHtml(packet.next_brief)}</code>
-      <code>${escapeHtml(packet.next_resume)}</code>
-      <code>${escapeHtml(packet.next_show_prompt)}</code>
-    </div>
-  </article>`;
+function escapeScriptJson(value) {
+  return value
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 function exportCommand(args) {

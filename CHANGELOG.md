@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1
+
+Dashboard usability pass.
+
+### Added
+
+- Upgraded `acb dashboard` into a three-pane local audit workspace with packet search, packet detail tabs, command copy buttons, workspace metadata, and raw JSON inspection.
+- Extended dashboard packet state with notes, tags, Git snapshot metadata, and a bounded body preview.
+
 ## 0.5.0
 
 0.4.0+ completion candidate.
