@@ -284,7 +284,8 @@ test("handoff is a one-step save entrypoint", () => {
   const noCopy = run(["handoff", "--summary", "Two step handoff", "--no-copy"], { env });
   assert.equal(noCopy.status, 0);
   assert.match(noCopy.stdout, /saved handoff packet/);
-  assert.match(noCopy.stdout, /next: acb prompt/);
+  const noCopyPacket = JSON.parse(run(["latest", "--json"], { env }).stdout);
+  assert.match(noCopy.stdout, new RegExp(`next: acb resume --id ${noCopyPacket.id}`));
 
   const invalid = run(["handoff", "--summary", "bad", "--no-copy", "--json"], { env });
   assert.equal(invalid.status, 2);

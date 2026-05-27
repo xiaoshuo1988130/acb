@@ -51,7 +51,7 @@ acb save --summary "Design handoff" --file ./handoff.md
 cat ./agent-output.txt | acb save --summary "Prior agent output" --stdin
 ```
 
-`--file` and `--stdin` are mutually exclusive. ACB stores the body locally, and `acb prompt` includes it under `## Context Body`.
+`--file` and `--stdin` are mutually exclusive. ACB stores the body locally, and `acb resume` includes it under `## Context Body`.
 
 Prompt rendering caps the body section so a very large log does not accidentally flood the next agent context. The local packet still keeps the original body.
 

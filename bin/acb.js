@@ -165,7 +165,7 @@ function saveCommand(args) {
 
   console.log(`[acb] saved handoff packet: ${packet.id}`);
   console.log(`[acb] workspace: ${packet.workspace}`);
-  console.log("[acb] next: acb prompt");
+  console.log(`[acb] next: acb resume --id ${packet.id}`);
   return 0;
 }
 
