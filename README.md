@@ -61,7 +61,7 @@ MCP clients can pull the same handoff explicitly:
 acb serve
 ```
 
-Expose it as a local stdio MCP server. An upstream agent can call `save_handoff` or `update_handoff`, then the next agent can call `read_latest_handoff` or `search_handoffs` for the current workspace.
+Expose it as a local stdio MCP server. An upstream agent can call `save_handoff` or `update_handoff`, then the next agent can call `get_workspace_status`, `read_latest_handoff`, or `search_handoffs` for the current workspace.
 
 ## Commands
 

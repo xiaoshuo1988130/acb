@@ -228,6 +228,7 @@ Only JSON exports are importable. Markdown remains a human review format. By def
 
 Initial tools:
 
+- `get_workspace_status`: reports current packet count, latest handoff, Git state, and next commands for a workspace.
 - `read_latest_handoff`: returns the newest handoff prompt for a workspace.
 - `save_handoff`: saves an explicit local handoff packet from an MCP-capable agent.
 - `update_handoff`: corrects an existing handoff packet while preserving its original creation time.

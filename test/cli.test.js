@@ -978,30 +978,35 @@ test("serve exposes handoff tools over MCP stdio", () => {
     }, 1),
     notification("notifications/initialized"),
     rpc("tools/list", {}, 2),
-    rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace } }, 3),
-    rpc("tools/call", { name: "list_handoffs", arguments: { workspace, limit: 5 } }, 4),
-    rpc("tools/call", { name: "search_handoffs", arguments: { workspace, query: "pull", limit: 5 } }, 5),
-    rpc("tools/call", { name: "list_workspaces", arguments: { limit: 5 } }, 6),
+    rpc("tools/call", { name: "get_workspace_status", arguments: { workspace } }, 3),
+    rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace } }, 4),
+    rpc("tools/call", { name: "list_handoffs", arguments: { workspace, limit: 5 } }, 5),
+    rpc("tools/call", { name: "search_handoffs", arguments: { workspace, query: "pull", limit: 5 } }, 6),
+    rpc("tools/call", { name: "list_workspaces", arguments: { limit: 5 } }, 7),
   ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
   assert.equal(served.stderr, "");
   const messages = parseJsonLines(served.stdout);
-  assert.equal(messages.length, 6);
+  assert.equal(messages.length, 7);
   assert.equal(messages[0].result.protocolVersion, "2025-06-18");
   assert.deepEqual(messages[0].result.capabilities, { tools: { listChanged: false } });
-  assert.equal(messages[1].result.tools[0].name, "read_latest_handoff");
+  assert.equal(messages[1].result.tools[0].name, "get_workspace_status");
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "read_latest_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "search_handoffs"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "update_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "list_workspaces"));
-  assert.match(messages[2].result.content[0].text, /MCP handoff/);
-  assert.equal(messages[2].result.structuredContent.packet.summary, "MCP handoff");
-  assert.equal(messages[3].result.structuredContent.packets.length, 1);
-  assert.equal(messages[4].result.structuredContent.packets[0].summary, "MCP handoff");
-  assert.equal(messages[5].result.structuredContent.workspaces[0].workspace, realWorkspace(workspace));
+  assert.match(messages[2].result.content[0].text, /ACB Status/);
+  assert.equal(messages[2].result.structuredContent.report.workspace_packets, 1);
+  assert.match(messages[2].result.structuredContent.report.next.resume, /^acb resume --id pkt_/);
+  assert.match(messages[3].result.content[0].text, /MCP handoff/);
+  assert.equal(messages[3].result.structuredContent.packet.summary, "MCP handoff");
+  assert.equal(messages[4].result.structuredContent.packets.length, 1);
+  assert.equal(messages[5].result.structuredContent.packets[0].summary, "MCP handoff");
+  assert.equal(messages[6].result.structuredContent.workspaces[0].workspace, realWorkspace(workspace));
 
-  const id = messages[3].result.structuredContent.packets[0].id;
+  const id = messages[4].result.structuredContent.packets[0].id;
   const readById = run(["serve"], {
     env,
     input: rpc("tools/call", { name: "read_handoff", arguments: { id } }, 1),

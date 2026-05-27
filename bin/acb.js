@@ -889,29 +889,36 @@ function buildStatusReport(workspace) {
 }
 
 function printStatusReport(report) {
-  console.log("ACB Status");
-  console.log(`workspace: ${report.workspace}`);
-  console.log(`store: ${report.store_path}`);
-  console.log(`workspace_packets: ${report.workspace_packets}`);
+  process.stdout.write(`${formatStatusReport(report)}\n`);
+}
+
+function formatStatusReport(report) {
+  const lines = [
+    "ACB Status",
+    `workspace: ${report.workspace}`,
+    `store: ${report.store_path}`,
+    `workspace_packets: ${report.workspace_packets}`,
+  ];
   if (report.git) {
-    console.log(`git_branch: ${report.git.branch || "unknown"}`);
-    console.log(`git_head: ${report.git.head || "unknown"}`);
-    console.log(`git_dirty_files: ${report.git.dirty_files}`);
+    lines.push(`git_branch: ${report.git.branch || "unknown"}`);
+    lines.push(`git_head: ${report.git.head || "unknown"}`);
+    lines.push(`git_dirty_files: ${report.git.dirty_files}`);
   } else {
-    console.log("git: unavailable");
+    lines.push("git: unavailable");
   }
   if (!report.latest_packet) {
-    console.log("latest_packet: none");
-    console.log(`next: ${report.next.handoff}`);
-    return;
+    lines.push("latest_packet: none");
+    lines.push(`next: ${report.next.handoff}`);
+    return lines.join("\n");
   }
-  console.log(`latest_packet: ${report.latest_packet.id}`);
-  console.log(`latest_from: ${report.latest_packet.from}`);
-  console.log(`latest_created_at: ${report.latest_packet.created_at}`);
-  if (report.latest_packet.summary) console.log(`latest_summary: ${report.latest_packet.summary}`);
-  if (report.latest_packet.status) console.log(`latest_status: ${report.latest_packet.status}`);
-  console.log(`next_resume: ${report.next.resume}`);
-  console.log(`next_show_prompt: ${report.next.show_prompt}`);
+  lines.push(`latest_packet: ${report.latest_packet.id}`);
+  lines.push(`latest_from: ${report.latest_packet.from}`);
+  lines.push(`latest_created_at: ${report.latest_packet.created_at}`);
+  if (report.latest_packet.summary) lines.push(`latest_summary: ${report.latest_packet.summary}`);
+  if (report.latest_packet.status) lines.push(`latest_status: ${report.latest_packet.status}`);
+  lines.push(`next_resume: ${report.next.resume}`);
+  lines.push(`next_show_prompt: ${report.next.show_prompt}`);
+  return lines.join("\n");
 }
 
 function clearCommand(args) {
@@ -1171,7 +1178,7 @@ function verifyMcpServer(name, server) {
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["read_latest_handoff", "save_handoff", "update_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
+  const requiredTools = ["get_workspace_status", "read_latest_handoff", "save_handoff", "update_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   report.ok = Object.values(report.checks).every(Boolean);
   if (!report.ok && !report.error) report.error = "MCP server did not expose the expected ACB tools.";
@@ -1400,6 +1407,21 @@ function mcpInitialize(params) {
 function mcpTools() {
   return [
     {
+      name: "get_workspace_status",
+      title: "Get Workspace Status",
+      description: "Inspect local ACB handoff state for a workspace before deciding whether to read or save a handoff.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspace: {
+            type: "string",
+            description: "Optional workspace path. Defaults to the MCP server process current working directory.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
       name: "read_latest_handoff",
       title: "Read Latest Handoff",
       description: "Read the newest local ACB handoff packet, optionally scoped to a workspace.",
@@ -1613,6 +1635,7 @@ function mcpTools() {
 function mcpCallTool(params) {
   const name = params?.name;
   const args = params?.arguments || {};
+  if (name === "get_workspace_status") return mcpGetWorkspaceStatus(args);
   if (name === "read_latest_handoff") return mcpReadLatestHandoff(args);
   if (name === "save_handoff") return mcpSaveHandoff(args);
   if (name === "update_handoff") return mcpUpdateHandoff(args);
@@ -1621,6 +1644,16 @@ function mcpCallTool(params) {
   if (name === "list_workspaces") return mcpListWorkspaces(args);
   if (name === "list_handoffs") return mcpListHandoffs(args);
   throw jsonRpcError(-32602, `Unknown tool: ${name}`);
+}
+
+function mcpGetWorkspaceStatus(args) {
+  const workspace = args.workspace ? normalizeWorkspace(args.workspace) : normalizeWorkspace(process.cwd());
+  const report = buildStatusReport(workspace);
+  return {
+    content: [{ type: "text", text: formatStatusReport(report) }],
+    structuredContent: { report },
+    isError: false,
+  };
 }
 
 function mcpReadLatestHandoff(args) {
