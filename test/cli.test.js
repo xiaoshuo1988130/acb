@@ -471,19 +471,22 @@ test("serve exposes handoff tools over MCP stdio", () => {
     rpc("tools/list", {}, 2),
     rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace } }, 3),
     rpc("tools/call", { name: "list_handoffs", arguments: { workspace, limit: 5 } }, 4),
+    rpc("tools/call", { name: "search_handoffs", arguments: { workspace, query: "pull", limit: 5 } }, 5),
   ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
   assert.equal(served.stderr, "");
   const messages = parseJsonLines(served.stdout);
-  assert.equal(messages.length, 4);
+  assert.equal(messages.length, 5);
   assert.equal(messages[0].result.protocolVersion, "2025-06-18");
   assert.deepEqual(messages[0].result.capabilities, { tools: { listChanged: false } });
   assert.equal(messages[1].result.tools[0].name, "read_latest_handoff");
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "search_handoffs"));
   assert.match(messages[2].result.content[0].text, /MCP handoff/);
   assert.equal(messages[2].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[3].result.structuredContent.packets.length, 1);
+  assert.equal(messages[4].result.structuredContent.packets[0].summary, "MCP handoff");
 
   const id = messages[3].result.structuredContent.packets[0].id;
   const readById = run(["serve"], {
@@ -540,15 +543,18 @@ test("serve returns tool errors as tool results", () => {
   const input = [
     rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace: dir } }, 1),
     rpc("tools/call", { name: "save_handoff", arguments: { workspace: dir } }, 2),
+    rpc("tools/call", { name: "search_handoffs", arguments: { query: "" } }, 3),
   ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
-  const [message, saveMessage] = parseJsonLines(served.stdout);
+  const [message, saveMessage, searchMessage] = parseJsonLines(served.stdout);
   assert.equal(message.result.isError, true);
   assert.match(message.result.content[0].text, /No handoff packet found/);
   assert.equal(saveMessage.result.isError, true);
   assert.match(saveMessage.result.content[0].text, /requires summary/);
+  assert.equal(searchMessage.result.isError, true);
+  assert.match(searchMessage.result.content[0].text, /query is required/);
 });
 
 test("delete removes a single packet", () => {

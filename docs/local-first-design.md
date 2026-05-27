@@ -170,6 +170,7 @@ Initial tools:
 - `read_latest_handoff`: returns the newest handoff prompt for a workspace.
 - `save_handoff`: saves an explicit local handoff packet from an MCP-capable agent.
 - `read_handoff`: returns a specific handoff prompt by packet id.
+- `search_handoffs`: searches local handoff history.
 - `list_handoffs`: returns recent packet summaries without expanding full body text.
 
 This keeps both export and ingestion explicit. An upstream agent must call `save_handoff`; a downstream agent must call a read tool. ACB does not silently inject context into the model request.

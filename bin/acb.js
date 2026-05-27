@@ -806,7 +806,7 @@ function verifyMcpServer(name, server) {
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["read_latest_handoff", "save_handoff", "read_handoff", "list_handoffs"];
+  const requiredTools = ["read_latest_handoff", "save_handoff", "read_handoff", "search_handoffs", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   report.ok = Object.values(report.checks).every(Boolean);
   if (!report.ok && !report.error) report.error = "MCP server did not expose the expected ACB tools.";
@@ -1107,6 +1107,32 @@ function mcpTools() {
       },
     },
     {
+      name: "search_handoffs",
+      title: "Search Handoffs",
+      description: "Search local ACB handoff packet summaries, notes, tags, body text, workspace paths, and lightweight Git metadata.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Search query.",
+          },
+          workspace: {
+            type: "string",
+            description: "Optional workspace path.",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 50,
+            description: "Maximum number of packets to return. Defaults to 10.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+    {
       name: "list_handoffs",
       title: "List Handoffs",
       description: "List recent local ACB handoff packets without expanding full context bodies.",
@@ -1136,6 +1162,7 @@ function mcpCallTool(params) {
   if (name === "read_latest_handoff") return mcpReadLatestHandoff(args);
   if (name === "save_handoff") return mcpSaveHandoff(args);
   if (name === "read_handoff") return mcpReadHandoff(args);
+  if (name === "search_handoffs") return mcpSearchHandoffs(args);
   if (name === "list_handoffs") return mcpListHandoffs(args);
   throw jsonRpcError(-32602, `Unknown tool: ${name}`);
 }
@@ -1244,6 +1271,30 @@ function mcpListHandoffs(args) {
     .slice(0, limit)
     .map(packetSummary);
 
+  return {
+    content: [{ type: "text", text: JSON.stringify(packets, null, 2) }],
+    structuredContent: { packets },
+    isError: false,
+  };
+}
+
+function mcpSearchHandoffs(args) {
+  const query = typeof args.query === "string" ? args.query.trim() : "";
+  if (!query) {
+    return {
+      content: [{ type: "text", text: "query is required." }],
+      isError: true,
+    };
+  }
+  const workspace = args.workspace ? normalizeWorkspace(args.workspace) : null;
+  const limit = parseLimit(args.limit);
+  if (!limit || limit > 50) {
+    return {
+      content: [{ type: "text", text: "limit must be an integer between 1 and 50." }],
+      isError: true,
+    };
+  }
+  const packets = searchPackets({ query, workspace, limit });
   return {
     content: [{ type: "text", text: JSON.stringify(packets, null, 2) }],
     structuredContent: { packets },
