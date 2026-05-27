@@ -55,6 +55,15 @@ cat ./agent-output.txt | acb save --summary "Prior agent output" --stdin
 
 Prompt rendering caps the body section so a very large log does not accidentally flood the next agent context. The local packet still keeps the original body.
 
+When the user is ready to move immediately, `save` can render the prompt in the same step:
+
+```bash
+acb save --summary "Ready for another agent" --git --copy
+acb save --summary "Scripted handoff" --stdin --print-prompt
+```
+
+`--copy` writes the rendered handoff prompt to the system clipboard. If clipboard access fails, ACB prints the prompt instead. `--print-prompt` skips the clipboard and writes the rendered prompt to stdout.
+
 Existing packets can be corrected without deleting and recreating them:
 
 ```bash

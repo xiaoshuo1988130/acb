@@ -14,7 +14,7 @@ const MCP_PROTOCOL_VERSION = "2025-06-18";
 const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
-  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>]
+  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--copy | --print-prompt]
   acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]
   acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
   acb latest [--workspace <path>] [--json]
@@ -75,6 +75,11 @@ async function main(argv = process.argv.slice(2)) {
 }
 
 function saveCommand(args) {
+  if (args.includes("--copy") && args.includes("--print-prompt")) {
+    console.error("Use only one save output mode: --copy or --print-prompt.");
+    return 2;
+  }
+
   const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
   const summary = argValue(args, "--summary") || "";
   const status = argValue(args, "--status") || "";
@@ -114,6 +119,25 @@ function saveCommand(args) {
   const store = loadStore();
   store.packets.unshift(packet);
   writeStore(store);
+
+  if (args.includes("--print-prompt")) {
+    process.stdout.write(renderHandoffPrompt(packet));
+    return 0;
+  }
+
+  if (args.includes("--copy")) {
+    const copied = copyToClipboard(renderHandoffPrompt(packet));
+    if (copied.ok) {
+      console.log(`[acb] saved handoff packet: ${packet.id}`);
+      console.log("[acb] handoff prompt copied to clipboard.");
+      console.log("[acb] switch to your next agent and paste.");
+      return 0;
+    }
+    console.error(`[acb] clipboard unavailable: ${copied.error}`);
+    console.error("[acb] saved packet, printing prompt instead:\n");
+    process.stdout.write(renderHandoffPrompt(packet));
+    return 0;
+  }
 
   console.log(`[acb] saved handoff packet: ${packet.id}`);
   console.log(`[acb] workspace: ${packet.workspace}`);

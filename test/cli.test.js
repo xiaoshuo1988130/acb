@@ -200,6 +200,33 @@ test("save reads handoff body from stdin", () => {
   assert.match(packet.body, /failing smoke test/);
 });
 
+test("save can immediately render a handoff prompt", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const saved = run([
+    "save",
+    "--from",
+    "codex",
+    "--summary",
+    "One step handoff",
+    "--note",
+    "Paste directly into the next agent",
+    "--print-prompt",
+  ], { env });
+  assert.equal(saved.status, 0);
+  assert.match(saved.stdout, /You are taking over work/);
+  assert.match(saved.stdout, /One step handoff/);
+  assert.match(saved.stdout, /Paste directly into the next agent/);
+
+  const packet = JSON.parse(run(["latest", "--json"], { env }).stdout);
+  assert.equal(packet.summary, "One step handoff");
+
+  const invalid = run(["save", "--summary", "bad", "--copy", "--print-prompt"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use only one save output mode/);
+});
+
 test("update edits packet metadata, tags, notes, and body", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");

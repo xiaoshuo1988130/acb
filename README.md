@@ -17,6 +17,12 @@ acb prompt
 
 `acb prompt` copies a handoff prompt to your clipboard. Paste it into the next agent.
 
+For a one-step handoff, save and copy in the same command:
+
+```bash
+acb save --from codex --summary "Ready for the next agent" --git --copy
+```
+
 If clipboard access is unavailable, ACB prints the prompt instead.
 
 You can also hand off a real context body from a file or pipe:
@@ -53,7 +59,7 @@ Expose it as a local stdio MCP server. An upstream agent can call `save_handoff`
 ## Commands
 
 ```bash
-acb save --from <agent> --summary <text> --status <text> --note <text> --tag <tag> --file <path>
+acb save --from <agent> --summary <text> --status <text> --note <text> --tag <tag> --file <path> --copy
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
 acb save --from <agent> --summary <text> --diff
@@ -84,6 +90,8 @@ acb store path
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
 
 `acb status` prints the current workspace handoff state and the next commands to copy or inspect the latest packet.
+
+`acb save --copy` saves the packet and immediately copies its rendered prompt. `acb save --print-prompt` is the deterministic terminal-only version for scripts and tests.
 
 `acb save --diff` stores a bounded tracked Git diff body and a lightweight Git snapshot. It is useful when the next agent needs to inspect current code changes.
 
