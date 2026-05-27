@@ -91,6 +91,15 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(listed.stdout, new RegExp(packet.id));
   assert.match(listed.stdout, /Implemented local handoff/);
 
+  const searched = run(["search", "publish", "--workspace", workspace], { env });
+  assert.equal(searched.status, 0);
+  assert.match(searched.stdout, /ACB Search: publish/);
+  assert.match(searched.stdout, new RegExp(packet.id));
+
+  const searchedJson = run(["search", "mvp", "--workspace", workspace, "--json"], { env });
+  assert.equal(searchedJson.status, 0);
+  assert.equal(JSON.parse(searchedJson.stdout)[0].id, packet.id);
+
   const timeline = run(["timeline", "--workspace", workspace], { env });
   assert.equal(timeline.status, 0);
   assert.match(timeline.stdout, /ACB Timeline/);
@@ -245,6 +254,23 @@ test("preview reports missing packets", () => {
   const result = run(["preview", "--id", "pkt_missing"], { env: { ACB_STORE: path.join(dir, "packets.json") } });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /No handoff packet found/);
+});
+
+test("search handles empty matches and validates limit", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const missingQuery = run(["search"], { env });
+  assert.equal(missingQuery.status, 2);
+  assert.match(missingQuery.stderr, /Usage: acb search/);
+
+  const badLimit = run(["search", "anything", "--limit", "0"], { env });
+  assert.equal(badLimit.status, 2);
+  assert.match(badLimit.stderr, /--limit must be/);
+
+  const empty = run(["search", "nothing"], { env });
+  assert.equal(empty.status, 0);
+  assert.match(empty.stdout, /no packets matched/);
 });
 
 test("export validates requested format", () => {

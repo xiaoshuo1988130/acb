@@ -20,6 +20,7 @@ Usage:
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb preview [--workspace <path>] [--id <packet-id>] [--out <path>] [--open]
   acb list [--workspace <path>] [--limit <n>] [--json]
+  acb search <query> [--workspace <path>] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--limit <n>] [--json]
   acb export [--workspace <path>] [--limit <n>] [--format markdown|json] [--out <path>]
   acb import --file <path> [--replace]
@@ -50,6 +51,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "prompt") return promptCommand(args);
   if (command === "preview") return previewCommand(args);
   if (command === "list") return listCommand(args);
+  if (command === "search") return searchCommand(args);
   if (command === "timeline") return timelineCommand(args);
   if (command === "export") return exportCommand(args);
   if (command === "import") return importCommand(args);
@@ -243,6 +245,42 @@ function listCommand(args) {
   for (const packet of packets) {
     console.log(`${packet.id}  ${packet.created_at}  ${packet.from}  ${packet.workspace}`);
     if (packet.summary) console.log(`  ${packet.summary}`);
+  }
+  return 0;
+}
+
+function searchCommand(args) {
+  const query = args.find((arg) => !arg.startsWith("--"));
+  if (!query) {
+    console.error("Usage: acb search <query> [--workspace <path>] [--limit <n>] [--json]");
+    return 2;
+  }
+  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const limit = parseLimit(argValue(args, "--limit"));
+  if (!limit) {
+    console.error("--limit must be a positive integer.");
+    return 2;
+  }
+  const matches = searchPackets({ query, workspace, limit });
+
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(matches, null, 2)}\n`);
+    return 0;
+  }
+
+  if (matches.length === 0) {
+    console.log(workspace ? `[acb] no packets matched "${query}" in workspace: ${workspace}` : `[acb] no packets matched "${query}"`);
+    return 0;
+  }
+
+  console.log(`ACB Search: ${query}`);
+  if (workspace) console.log(`workspace: ${workspace}`);
+  for (const packet of matches) {
+    console.log(`${packet.id}  ${packet.created_at}  ${packet.from}`);
+    console.log(`  workspace: ${packet.workspace}`);
+    if (packet.summary) console.log(`  summary: ${packet.summary}`);
+    if (packet.status) console.log(`  status: ${packet.status}`);
+    if (packet.tags?.length) console.log(`  tags: ${packet.tags.join(", ")}`);
   }
   return 0;
 }
@@ -482,6 +520,34 @@ function printTimelinePacket(packet) {
   console.log(`  ${summary}`);
   console.log(`  workspace: ${packet.workspace}`);
   if (facts.length) console.log(`  ${facts.join("  ")}`);
+}
+
+function searchPackets({ query, workspace = null, limit = DEFAULT_LIMIT }) {
+  const needle = query.toLowerCase();
+  return loadStore().packets
+    .filter((packet) => !workspace || packet.workspace === workspace)
+    .filter((packet) => searchablePacketText(packet).includes(needle))
+    .slice(0, limit)
+    .map(packetSummary);
+}
+
+function searchablePacketText(packet) {
+  return [
+    packet.id,
+    packet.from,
+    packet.workspace,
+    packet.summary,
+    packet.status,
+    ...(packet.notes || []),
+    ...(packet.tags || []),
+    packet.body,
+    packet.git?.branch,
+    packet.git?.head,
+    ...(packet.git?.status || []),
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
 }
 
 function buildStatusReport(workspace) {

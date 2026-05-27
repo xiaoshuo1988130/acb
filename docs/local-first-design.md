@@ -116,6 +116,16 @@ It does not copy anything to the clipboard and does not modify the packet store.
 
 ## Terminal Timeline
 
+`acb search` keeps local history useful once packets accumulate:
+
+```bash
+acb search "schema"
+acb search "handoff" --workspace .
+acb search "blocked" --json
+```
+
+It searches packet ids, source agent names, workspace paths, summaries, statuses, notes, tags, body text, and lightweight Git metadata.
+
 `acb timeline` is the first visualization layer.
 
 It prints recent handoff packets with:
