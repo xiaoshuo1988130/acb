@@ -532,7 +532,7 @@ function searchCommand(args) {
   }
 
   console.log(`ACB Search: ${query}`);
-  if (workspace) console.log(`workspace: ${workspace}`);
+  console.log(workspace ? `workspace: ${workspace}` : "workspace: all");
   for (const packet of matches) {
     console.log(`${packet.id}  ${packet.created_at}  ${packet.from}`);
     console.log(`  workspace: ${packet.workspace}`);
@@ -570,7 +570,7 @@ function timelineCommand(args) {
   }
 
   console.log("ACB Timeline");
-  if (workspace) console.log(`workspace: ${workspace}`);
+  console.log(workspace ? `workspace: ${workspace}` : "workspace: all");
   for (const packet of packets) printTimelinePacket(packet);
   return 0;
 }

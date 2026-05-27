@@ -320,8 +320,20 @@ test("history commands default to current workspace and support all", () => {
   const searchScoped = run(["search", "handoff", "--json"], { env, cwd: workspaceA });
   assert.equal(JSON.parse(searchScoped.stdout).length, 1);
 
+  const searchAllHuman = run(["search", "handoff", "--all"], { env, cwd: workspaceA });
+  assert.equal(searchAllHuman.status, 0);
+  assert.match(searchAllHuman.stdout, /workspace: all/);
+
+  const timelineScopedHuman = run(["timeline"], { env, cwd: workspaceA });
+  assert.equal(timelineScopedHuman.status, 0);
+  assert.match(timelineScopedHuman.stdout, new RegExp(`workspace: ${realWorkspace(workspaceA)}`));
+
   const timelineAll = JSON.parse(run(["timeline", "--all", "--json"], { env, cwd: workspaceA }).stdout);
   assert.equal(timelineAll.length, 2);
+
+  const timelineAllHuman = run(["timeline", "--all"], { env, cwd: workspaceA });
+  assert.equal(timelineAllHuman.status, 0);
+  assert.match(timelineAllHuman.stdout, /workspace: all/);
 
   const exportScoped = run(["export", "--format", "json"], { env, cwd: workspaceA });
   assert.equal(JSON.parse(exportScoped.stdout).length, 1);
