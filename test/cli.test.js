@@ -78,13 +78,16 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(status.status, 0);
   assert.match(status.stdout, /ACB Status/);
   assert.match(status.stdout, new RegExp(packet.id));
-  assert.match(status.stdout, /next_copy_prompt/);
+  assert.match(status.stdout, /next_resume/);
+  assert.match(status.stdout, new RegExp(`acb resume --id ${packet.id}`));
 
   const statusJson = run(["status", "--workspace", workspace, "--json"], { env });
   assert.equal(statusJson.status, 0);
   const statusReport = JSON.parse(statusJson.stdout);
   assert.equal(statusReport.latest_packet.id, packet.id);
   assert.equal(statusReport.workspace_packets, 1);
+  assert.equal(statusReport.next.resume, `acb resume --id ${packet.id}`);
+  assert.equal(statusReport.next.copy_prompt, `acb prompt --id ${packet.id}`);
 
   const listed = run(["list", "--workspace", workspace], { env });
   assert.equal(listed.status, 0);
@@ -526,7 +529,7 @@ test("status reports an empty workspace without failing", () => {
   const result = run(["status", "--workspace", workspace], { env: { ACB_STORE: path.join(dir, "packets.json") } });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /latest_packet: none/);
-  assert.match(result.stdout, /acb save --summary/);
+  assert.match(result.stdout, /acb handoff --summary/);
 });
 
 test("preview reports missing packets", () => {

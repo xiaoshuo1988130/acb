@@ -817,10 +817,12 @@ function buildStatusReport(workspace) {
     latest_packet: latest ? packetSummary(latest) : null,
     git,
     next: latest ? {
+      resume: `acb resume --id ${latest.id}`,
       copy_prompt: `acb prompt --id ${latest.id}`,
       show_prompt: `acb show ${latest.id} --prompt`,
       mcp_pull: "Use acb to read the latest handoff for this workspace.",
     } : {
+      handoff: "acb handoff --summary \"...\" --git",
       save: "acb save --summary \"...\" --git",
     },
   };
@@ -840,7 +842,7 @@ function printStatusReport(report) {
   }
   if (!report.latest_packet) {
     console.log("latest_packet: none");
-    console.log(`next: ${report.next.save}`);
+    console.log(`next: ${report.next.handoff}`);
     return;
   }
   console.log(`latest_packet: ${report.latest_packet.id}`);
@@ -848,7 +850,7 @@ function printStatusReport(report) {
   console.log(`latest_created_at: ${report.latest_packet.created_at}`);
   if (report.latest_packet.summary) console.log(`latest_summary: ${report.latest_packet.summary}`);
   if (report.latest_packet.status) console.log(`latest_status: ${report.latest_packet.status}`);
-  console.log(`next_copy_prompt: ${report.next.copy_prompt}`);
+  console.log(`next_resume: ${report.next.resume}`);
   console.log(`next_show_prompt: ${report.next.show_prompt}`);
 }
 

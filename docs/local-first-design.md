@@ -132,7 +132,7 @@ If clipboard access fails, ACB prints the prompt. Linux users may need to instal
 
 `acb status` is the quick workspace view.
 
-It reports the current workspace, packet count, latest packet summary, Git state, and the next concrete commands to copy or inspect the handoff prompt.
+It reports the current workspace, packet count, latest packet summary, Git state, and the next concrete commands to resume or inspect the handoff prompt.
 
 `acb doctor` is a read-only local environment check.
 

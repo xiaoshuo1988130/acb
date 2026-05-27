@@ -101,7 +101,7 @@ acb store backup --out ./acb-store.backup.json
 
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
 
-`acb status` prints the current workspace handoff state and the next commands to copy or inspect the latest packet.
+`acb status` prints the current workspace handoff state and the next commands to resume or inspect the latest packet.
 
 `acb handoff` is the primary one-step entrypoint. It behaves like `acb save --copy` by default. Use `--print-prompt` or `--json` for deterministic script output, or `--no-copy` when you want the older two-step `save` then `prompt` flow.
 
