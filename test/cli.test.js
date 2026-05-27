@@ -300,6 +300,13 @@ test("config mcp prints a copyable MCP server snippet", () => {
   ]);
   assert.equal(nodeConfig.status, 0);
   assert.deepEqual(JSON.parse(nodeConfig.stdout).mcpServers["node-acb"].args, [bin, "serve"]);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const outPath = path.join(dir, "nested", "mcp.json");
+  const written = run(["config", "mcp", "--name", "file-acb", "--out", outPath]);
+  assert.equal(written.status, 0);
+  assert.match(written.stdout, /wrote MCP config/);
+  assert.equal(JSON.parse(fs.readFileSync(outPath, "utf8")).mcpServers["file-acb"].command, "acb");
 });
 
 test("verify mcp smoke tests a configured stdio server", () => {
@@ -376,6 +383,9 @@ test("doctor reports local store and workspace state", () => {
   assert.equal(report.checks.store_readable, true);
   assert.equal(typeof report.checks.git_available, "boolean");
   assert.equal(typeof report.checks.clipboard_command_available, "boolean");
+  assert.equal(typeof report.checks.acb_command_available, "boolean");
+  assert.equal(report.mcp.config_command, "acb config mcp --out ./mcp.json");
+  assert.match(human.stdout, /mcp_config_command/);
 });
 
 test("serve exposes handoff tools over MCP stdio", () => {

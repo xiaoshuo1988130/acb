@@ -95,6 +95,8 @@ It reports:
 - Current workspace packet count
 - Git command availability and workspace detection
 - Clipboard command availability
+- Whether the default `acb` command is visible on `PATH` for MCP clients
+- Copyable MCP config and verify commands
 
 It does not copy anything to the clipboard and does not modify the packet store.
 
@@ -155,6 +157,7 @@ Generate it:
 acb config mcp
 acb config mcp --command /absolute/path/to/acb --name local-acb
 acb config mcp --command node --arg /absolute/path/to/bin/acb.js --arg serve --name local-acb
+acb config mcp --out ./mcp.json
 ```
 
 Example output:

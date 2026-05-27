@@ -24,7 +24,7 @@ Usage:
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
-  acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...]
+  acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
   acb verify mcp [--config <path>] [--name <server-name>] [--json]
   acb serve
   acb store path
@@ -450,14 +450,24 @@ function doctorCommand(args) {
 function configCommand(args) {
   const target = args[0];
   if (target !== "mcp") {
-    console.error("Usage: acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...]");
+    console.error("Usage: acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]");
     return 2;
   }
   const command = argValue(args, "--command") || "acb";
   const name = argValue(args, "--name") || "acb";
   const commandArgs = argValues(args, "--arg");
+  const outPath = argValue(args, "--out");
   const config = mcpServerConfig({ name, command, args: commandArgs.length ? commandArgs : ["serve"] });
-  process.stdout.write(`${JSON.stringify(config, null, 2)}\n`);
+  const content = `${JSON.stringify(config, null, 2)}\n`;
+  if (outPath) {
+    const resolved = path.resolve(outPath);
+    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    fs.writeFileSync(resolved, content);
+    console.log(`[acb] wrote MCP config to ${resolved}`);
+    console.log(`[acb] next: acb verify mcp --config ${resolved} --name ${name}`);
+    return 0;
+  }
+  process.stdout.write(content);
   return 0;
 }
 
@@ -647,6 +657,7 @@ function buildDoctorReport(workspace) {
     command,
     available: commandExists(command),
   }));
+  const acbCommandAvailable = commandExists("acb");
   const gitAvailable = commandExists("git");
   const gitRootResult = gitAvailable ? runGit(workspace, ["rev-parse", "--show-toplevel"]) : { status: 1 };
   const gitRoot = gitRootResult.status === 0 ? gitRootResult.stdout.trim() : null;
@@ -663,6 +674,7 @@ function buildDoctorReport(workspace) {
       git_available: gitAvailable,
       git_workspace: Boolean(gitRoot),
       clipboard_command_available: clipboardCommands.some((item) => item.available),
+      acb_command_available: acbCommandAvailable,
     },
     git: {
       root: gitRoot,
@@ -672,6 +684,11 @@ function buildDoctorReport(workspace) {
     clipboard: {
       platform: process.platform,
       commands: clipboardCommands,
+    },
+    mcp: {
+      default_command_available: acbCommandAvailable,
+      config_command: "acb config mcp --out ./mcp.json",
+      verify_command: "acb verify mcp --config ./mcp.json --name acb",
     },
   };
 }
@@ -695,6 +712,9 @@ function printDoctorReport(report) {
   if (!availableClipboard.length && process.platform === "linux") {
     console.log("clipboard_hint: install wl-clipboard, xclip, or xsel");
   }
+  console.log(`mcp_default_command_available: ${report.mcp.default_command_available ? "yes" : "no"}`);
+  console.log(`mcp_config_command: ${report.mcp.config_command}`);
+  console.log(`mcp_verify_command: ${report.mcp.verify_command}`);
 }
 
 function serveCommand(args) {

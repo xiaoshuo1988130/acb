@@ -60,7 +60,7 @@ acb delete <packet-id>
 acb clear --workspace .
 acb clear --all
 acb doctor
-acb config mcp
+acb config mcp --out ./mcp.json
 acb verify mcp --config ./mcp.json
 acb serve
 acb store path
@@ -70,7 +70,7 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 
-`acb doctor` checks the local store, current workspace packet count, Git availability, and clipboard command availability without writing anything.
+`acb doctor` checks the local store, current workspace packet count, Git availability, clipboard command availability, and whether `acb` is visible on `PATH` for MCP clients.
 
 `acb timeline` prints a compact terminal view of recent handoffs. It is the first visualization layer before any optional web viewer.
 
@@ -78,7 +78,7 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 
 `acb import` restores JSON exports into the local packet store. Duplicate packet ids are skipped unless `--replace` is used.
 
-`acb config mcp` prints a copyable stdio MCP server config for clients that support MCP.
+`acb config mcp` prints or writes a copyable stdio MCP server config for clients that support MCP.
 
 `acb verify mcp` reads an MCP config, launches the selected stdio server, and checks that the ACB handoff tools are available before you paste that config into a client.
 
