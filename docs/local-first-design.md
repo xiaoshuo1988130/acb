@@ -72,6 +72,7 @@ Use `--git` to attach a lightweight snapshot:
 
 ```bash
 acb save --summary "Ready for another agent" --git
+acb save --summary "Review current changes" --diff
 ```
 
 ACB records:
@@ -81,7 +82,7 @@ ACB records:
 - Short HEAD
 - `git status --short`
 
-It intentionally does not capture `git diff` by default. Large diffs should be passed explicitly with `--file` or `--stdin` when the user wants that context in the packet.
+It intentionally does not capture `git diff` by default. Use `--diff` when the next agent needs the tracked staged and unstaged diff relative to `HEAD`. `--diff` is bounded by `--diff-limit` and does not include untracked file contents.
 
 ## Clipboard
 

@@ -48,6 +48,7 @@ Expose it as a local stdio MCP server. An upstream agent can call `save_handoff`
 acb save --from <agent> --summary <text> --status <text> --note <text> --tag <tag> --file <path>
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
+acb save --from <agent> --summary <text> --diff
 acb status
 acb latest
 acb show <packet-id>
@@ -72,6 +73,8 @@ acb store path
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
 
 `acb status` prints the current workspace handoff state and the next commands to copy or inspect the latest packet.
+
+`acb save --diff` stores a bounded tracked Git diff body and a lightweight Git snapshot. It is useful when the next agent needs to inspect current code changes.
 
 `acb preview` writes the latest handoff prompt to a Markdown file for review. Add `--open` when you want ACB to open it with the system default app.
 

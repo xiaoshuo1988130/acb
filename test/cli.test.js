@@ -210,6 +210,33 @@ test("save can attach an explicit git snapshot", () => {
   assert.match(prompt.stdout, /dirty_files: 1/);
 });
 
+test("save can attach a bounded git diff body", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "ACB Test"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  spawnSync("git", ["add", "README.md"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["commit", "-m", "initial"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n\nchanged line for handoff\n", "utf8");
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const saved = run(["save", "--workspace", workspace, "--summary", "Captured diff", "--diff", "--diff-limit", "1000"], { env });
+  assert.equal(saved.status, 0);
+
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.match(packet.body, /## Git Diff/);
+  assert.match(packet.body, /changed line for handoff/);
+  assert.equal(packet.git.status.length, 1);
+
+  const prompt = run(["prompt", "--id", packet.id, "--no-copy"], { env });
+  assert.equal(prompt.status, 0);
+  assert.match(prompt.stdout, /## Context Body/);
+  assert.match(prompt.stdout, /```diff/);
+});
+
 test("save rejects git snapshot outside a git workspace", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const env = { ACB_STORE: path.join(dir, "packets.json") };
@@ -225,11 +252,15 @@ test("save rejects invalid body sources", () => {
 
   const both = run(["save", "--summary", "bad", "--file", "x", "--stdin"], { env, input: "x" });
   assert.equal(both.status, 2);
-  assert.match(both.stderr, /either --file or --stdin/);
+  assert.match(both.stderr, /Use only one body source/);
 
   const missing = run(["save", "--file", path.join(dir, "missing.md")], { env });
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /Cannot read --file/);
+
+  const badDiffLimit = run(["save", "--summary", "bad", "--diff", "--diff-limit", "nope"], { env });
+  assert.equal(badDiffLimit.status, 2);
+  assert.match(badDiffLimit.stderr, /--diff-limit must be/);
 });
 
 test("save requires useful handoff content", () => {
@@ -535,6 +566,39 @@ test("serve can save handoff packets over MCP stdio", () => {
   const latest = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
   assert.equal(latest.summary, "Saved through MCP");
   assert.deepEqual(latest.tags, ["mcp", "handoff"]);
+});
+
+test("serve can save handoff packets with git diff over MCP stdio", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "ACB Test"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  spawnSync("git", ["add", "README.md"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["commit", "-m", "initial"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n\nmcp diff line\n", "utf8");
+  const env = { ACB_STORE: storePath };
+
+  const served = run(["serve"], {
+    env,
+    input: rpc("tools/call", {
+      name: "save_handoff",
+      arguments: {
+        workspace,
+        summary: "MCP diff packet",
+        include_diff: true,
+        diff_limit: 1000,
+      },
+    }, 1),
+  });
+  assert.equal(served.status, 0);
+  const [message] = parseJsonLines(served.stdout);
+  assert.equal(message.result.isError, false);
+  assert.match(message.result.structuredContent.packet.body, /mcp diff line/);
+  assert.equal(message.result.structuredContent.packet.git.status.length, 1);
 });
 
 test("serve returns tool errors as tool results", () => {

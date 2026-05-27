@@ -8,12 +8,13 @@ const VERSION = "0.0.1";
 const STORE_VERSION = 1;
 const DEFAULT_LIMIT = 10;
 const PROMPT_BODY_LIMIT = 12000;
+const DIFF_BODY_LIMIT = 20000;
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 
 const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
-  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin] [--git]
+  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>]
   acb latest [--workspace <path>] [--json]
   acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
@@ -74,8 +75,10 @@ function saveCommand(args) {
   const notes = argValues(args, "--note");
   const tags = argValues(args, "--tag");
   const from = argValue(args, "--from") || process.env.ACB_AGENT || "unknown";
-  const bodyResult = readSaveBody(args);
-  const gitResult = args.includes("--git") ? readGitSnapshot(workspace) : { ok: true, snapshot: null };
+  const bodyResult = readSaveBody(args, workspace);
+  const gitResult = args.includes("--git") || args.includes("--diff")
+    ? readGitSnapshot(workspace)
+    : { ok: true, snapshot: null };
 
   if (!bodyResult.ok) {
     console.error(bodyResult.error);
@@ -87,7 +90,7 @@ function saveCommand(args) {
   }
 
   if (!summary && !status && notes.length === 0 && !bodyResult.body && !gitResult.snapshot) {
-    console.error("acb save needs at least --summary, --status, --note, --file, --stdin, or --git.");
+    console.error("acb save needs at least --summary, --status, --note, --file, --stdin, --diff, or --git.");
     return 2;
   }
 
@@ -1086,6 +1089,15 @@ function mcpTools() {
             type: "boolean",
             description: "Attach a lightweight Git snapshot when the workspace is a Git repository.",
           },
+          include_diff: {
+            type: "boolean",
+            description: "Attach tracked staged and unstaged Git diff text when the workspace is a Git repository.",
+          },
+          diff_limit: {
+            type: "integer",
+            minimum: 1,
+            description: "Maximum diff body characters when include_diff is true. Defaults to 20000.",
+          },
         },
         additionalProperties: false,
       },
@@ -1191,16 +1203,27 @@ function mcpSaveHandoff(args) {
   const tags = normalizeStringArray(args.tags);
   const summary = typeof args.summary === "string" && args.summary.trim() ? args.summary : null;
   const status = typeof args.status === "string" && args.status.trim() ? args.status : null;
-  const body = typeof args.body === "string" && args.body.trim() ? args.body : null;
+  let body = typeof args.body === "string" && args.body.trim() ? args.body : null;
 
-  if (!summary && !status && notes.length === 0 && !body && !args.include_git) {
+  if (args.include_diff) {
+    const diffResult = readGitDiffBody(workspace, args.diff_limit);
+    if (!diffResult.ok) {
+      return {
+        content: [{ type: "text", text: diffResult.error }],
+        isError: true,
+      };
+    }
+    body = body ? `${body.trimEnd()}\n\n${diffResult.body}` : diffResult.body;
+  }
+
+  if (!summary && !status && notes.length === 0 && !body && !args.include_git && !args.include_diff) {
     return {
-      content: [{ type: "text", text: "save_handoff requires summary, status, notes, body, or include_git." }],
+      content: [{ type: "text", text: "save_handoff requires summary, status, notes, body, include_git, or include_diff." }],
       isError: true,
     };
   }
 
-  const gitResult = args.include_git ? readGitSnapshot(workspace) : { ok: true, snapshot: null };
+  const gitResult = args.include_git || args.include_diff ? readGitSnapshot(workspace) : { ok: true, snapshot: null };
   if (!gitResult.ok) {
     return {
       content: [{ type: "text", text: gitResult.error }],
@@ -1418,15 +1441,18 @@ function createPacketId() {
   return `pkt_${stamp}_${random}`;
 }
 
-function readSaveBody(args) {
+function readSaveBody(args, workspace) {
   const filePath = argValue(args, "--file");
   const wantsStdin = args.includes("--stdin");
+  const wantsDiff = args.includes("--diff");
+  const sources = [Boolean(filePath), wantsStdin, wantsDiff].filter(Boolean).length;
 
-  if (filePath && wantsStdin) {
-    return { ok: false, error: "Use either --file or --stdin, not both." };
+  if (sources > 1) {
+    return { ok: false, error: "Use only one body source: --file, --stdin, or --diff." };
   }
   if (filePath) return readBodyFile(filePath);
   if (wantsStdin) return readBodyStdin();
+  if (wantsDiff) return readGitDiffBody(workspace, argValue(args, "--diff-limit"));
   return { ok: true, body: "" };
 }
 
@@ -1451,6 +1477,33 @@ function readBodyStdin() {
   } catch (error) {
     return { ok: false, error: `Cannot read --stdin: ${error.message}` };
   }
+}
+
+function readGitDiffBody(workspace, limitValue) {
+  const limit = limitValue === undefined ? DIFF_BODY_LIMIT : parseLimit(limitValue);
+  if (!limit) return { ok: false, error: "--diff-limit must be a positive integer." };
+
+  const rootResult = runGit(workspace, ["rev-parse", "--show-toplevel"]);
+  if (rootResult.status !== 0) {
+    return { ok: false, error: `--diff requires a Git workspace: ${workspace}` };
+  }
+  const root = rootResult.stdout.trim();
+  const stat = runGit(root, ["diff", "--stat", "HEAD", "--"]);
+  const diff = runGit(root, ["diff", "--no-ext-diff", "--unified=3", "HEAD", "--"]);
+  const sections = [
+    "## Git Diff",
+    "",
+    "Tracked staged and unstaged changes relative to HEAD. Untracked file contents are not included.",
+  ];
+  if (stat.stdout.trim()) sections.push("", "### Stat", "", "```text", stat.stdout.trimEnd(), "```");
+  if (diff.stdout.trim()) sections.push("", "### Diff", "", "```diff", truncateDiff(diff.stdout.trimEnd(), limit), "```");
+  if (!stat.stdout.trim() && !diff.stdout.trim()) sections.push("", "_No tracked diff relative to HEAD._");
+  return { ok: true, body: `${sections.join("\n")}\n` };
+}
+
+function truncateDiff(diff, limit) {
+  if (diff.length <= limit) return diff;
+  return `${diff.slice(0, limit).trimEnd()}\n\n[acb: git diff truncated at ${limit} characters]`;
 }
 
 function readGitSnapshot(workspace) {
