@@ -24,7 +24,8 @@ Usage:
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
-  acb config mcp [--command <path-or-command>] [--name <server-name>]
+  acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...]
+  acb verify mcp [--config <path>] [--name <server-name>] [--json]
   acb serve
   acb store path
   acb --version
@@ -52,6 +53,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "clear") return clearCommand(args);
   if (command === "doctor") return doctorCommand(args);
   if (command === "config") return configCommand(args);
+  if (command === "verify") return verifyCommand(args);
   if (command === "serve") return serveCommand(args);
   if (command === "store") return storeCommand(args);
 
@@ -448,21 +450,43 @@ function doctorCommand(args) {
 function configCommand(args) {
   const target = args[0];
   if (target !== "mcp") {
-    console.error("Usage: acb config mcp [--command <path-or-command>] [--name <server-name>]");
+    console.error("Usage: acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...]");
     return 2;
   }
   const command = argValue(args, "--command") || "acb";
   const name = argValue(args, "--name") || "acb";
-  const config = {
-    mcpServers: {
-      [name]: {
-        command,
-        args: ["serve"],
-      },
-    },
-  };
+  const commandArgs = argValues(args, "--arg");
+  const config = mcpServerConfig({ name, command, args: commandArgs.length ? commandArgs : ["serve"] });
   process.stdout.write(`${JSON.stringify(config, null, 2)}\n`);
   return 0;
+}
+
+function verifyCommand(args) {
+  const target = args[0];
+  if (target !== "mcp") {
+    console.error("Usage: acb verify mcp [--config <path>] [--name <server-name>] [--json]");
+    return 2;
+  }
+
+  const parsed = readMcpConfig(argValue(args, "--config"));
+  if (!parsed.ok) {
+    console.error(parsed.error);
+    return 2;
+  }
+
+  const selected = selectMcpServer(parsed.config, argValue(args, "--name"));
+  if (!selected.ok) {
+    console.error(selected.error);
+    return 2;
+  }
+
+  const report = verifyMcpServer(selected.name, selected.server);
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  } else {
+    printMcpVerifyReport(report);
+  }
+  return report.ok ? 0 : 1;
 }
 
 function storeCommand(args) {
@@ -472,6 +496,148 @@ function storeCommand(args) {
   }
   console.log(storePath());
   return 0;
+}
+
+function mcpServerConfig({ name, command, args }) {
+  return {
+    mcpServers: {
+      [name]: {
+        command,
+        args,
+      },
+    },
+  };
+}
+
+function readMcpConfig(configPath) {
+  if (!configPath) return { ok: true, config: mcpServerConfig({ name: "acb", command: "acb", args: ["serve"] }) };
+  const resolved = path.resolve(configPath);
+  try {
+    return { ok: true, config: JSON.parse(fs.readFileSync(resolved, "utf8")) };
+  } catch (error) {
+    return { ok: false, error: `Cannot read MCP config ${resolved}: ${error.message}` };
+  }
+}
+
+function selectMcpServer(config, requestedName) {
+  const servers = config?.mcpServers;
+  if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
+    return { ok: false, error: "MCP config must contain an mcpServers object." };
+  }
+  const names = Object.keys(servers);
+  if (names.length === 0) return { ok: false, error: "MCP config does not contain any servers." };
+  const name = requestedName || names[0];
+  const server = servers[name];
+  if (!server) return { ok: false, error: `MCP server not found in config: ${name}` };
+  if (!server.command || typeof server.command !== "string") {
+    return { ok: false, error: `MCP server ${name} must define a string command.` };
+  }
+  if (server.args !== undefined && !Array.isArray(server.args)) {
+    return { ok: false, error: `MCP server ${name} args must be an array when provided.` };
+  }
+  return { ok: true, name, server: { command: server.command, args: server.args || [] } };
+}
+
+function verifyMcpServer(name, server) {
+  const input = [
+    jsonRpcLine("initialize", {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: { name: "acb-verify", version: VERSION },
+    }, 1),
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }),
+    jsonRpcLine("tools/list", {}, 2),
+    "",
+  ].join("\n");
+
+  const result = spawnSync(server.command, server.args, {
+    encoding: "utf8",
+    input,
+    timeout: 5000,
+    maxBuffer: 1024 * 1024,
+  });
+
+  const report = {
+    ok: false,
+    server: name,
+    command: server.command,
+    args: server.args,
+    checks: {
+      launch: false,
+      initialize: false,
+      tools_list: false,
+      required_tools: false,
+    },
+    tools: [],
+    error: null,
+    stderr: result.stderr?.trim() || "",
+  };
+
+  if (result.error) {
+    report.error = result.error.message;
+    return report;
+  }
+  if (result.status !== 0) {
+    report.error = `server exited with status ${result.status}`;
+    return report;
+  }
+
+  report.checks.launch = true;
+  const messages = parseJsonRpcLines(result.stdout || "");
+  const initialize = messages.find((message) => message.id === 1);
+  const toolsList = messages.find((message) => message.id === 2);
+
+  if (initialize?.result?.serverInfo?.name) report.checks.initialize = true;
+  else if (initialize?.error) report.error = initialize.error.message || "initialize failed";
+
+  if (Array.isArray(toolsList?.result?.tools)) {
+    report.checks.tools_list = true;
+    report.tools = toolsList.result.tools.map((tool) => tool.name).filter(Boolean);
+  } else if (toolsList?.error) {
+    report.error = toolsList.error.message || "tools/list failed";
+  }
+
+  const requiredTools = ["read_latest_handoff", "read_handoff", "list_handoffs"];
+  report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
+  report.ok = Object.values(report.checks).every(Boolean);
+  if (!report.ok && !report.error) report.error = "MCP server did not expose the expected ACB tools.";
+  return report;
+}
+
+function jsonRpcLine(method, params, id) {
+  return JSON.stringify({ jsonrpc: "2.0", id, method, params });
+}
+
+function parseJsonRpcLines(stdout) {
+  return stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function printMcpVerifyReport(report) {
+  console.log("ACB MCP Verify");
+  console.log(`server: ${report.server}`);
+  console.log(`command: ${formatCommand(report.command, report.args)}`);
+  console.log(`launch: ${report.checks.launch ? "ok" : "failed"}`);
+  console.log(`initialize: ${report.checks.initialize ? "ok" : "failed"}`);
+  console.log(`tools/list: ${report.checks.tools_list ? "ok" : "failed"}`);
+  console.log(`required_tools: ${report.checks.required_tools ? "ok" : "failed"}`);
+  console.log(`tools: ${report.tools.length ? report.tools.join(", ") : "none"}`);
+  if (report.error) console.log(`error: ${report.error}`);
+  if (report.stderr) console.log(`stderr: ${report.stderr}`);
+}
+
+function formatCommand(command, args) {
+  return [command, ...args].map((part) => (/\s/.test(part) ? JSON.stringify(part) : part)).join(" ");
 }
 
 function buildDoctorReport(workspace) {

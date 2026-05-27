@@ -61,6 +61,7 @@ acb clear --workspace .
 acb clear --all
 acb doctor
 acb config mcp
+acb verify mcp --config ./mcp.json
 acb serve
 acb store path
 ```
@@ -78,6 +79,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb import` restores JSON exports into the local packet store. Duplicate packet ids are skipped unless `--replace` is used.
 
 `acb config mcp` prints a copyable stdio MCP server config for clients that support MCP.
+
+`acb verify mcp` reads an MCP config, launches the selected stdio server, and checks that the ACB handoff tools are available before you paste that config into a client.
 
 ## Boundaries
 

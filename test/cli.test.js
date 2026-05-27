@@ -284,6 +284,72 @@ test("config mcp prints a copyable MCP server snippet", () => {
   assert.equal(localConfig.status, 0);
   const parsed = JSON.parse(localConfig.stdout);
   assert.equal(parsed.mcpServers["local-acb"].command, "/tmp/acb/bin/acb.js");
+  assert.deepEqual(parsed.mcpServers["local-acb"].args, ["serve"]);
+
+  const nodeConfig = run([
+    "config",
+    "mcp",
+    "--command",
+    process.execPath,
+    "--arg",
+    bin,
+    "--arg",
+    "serve",
+    "--name",
+    "node-acb",
+  ]);
+  assert.equal(nodeConfig.status, 0);
+  assert.deepEqual(JSON.parse(nodeConfig.stdout).mcpServers["node-acb"].args, [bin, "serve"]);
+});
+
+test("verify mcp smoke tests a configured stdio server", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const configPath = path.join(dir, "mcp.json");
+  const config = run([
+    "config",
+    "mcp",
+    "--command",
+    process.execPath,
+    "--arg",
+    bin,
+    "--arg",
+    "serve",
+    "--name",
+    "local-acb",
+  ]);
+  assert.equal(config.status, 0);
+  fs.writeFileSync(configPath, config.stdout, "utf8");
+
+  const verified = run(["verify", "mcp", "--config", configPath, "--name", "local-acb"]);
+  assert.equal(verified.status, 0);
+  assert.match(verified.stdout, /ACB MCP Verify/);
+  assert.match(verified.stdout, /initialize: ok/);
+  assert.match(verified.stdout, /read_latest_handoff/);
+
+  const json = run(["verify", "mcp", "--config", configPath, "--name", "local-acb", "--json"]);
+  assert.equal(json.status, 0);
+  const report = JSON.parse(json.stdout);
+  assert.equal(report.ok, true);
+  assert.equal(report.server, "local-acb");
+  assert.equal(report.checks.required_tools, true);
+});
+
+test("verify mcp reports launch failures", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const configPath = path.join(dir, "bad-mcp.json");
+  fs.writeFileSync(configPath, JSON.stringify({
+    mcpServers: {
+      broken: {
+        command: "definitely-not-acb-command",
+        args: ["serve"],
+      },
+    },
+  }), "utf8");
+
+  const verified = run(["verify", "mcp", "--config", configPath, "--name", "broken"]);
+  assert.equal(verified.status, 1);
+  assert.match(verified.stdout, /launch: failed/);
+  assert.match(verified.stdout, /error:/);
 });
 
 test("doctor reports local store and workspace state", () => {
