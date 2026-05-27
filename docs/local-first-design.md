@@ -58,12 +58,13 @@ Prompt rendering caps the body section so a very large log does not accidentally
 When the user is ready to move immediately, `save` can render the prompt in the same step:
 
 ```bash
+acb handoff --summary "Ready for another agent" --git
 acb save --summary "Ready for another agent" --git --copy
 acb save --summary "Scripted handoff" --stdin --print-prompt
 acb save --summary "Scripted handoff" --json
 ```
 
-`--copy` writes the rendered handoff prompt to the system clipboard. If clipboard access fails, ACB prints the prompt instead. `--print-prompt` skips the clipboard and writes the rendered prompt to stdout. `--json` skips human output and writes the created packet as JSON.
+`acb handoff` is the primary one-step entrypoint and defaults to copying the rendered prompt. `--copy` writes the rendered handoff prompt to the system clipboard. If clipboard access fails, ACB prints the prompt instead. `--print-prompt` skips the clipboard and writes the rendered prompt to stdout. `--json` skips human output and writes the created packet as JSON.
 
 Existing packets can be corrected without deleting and recreating them:
 

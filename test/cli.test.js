@@ -253,6 +253,41 @@ test("save can return the created packet as JSON", () => {
   assert.match(invalid.stderr, /Use only one save output mode/);
 });
 
+test("handoff is a one-step save entrypoint", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const prompt = run([
+    "handoff",
+    "--from",
+    "codex",
+    "--summary",
+    "Handoff shortcut",
+    "--note",
+    "Use the main entrypoint",
+    "--print-prompt",
+  ], { env });
+  assert.equal(prompt.status, 0);
+  assert.match(prompt.stdout, /You are taking over work/);
+  assert.match(prompt.stdout, /Handoff shortcut/);
+
+  const packet = JSON.parse(run(["latest", "--json"], { env }).stdout);
+  assert.equal(packet.summary, "Handoff shortcut");
+
+  const json = run(["handoff", "--summary", "Machine handoff", "--json"], { env });
+  assert.equal(json.status, 0);
+  assert.equal(JSON.parse(json.stdout).summary, "Machine handoff");
+
+  const noCopy = run(["handoff", "--summary", "Two step handoff", "--no-copy"], { env });
+  assert.equal(noCopy.status, 0);
+  assert.match(noCopy.stdout, /saved handoff packet/);
+  assert.match(noCopy.stdout, /next: acb prompt/);
+
+  const invalid = run(["handoff", "--summary", "bad", "--no-copy", "--json"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use only one handoff output mode/);
+});
+
 test("update edits packet metadata, tags, notes, and body", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");

@@ -14,6 +14,7 @@ const MCP_PROTOCOL_VERSION = "2025-06-18";
 const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
+  acb handoff [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--no-copy | --print-prompt | --json]
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--copy | --print-prompt | --json]
   acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]
   acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
@@ -50,6 +51,7 @@ async function main(argv = process.argv.slice(2)) {
 
   if (command === "help" || command === "--help" || command === "-h") return print(usage);
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
+  if (command === "handoff") return handoffCommand(args);
   if (command === "save") return saveCommand(args);
   if (command === "update") return updateCommand(args);
   if (command === "diff-preview") return diffPreviewCommand(args);
@@ -74,6 +76,19 @@ async function main(argv = process.argv.slice(2)) {
 
   console.error(`Unknown command: ${command}\n\n${usage}`);
   return 2;
+}
+
+function handoffCommand(args) {
+  if (args.includes("--no-copy") && saveOutputModes(args).length > 0) {
+    console.error("Use only one handoff output mode: --no-copy, --print-prompt, or --json.");
+    return 2;
+  }
+
+  const cleanArgs = args.filter((arg) => arg !== "--no-copy");
+  if (args.includes("--no-copy") || saveOutputModes(cleanArgs).length > 0) {
+    return saveCommand(cleanArgs);
+  }
+  return saveCommand([...cleanArgs, "--copy"]);
 }
 
 function saveCommand(args) {
