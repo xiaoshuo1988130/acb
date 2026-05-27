@@ -77,6 +77,16 @@ acb resume --id pkt_20260527123000_abc123 --preview --open
 
 `acb resume` copies the latest handoff prompt for the current workspace. `--preview` writes the same Markdown review file as `acb preview`, and `--open` opens it. It is a named entrypoint for the receiving side of the handoff; the older `acb prompt` command remains available.
 
+For a shorter receiving-side first message, use `brief`:
+
+```bash
+acb brief
+acb brief --workspace /path/to/workspace --print-brief
+acb brief --id pkt_20260527123000_abc123 --json
+```
+
+`acb brief` copies a compact takeover prompt by default. It includes packet identity, summary, status, notes, Git facts, a bounded body excerpt, and commands for pulling the full context. It is useful when a client input box is small or when you want the next agent to decide whether it needs the complete prompt.
+
 Existing packets can be corrected without deleting and recreating them:
 
 ```bash
@@ -133,11 +143,11 @@ If clipboard access fails, ACB prints the prompt. Linux users may need to instal
 
 `acb status` is the quick workspace view.
 
-It reports the current workspace, packet count, latest packet summary, Git state, and the next concrete CLI and MCP commands to resume, inspect, read, or save the handoff prompt.
+It reports the current workspace, packet count, latest packet summary, Git state, and the next concrete CLI and MCP commands to resume, brief, inspect, read, or save the handoff prompt.
 
 `acb latest` also defaults to the current workspace. Use `acb latest --all` only when you explicitly want the newest packet across every workspace.
 
-Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, and `read_handoff`) return the stored packet plus derived `next_resume`, `next_show_prompt`, and `next_mcp_read` fields. These fields are not written back into the packet store.
+Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, `read_handoff_brief`, and `read_handoff`) return the stored packet plus derived `next_resume`, `next_brief`, `next_show_prompt`, `next_mcp_read`, and `next_mcp_brief` fields. These fields are not written back into the packet store.
 
 `acb doctor` is a read-only local environment check.
 
@@ -204,6 +214,24 @@ It prints recent handoff packets with:
 
 This deliberately comes before a web dashboard. It validates whether handoff history is useful in daily work without adding frontend complexity.
 
+`acb view` is the next visual step. It writes a static local HTML file with recent handoff cards:
+
+```bash
+acb view --open
+acb view --all --limit 50 --out ./acb-view.html
+```
+
+This is still not a dashboard. It does not start a server, watch files, or sync data. The goal is to make local handoff history easier to scan while keeping the storage and review path inspectable.
+
+`acb dashboard` is the lightweight local dashboard step:
+
+```bash
+acb dashboard --workspace .
+acb dashboard --all --limit 50 --port 8765
+```
+
+It starts a read-only local HTTP server with an HTML dashboard, `/api/state`, and `/health`. It reads the packet store on each request, so refreshes show recent handoffs. It does not write to the store, sync data, or edit third-party client config.
+
 `acb list`, `acb timeline`, and `acb export` also default to the current workspace. Use `--all` when you intentionally want to inspect or export cross-workspace history.
 
 ## Export
@@ -237,6 +265,7 @@ Initial tools:
 
 - `get_workspace_status`: reports current packet count, latest handoff, Git state, and next CLI/MCP commands for a workspace.
 - `read_latest_handoff`: returns the newest handoff prompt for a workspace.
+- `read_handoff_brief`: returns a compact brief by id or latest workspace packet.
 - `save_handoff`: saves an explicit local handoff packet from an MCP-capable agent.
 - `update_handoff`: corrects an existing handoff packet while preserving its original creation time.
 - `read_handoff`: returns a specific handoff prompt by packet id.
@@ -274,10 +303,21 @@ Before copying a config into an MCP client, smoke test it:
 
 ```bash
 acb verify mcp --config ./mcp.json --name acb
+acb verify mcp --config ./mcp.json --name acb --workspace .
 acb verify mcp --config ./mcp.json --name acb --json
 ```
 
-`verify mcp` launches the configured stdio server, sends `initialize`, checks `tools/list` for the expected ACB handoff tools, and calls `get_workspace_status` once. It does not modify any client config.
+`verify mcp` launches the configured stdio server, sends `initialize`, checks `tools/list` for the expected ACB handoff tools, and calls `get_workspace_status` for the selected workspace. It does not modify any client config.
+
+`verify workflow` checks the ACB side of a client recipe without launching the client:
+
+```bash
+acb verify workflow opencode
+acb verify workflow cline --json
+acb verify workflow codex --keep-artifacts --json
+```
+
+It uses a temporary store and verifies recipe lookup, handoff save, full resume prompt, compact brief, MCP server readiness against the target workspace, dashboard state, and dashboard HTML. The temporary store is cleaned by default; use `--keep-artifacts` for debugging. This is the project-level smoke test for real client workflows while keeping third-party app setup explicit.
 
 Recommended first message in a new session:
 

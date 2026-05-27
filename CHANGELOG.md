@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.5.0
+
+0.4.0+ completion candidate.
+
+### Added
+
+- Added `acb dashboard`, a read-only local dashboard with HTML and `/api/state` views.
+- Added `acb verify workflow <target>` to smoke test recipe, handoff, brief, MCP, and dashboard surfaces for a client target without launching or mutating the third-party client.
+- Added dashboard and workflow verification documentation.
+
+## 0.4.0
+
+Compact ingest release candidate.
+
+### Added
+
+- Added `acb brief` for compact receiving-side handoff prompts.
+- Added `read_handoff_brief` to the MCP server for clients that want a short takeover summary before reading full context.
+- Added brief next-step hints to status, workspace summaries, quickstart checks, and the local HTML viewer.
+
+## 0.3.0
+
+Client recipe release candidate.
+
+### Added
+
+- Added `acb recipe` to list supported client handoff paths.
+- Added client-specific recipes for OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP clients.
+- Added recipe JSON output for scripts and documentation checks.
+
+## 0.2.0
+
+Local visual review release candidate.
+
+### Added
+
+- Added `acb view` to generate a standalone local HTML viewer for handoff history.
+- Added local viewer docs covering scope, limits, and static-file boundaries.
+
+## 0.1.0
+
+First usable local handoff release candidate.
+
+### Added
+
+- Added `acb quickstart --check` for a short first-run readiness report.
+- Reworked the README around the Codex/OpenCode/Cline handoff problem.
+- Added example and MCP recipe docs for the first user-facing adoption path.
+- Added a lightweight terminal demo SVG for the README.
+
 ## 0.0.3
 
 ### Added

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">AgentContextBus terminal demo</title>
+  <desc id="desc">A terminal transcript showing acb quickstart check, handoff, and resume commands.</desc>
+  <rect width="960" height="520" rx="10" fill="#101418"/>
+  <rect x="0" y="0" width="960" height="42" rx="10" fill="#1d232b"/>
+  <circle cx="24" cy="21" r="7" fill="#ff5f57"/>
+  <circle cx="46" cy="21" r="7" fill="#febc2e"/>
+  <circle cx="68" cy="21" r="7" fill="#28c840"/>
+  <text x="88" y="26" fill="#c9d1d9" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">acb local handoff</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16">
+    <text x="28" y="78" fill="#8b949e">$ acb quickstart --check</text>
+    <text x="28" y="108" fill="#e6edf3">ACB Quickstart Check</text>
+    <text x="28" y="136" fill="#7ee787">version: acb 0.5.0</text>
+    <text x="28" y="164" fill="#e6edf3">package: @xiaoshuo1988/acb</text>
+    <text x="28" y="192" fill="#e6edf3">store_readable: yes</text>
+    <text x="28" y="220" fill="#e6edf3">git_workspace: yes</text>
+    <text x="28" y="248" fill="#e6edf3">clipboard_ready: yes</text>
+    <text x="28" y="276" fill="#e6edf3">next_handoff: acb handoff --from codex --summary "Ready for the next agent" --git</text>
+
+    <text x="28" y="326" fill="#8b949e">$ acb handoff --from codex --summary "Ready for OpenCode" --git</text>
+    <text x="28" y="356" fill="#e6edf3">[acb] saved handoff packet: pkt_20260527123000_ab12cd</text>
+    <text x="28" y="384" fill="#7ee787">[acb] handoff prompt copied to clipboard.</text>
+
+    <text x="28" y="434" fill="#8b949e">$ acb resume</text>
+    <text x="28" y="464" fill="#7ee787">[acb] resume prompt copied to clipboard.</text>
+  </g>
+</svg>

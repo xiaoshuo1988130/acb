@@ -1,16 +1,33 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  STORE_VERSION,
+  clipboardCandidates,
+  commandExists,
+  copyToClipboard,
+  escapeHtml,
+  formatCommand,
+  jsonRpcLine,
+  normalizeWorkspace,
+  openFile,
+  parseJsonRpcLines,
+  readStore,
+  storeError,
+  storePath,
+  writeStore,
+} from "../lib/runtime.js";
 
 const PACKAGE_META = readPackageMeta();
 const VERSION = PACKAGE_META.version;
 const PACKAGE_NAME = PACKAGE_META.name;
-const STORE_VERSION = 1;
 const DEFAULT_LIMIT = 10;
 const PROMPT_BODY_LIMIT = 12000;
+const BRIEF_BODY_LIMIT = 1800;
 const DIFF_BODY_LIMIT = 20000;
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 
@@ -25,19 +42,24 @@ Usage:
   acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
   acb resume [--workspace <path>] [--id <packet-id>] [--no-copy | --print-prompt | --json | --preview] [--out <path>] [--open]
+  acb brief [--workspace <path>] [--id <packet-id>] [--no-copy | --print-brief | --json]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb preview [--workspace <path>] [--id <packet-id>] [--out <path>] [--open]
   acb list [--workspace <path>] [--all] [--limit <n>] [--json]
   acb workspaces [--limit <n>] [--json]
   acb search <query> [--workspace <path>] [--all] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--all] [--limit <n>] [--json]
+  acb view [--workspace <path>] [--all] [--limit <n>] [--out <path>] [--open]
+  acb dashboard [--workspace <path>] [--all] [--limit <n>] [--host <host>] [--port <port>] [--open]
   acb export [--workspace <path>] [--all] [--limit <n>] [--format markdown|json] [--out <path>]
   acb import --file <path> [--replace]
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
+  acb recipe [target] [--json]
   acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
-  acb verify mcp [--config <path>] [--name <server-name>] [--json]
+  acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
+  acb verify workflow <target> [--workspace <path>] [--keep-artifacts] [--json]
   acb serve
   acb store path
   acb store info [--json]
@@ -64,7 +86,10 @@ Check your local setup:
 2. In the next agent's workspace:
   acb resume
 
-3. Paste the copied handoff prompt into the next agent.
+3. For a shorter first message:
+  acb brief
+
+4. Paste the copied handoff prompt or brief into the next agent.
 
 For explicit MCP pull mode:
   acb config mcp --out ./mcp.json
@@ -72,6 +97,122 @@ For explicit MCP pull mode:
 
 Use the scoped package name ${PACKAGE_NAME}; the unscoped acb package name is already taken.
 `;
+
+const RECIPE_PROMPT = "Use acb to read the latest handoff for this workspace, then continue from it.";
+const INSPECT_PROMPT = "Use acb to inspect this workspace status. If a latest handoff exists, read it before making changes.";
+
+const RECIPE_TARGETS = [
+  {
+    id: "opencode",
+    title: "OpenCode",
+    aliases: ["open-code"],
+    mode: "Copy/paste first; MCP pull when configured.",
+    setup: [
+      "acb quickstart --check",
+      "acb handoff --from codex --summary \"Ready for OpenCode to continue\" --git",
+      "acb resume",
+      "acb config mcp --out ./mcp.json",
+      "acb verify mcp --config ./mcp.json --name acb",
+    ],
+    prompt: RECIPE_PROMPT,
+    notes: [
+      "Use copy/paste mode for the first run because it works with every OpenCode setup.",
+      "Add the generated MCP server entry only through the config path supported by your installed OpenCode version.",
+      "Keep ACB as an explicit handoff source, not a hidden prompt injector.",
+    ],
+  },
+  {
+    id: "cline",
+    title: "Cline",
+    aliases: ["claude-dev"],
+    mode: "Copy/paste first; MCP pull through Cline's own MCP configuration.",
+    setup: [
+      "acb quickstart --check",
+      "acb handoff --from codex --summary \"Ready for Cline to continue\" --git",
+      "acb resume",
+      "acb config mcp --out ./mcp.json",
+      "acb verify mcp --config ./mcp.json --name acb",
+    ],
+    prompt: INSPECT_PROMPT,
+    notes: [
+      "Do not edit VS Code extension storage or Cline private databases.",
+      "Paste the handoff prompt into Cline, or add the generated MCP entry through Cline's supported settings path.",
+      "Ask Cline to summarize the loaded handoff before it changes files.",
+    ],
+  },
+  {
+    id: "roo",
+    title: "Roo Code",
+    aliases: ["roo-code", "roocode"],
+    mode: "Copy/paste first; MCP pull through Roo's own MCP configuration.",
+    setup: [
+      "acb quickstart --check",
+      "acb handoff --from codex --summary \"Ready for Roo Code to continue\" --git",
+      "acb resume",
+      "acb config mcp --out ./mcp.json",
+      "acb verify mcp --config ./mcp.json --name acb",
+    ],
+    prompt: INSPECT_PROMPT,
+    notes: [
+      "Do not patch Roo or VS Code private state.",
+      "Use Roo's supported MCP configuration UI or file if you want tool-based pull mode.",
+      "Use copy/paste mode when MCP config format changes between Roo versions.",
+    ],
+  },
+  {
+    id: "claude-desktop",
+    title: "Claude Desktop",
+    aliases: ["claude", "claude-code", "claude-desktop-app"],
+    mode: "MCP pull when configured; copy/paste remains the fallback.",
+    setup: [
+      "acb quickstart --check",
+      "acb config mcp --out ./mcp.json",
+      "acb verify mcp --config ./mcp.json --name acb",
+      "acb handoff --from codex --summary \"Ready for Claude Desktop to continue\" --git",
+    ],
+    prompt: "Use acb to read the latest handoff for this workspace. Summarize what you loaded before acting.",
+    notes: [
+      "Add the generated MCP server entry through Claude Desktop's supported local config path.",
+      "Restart Claude Desktop after changing MCP configuration if your version requires it.",
+      "Keep handoff loading explicit and auditable.",
+    ],
+  },
+  {
+    id: "codex",
+    title: "Codex",
+    aliases: ["openai-codex"],
+    mode: "Copy/paste first; scripts can also read JSON directly.",
+    setup: [
+      "acb quickstart --check",
+      "acb handoff --from opencode --summary \"Ready for Codex to continue\" --git",
+      "acb resume",
+      "acb latest --json",
+    ],
+    prompt: RECIPE_PROMPT,
+    notes: [
+      "Use copy/paste mode when resuming a Codex thread from another tool.",
+      "Use JSON commands for scripts or automation that should avoid natural-language parsing.",
+      "Do not ask ACB to commit, push, or publish unless the user explicitly requests it.",
+    ],
+  },
+  {
+    id: "generic-mcp",
+    title: "Generic MCP Client",
+    aliases: ["mcp", "generic", "mcp-client"],
+    mode: "Explicit MCP pull.",
+    setup: [
+      "acb quickstart --check",
+      "acb config mcp --out ./mcp.json",
+      "acb verify mcp --config ./mcp.json --name acb",
+    ],
+    prompt: RECIPE_PROMPT,
+    notes: [
+      "Use the generated stdio server entry wherever your MCP client accepts local servers.",
+      "If PATH lookup fails, run acb doctor and use the local node command hint.",
+      "Prefer read_latest_handoff for workspace takeover and get_workspace_status for triage.",
+    ],
+  },
+];
 
 function readPackageMeta() {
   try {
@@ -101,17 +242,21 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "status") return statusCommand(args);
   if (command === "show") return showCommand(args);
   if (command === "resume") return resumeCommand(args);
+  if (command === "brief") return briefCommand(args);
   if (command === "prompt") return promptCommand(args);
   if (command === "preview") return previewCommand(args);
   if (command === "list") return listCommand(args);
   if (command === "workspaces") return workspacesCommand(args);
   if (command === "search") return searchCommand(args);
   if (command === "timeline") return timelineCommand(args);
+  if (command === "view") return viewCommand(args);
+  if (command === "dashboard") return dashboardCommand(args);
   if (command === "export") return exportCommand(args);
   if (command === "import") return importCommand(args);
   if (command === "delete") return deleteCommand(args);
   if (command === "clear") return clearCommand(args);
   if (command === "doctor") return doctorCommand(args);
+  if (command === "recipe" || command === "recipes") return recipeCommand(args);
   if (command === "config") return configCommand(args);
   if (command === "verify") return verifyCommand(args);
   if (command === "serve") return serveCommand(args);
@@ -150,6 +295,7 @@ function quickstartCommand(args) {
       next: {
         handoff: "acb handoff --from codex --summary \"Ready for the next agent\" --git",
         resume: "acb resume",
+        brief: "acb brief",
         doctor: "acb doctor",
         mcp_config: report.mcp.config_command,
         mcp_verify: report.mcp.verify_command,
@@ -440,6 +586,46 @@ function resumeCommand(args) {
   return 0;
 }
 
+function briefCommand(args) {
+  if (briefOutputModes(args).length > 1) {
+    console.error("Use only one brief output mode: --no-copy, --print-brief, or --json.");
+    return 2;
+  }
+
+  const id = argValue(args, "--id");
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const packet = findPacket({ workspace: id ? null : workspace, id });
+  if (!packet) {
+    console.error(id ? `No handoff packet found for id: ${id}` : "No handoff packet found to brief.");
+    return 1;
+  }
+
+  const brief = renderBriefPrompt(packet);
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify({ packet: packetWithNextSteps(packet), brief }, null, 2)}\n`);
+    return 0;
+  }
+  if (args.includes("--print-brief") || args.includes("--no-copy")) {
+    process.stdout.write(brief);
+    return 0;
+  }
+
+  const copied = copyToClipboard(brief);
+  if (copied.ok) {
+    console.log("[acb] brief copied to clipboard.");
+    console.log("Paste it into the next agent as the first message.");
+    return 0;
+  }
+  console.error(`[acb] clipboard unavailable: ${copied.error}`);
+  console.error("[acb] printing brief instead:\n");
+  process.stdout.write(brief);
+  return 0;
+}
+
+function briefOutputModes(args) {
+  return ["--no-copy", "--print-brief", "--json"].filter((flag) => args.includes(flag));
+}
+
 function resumeWantsPreview(args) {
   return args.includes("--preview") || args.includes("--open") || args.includes("--out");
 }
@@ -577,6 +763,7 @@ function workspacesCommand(args) {
     console.log(`  latest: ${item.latest_packet_id}  ${item.latest_created_at}  ${item.latest_from}`);
     if (item.latest_summary) console.log(`  summary: ${item.latest_summary}`);
     console.log(`  next_resume: ${item.next_resume}`);
+    console.log(`  next_brief: ${item.next_brief}`);
   }
   return 0;
 }
@@ -652,6 +839,267 @@ function timelineCommand(args) {
   console.log(workspace ? `workspace: ${workspace}` : "workspace: all");
   for (const packet of packets) printTimelinePacket(packet);
   return 0;
+}
+
+function viewCommand(args) {
+  const scope = resolveHistoryScope(args);
+  if (!scope.ok) {
+    console.error(scope.error);
+    return 2;
+  }
+  const { workspace } = scope;
+  const limit = parseLimit(argValue(args, "--limit"));
+  if (!limit) {
+    console.error("--limit must be a positive integer.");
+    return 2;
+  }
+
+  const packets = loadStore().packets
+    .filter((packet) => !workspace || packet.workspace === workspace)
+    .slice(0, limit);
+  const outPath = path.resolve(argValue(args, "--out") || defaultViewPath(workspace));
+  const html = renderHtmlView(packets, { workspace, limit });
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, html);
+
+  if (args.includes("--open")) {
+    const opened = openFile(outPath);
+    if (!opened.ok) {
+      console.error(`[acb] wrote local viewer to ${outPath}`);
+      console.error(`[acb] cannot open viewer: ${opened.error}`);
+      return 1;
+    }
+    console.log(`[acb] opened local viewer: ${outPath}`);
+    return 0;
+  }
+
+  console.log(`[acb] wrote local viewer to ${outPath}`);
+  console.log(`[acb] packets: ${packets.length}`);
+  console.log("[acb] add --open to open it with your system default browser.");
+  return 0;
+}
+
+function dashboardCommand(args) {
+  const scope = resolveHistoryScope(args);
+  if (!scope.ok) {
+    console.error(scope.error);
+    return 2;
+  }
+  const { workspace } = scope;
+  const limit = parseLimit(argValue(args, "--limit"));
+  if (!limit) {
+    console.error("--limit must be a positive integer.");
+    return 2;
+  }
+  const host = argValue(args, "--host") || "127.0.0.1";
+  const port = parsePort(argValue(args, "--port"));
+  if (port === null) {
+    console.error("--port must be an integer between 0 and 65535.");
+    return 2;
+  }
+
+  const server = http.createServer((request, response) => {
+    const url = new URL(request.url || "/", `http://${host}`);
+    if (request.method !== "GET") {
+      sendDashboardResponse(response, 405, "text/plain; charset=utf-8", "Method not allowed\n");
+      return;
+    }
+    if (url.pathname === "/health") {
+      sendDashboardResponse(response, 200, "text/plain; charset=utf-8", "ok\n");
+      return;
+    }
+    const state = buildDashboardState({ workspace, limit });
+    if (url.pathname === "/api/state") {
+      sendDashboardResponse(response, 200, "application/json; charset=utf-8", `${JSON.stringify(state, null, 2)}\n`);
+      return;
+    }
+    if (url.pathname === "/") {
+      sendDashboardResponse(response, 200, "text/html; charset=utf-8", renderDashboardHtml(state));
+      return;
+    }
+    sendDashboardResponse(response, 404, "text/plain; charset=utf-8", "Not found\n");
+  });
+
+  return new Promise((resolve) => {
+    server.on("error", (error) => {
+      console.error(`[acb] dashboard failed: ${error.message}`);
+      resolve(1);
+    });
+    server.listen(port, host, () => {
+      const address = server.address();
+      const actualPort = typeof address === "object" && address ? address.port : port;
+      const url = `http://${host}:${actualPort}/`;
+      console.log(`[acb] dashboard: ${url}`);
+      console.log("[acb] read-only; press Ctrl+C to stop.");
+      if (args.includes("--open")) {
+        const opened = openFile(url);
+        if (!opened.ok) console.error(`[acb] cannot open dashboard: ${opened.error}`);
+      }
+    });
+  });
+}
+
+function sendDashboardResponse(response, status, contentType, body) {
+  response.writeHead(status, {
+    "content-type": contentType,
+    "cache-control": "no-store",
+  });
+  response.end(body);
+}
+
+function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
+  const store = loadStore();
+  const scopedPackets = store.packets
+    .filter((packet) => !workspace || packet.workspace === workspace);
+  const packets = scopedPackets.slice(0, limit);
+  const workspaces = workspace
+    ? listWorkspaceSummaries(20).filter((item) => item.workspace === workspace)
+    : listWorkspaceSummaries(20);
+  return {
+    version: VERSION,
+    generated_at: new Date().toISOString(),
+    scope: workspace ? "workspace" : "all",
+    workspace,
+    store_path: storePath(),
+    limit,
+    total_packets: scopedPackets.length,
+    shown_packets: packets.length,
+    workspace_count: new Set(scopedPackets.map((packet) => packet.workspace)).size,
+    dirty_file_count: packets.reduce((sum, packet) => sum + (packet.git?.status?.length || 0), 0),
+    body_chars: packets.reduce((sum, packet) => sum + (packet.body?.length || 0), 0),
+    latest_packet: packets[0] ? packetSummary(packets[0]) : null,
+    packets: packets.map(packetSummary),
+    workspaces,
+  };
+}
+
+function renderDashboardHtml(state) {
+  const cards = state.packets.length
+    ? state.packets.map(renderDashboardPacketCard).join("\n")
+    : `<section class="empty">No handoff packets matched this dashboard.</section>`;
+  const workspaces = state.workspaces.length
+    ? state.workspaces.map((item) => `<li><span>${escapeHtml(item.workspace)}</span><strong>${item.packets}</strong></li>`).join("\n")
+    : "<li><span>No workspaces yet</span><strong>0</strong></li>";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ACB Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f8fa;
+      --panel: #ffffff;
+      --text: #1f2328;
+      --muted: #59636e;
+      --line: #d0d7de;
+      --accent: #0969da;
+      --good: #1a7f37;
+      --warn: #9a6700;
+      --code: #f6f8fa;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --line: #30363d;
+        --accent: #58a6ff;
+        --good: #3fb950;
+        --warn: #d29922;
+        --code: #0d1117;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    main { max-width: 1220px; margin: 0 auto; padding: 28px 20px 44px; }
+    header { display: flex; justify-content: space-between; gap: 18px; align-items: start; margin-bottom: 20px; }
+    h1 { margin: 0 0 6px; font-size: 31px; line-height: 1.15; letter-spacing: 0; }
+    h2 { margin: 0 0 10px; font-size: 18px; letter-spacing: 0; }
+    p { margin: 0; color: var(--muted); }
+    .meta { color: var(--muted); font-size: 13px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; margin: 18px 0; }
+    .stat, .panel, .packet, .empty {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .stat strong { display: block; font-size: 23px; line-height: 1.2; }
+    .stat span, .packet .sub { color: var(--muted); font-size: 13px; }
+    .packet { margin-bottom: 10px; }
+    .packet h3 { margin: 0 0 6px; font-size: 16px; letter-spacing: 0; }
+    .commands { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+    }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    li:last-child { border-bottom: 0; }
+    li span { overflow-wrap: anywhere; color: var(--muted); font-size: 13px; }
+    a { color: var(--accent); }
+    @media (max-width: 820px) {
+      header { display: block; }
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>ACB Dashboard</h1>
+        <p>${escapeHtml(state.workspace || "All workspaces")}</p>
+      </div>
+      <div class="meta">version ${escapeHtml(state.version)}<br>generated ${escapeHtml(state.generated_at)}<br><a href="/api/state">/api/state</a></div>
+    </header>
+    <section class="stats" aria-label="summary">
+      <div class="stat"><strong>${state.shown_packets}</strong><span>packets shown</span></div>
+      <div class="stat"><strong>${state.total_packets}</strong><span>total packets</span></div>
+      <div class="stat"><strong>${state.workspace_count}</strong><span>workspaces</span></div>
+      <div class="stat"><strong>${state.dirty_file_count}</strong><span>dirty files captured</span></div>
+      <div class="stat"><strong>${state.body_chars}</strong><span>body chars shown</span></div>
+    </section>
+    <section class="layout">
+      <div>${cards}</div>
+      <aside class="panel">
+        <h2>Workspace History</h2>
+        <ul>${workspaces}</ul>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
+`;
+}
+
+function renderDashboardPacketCard(packet) {
+  const title = packet.summary || packet.status || packet.id;
+  return `<article class="packet">
+    <h3>${escapeHtml(title)}</h3>
+    <div class="sub">${escapeHtml(packet.id)} - ${escapeHtml(packet.from)} - ${escapeHtml(packet.created_at)}</div>
+    <div class="sub">${escapeHtml(packet.workspace)}</div>
+    <div class="commands">
+      <code>${escapeHtml(packet.next_brief)}</code>
+      <code>${escapeHtml(packet.next_resume)}</code>
+      <code>${escapeHtml(packet.next_show_prompt)}</code>
+    </div>
+  </article>`;
 }
 
 function exportCommand(args) {
@@ -864,6 +1312,184 @@ function renderPromptPreview(packet) {
   ].join("\n");
 }
 
+function defaultViewPath(workspace = null) {
+  const scope = workspace ? slugPath(workspace) : "all-workspaces";
+  return path.join(os.tmpdir(), "acb", "views", `${scope}.html`);
+}
+
+function slugPath(value) {
+  return String(value || "workspace")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "workspace";
+}
+
+function renderHtmlView(packets, { workspace = null, limit = DEFAULT_LIMIT } = {}) {
+  const generatedAt = new Date().toISOString();
+  const title = workspace ? `ACB Handoffs - ${workspace}` : "ACB Handoffs - All Workspaces";
+  const workspaceCount = new Set(packets.map((packet) => packet.workspace)).size;
+  const dirtyCount = packets.reduce((sum, packet) => sum + (packet.git?.status?.length || 0), 0);
+  const bodyChars = packets.reduce((sum, packet) => sum + (packet.body?.length || 0), 0);
+  const packetCards = packets.length
+    ? packets.map(renderHtmlPacketCard).join("\n")
+    : `<section class="empty">No handoff packets matched this view.</section>`;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f8fa;
+      --panel: #ffffff;
+      --text: #1f2328;
+      --muted: #59636e;
+      --line: #d0d7de;
+      --accent: #0969da;
+      --good: #1a7f37;
+      --warn: #9a6700;
+      --code: #f6f8fa;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --line: #30363d;
+        --accent: #58a6ff;
+        --good: #3fb950;
+        --warn: #d29922;
+        --code: #0d1117;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 48px; }
+    header { margin-bottom: 24px; }
+    h1 { margin: 0 0 8px; font-size: 32px; line-height: 1.15; letter-spacing: 0; }
+    h2 { margin: 0 0 8px; font-size: 20px; letter-spacing: 0; }
+    p { margin: 0; color: var(--muted); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin: 22px 0;
+    }
+    .stat, .packet, .empty {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .stat strong { display: block; font-size: 24px; line-height: 1.2; }
+    .stat span { color: var(--muted); font-size: 13px; }
+    .packet { margin: 12px 0; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 9px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .pill.good { color: var(--good); border-color: var(--good); }
+    .pill.warn { color: var(--warn); border-color: var(--warn); }
+    pre {
+      overflow: auto;
+      margin: 10px 0 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--code);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    ul { margin: 8px 0 0; padding-left: 20px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .commands { margin-top: 12px; }
+    .body-preview { max-height: 220px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ACB Handoff Viewer</h1>
+      <p>${escapeHtml(workspace || "All workspaces")} - generated ${escapeHtml(generatedAt)}</p>
+    </header>
+    <section class="stats" aria-label="summary">
+      <div class="stat"><strong>${packets.length}</strong><span>packets shown</span></div>
+      <div class="stat"><strong>${workspaceCount}</strong><span>workspaces</span></div>
+      <div class="stat"><strong>${dirtyCount}</strong><span>dirty files captured</span></div>
+      <div class="stat"><strong>${bodyChars}</strong><span>context body chars</span></div>
+      <div class="stat"><strong>${limit}</strong><span>limit</span></div>
+    </section>
+    ${packetCards}
+  </main>
+</body>
+</html>
+`;
+}
+
+function renderHtmlPacketCard(packet) {
+  const title = packet.summary || packet.status || packet.id;
+  const tags = (packet.tags || []).map((tag) => `<span class="pill">${escapeHtml(tag)}</span>`).join("");
+  const gitDirty = packet.git?.status?.length || 0;
+  const notes = packet.notes?.length
+    ? `<ul>${packet.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>`
+    : "";
+  const git = packet.git ? `<div class="commands">
+      <span class="pill ${gitDirty ? "warn" : "good"}">${gitDirty} dirty files</span>
+      <span class="pill">branch ${escapeHtml(packet.git.branch || "unknown")}</span>
+      <span class="pill">head ${escapeHtml(packet.git.head || "unknown")}</span>
+      ${packet.git.status?.length ? `<pre>${escapeHtml(packet.git.status.join("\n"))}</pre>` : ""}
+    </div>` : "";
+  const body = packet.body ? `<pre class="body-preview">${escapeHtml(truncatePromptBody(packet.body))}</pre>` : "";
+  return `<article class="packet">
+    <h2>${escapeHtml(title)}</h2>
+    <div class="meta">
+      <span>${escapeHtml(packet.id)}</span>
+      <span>${escapeHtml(packet.created_at)}</span>
+      <span>from ${escapeHtml(packet.from)}</span>
+      <span>${escapeHtml(packet.workspace)}</span>
+    </div>
+    <div>
+      ${packet.status ? `<span class="pill good">${escapeHtml(packet.status)}</span>` : ""}
+      ${tags}
+    </div>
+    ${notes}
+    ${git}
+    ${body}
+    <div class="commands">
+      <span class="pill"><code>${escapeHtml(`acb resume --id ${packet.id}`)}</code></span>
+      <span class="pill"><code>${escapeHtml(`acb brief --id ${packet.id}`)}</code></span>
+      <span class="pill"><code>${escapeHtml(`acb show ${packet.id} --prompt`)}</code></span>
+    </div>
+  </article>`;
+}
+
 function defaultPreviewPath(packet) {
   return path.join(os.tmpdir(), "acb", "previews", `${packet.id}.md`);
 }
@@ -926,6 +1552,7 @@ function listWorkspaceSummaries(limit = DEFAULT_LIMIT) {
         latest_body_chars: packet.body?.length || 0,
         latest_git_dirty_files: packet.git?.status?.length || 0,
         next_resume: `acb resume --id ${packet.id}`,
+        next_brief: `acb brief --id ${packet.id}`,
       });
     } else {
       current.packets += 1;
@@ -956,10 +1583,12 @@ function buildStatusReport(workspace) {
     git,
     next: latest ? {
       resume: `acb resume --id ${latest.id}`,
+      brief: `acb brief --id ${latest.id}`,
       copy_prompt: `acb prompt --id ${latest.id}`,
       show_prompt: `acb show ${latest.id} --prompt`,
       mcp_status: "get_workspace_status",
       mcp_read_latest: "read_latest_handoff",
+      mcp_read_brief: "read_handoff_brief",
     } : {
       handoff: "acb handoff --summary \"...\" --git",
       save: "acb save --summary \"...\" --git",
@@ -999,8 +1628,10 @@ function formatStatusReport(report) {
   if (report.latest_packet.summary) lines.push(`latest_summary: ${report.latest_packet.summary}`);
   if (report.latest_packet.status) lines.push(`latest_status: ${report.latest_packet.status}`);
   lines.push(`next_resume: ${report.next.resume}`);
+  lines.push(`next_brief: ${report.next.brief}`);
   lines.push(`next_show_prompt: ${report.next.show_prompt}`);
   lines.push(`next_mcp_read_latest: ${report.next.mcp_read_latest}`);
+  lines.push(`next_mcp_read_brief: ${report.next.mcp_read_brief}`);
   return lines.join("\n");
 }
 
@@ -1031,6 +1662,81 @@ function doctorCommand(args) {
   return report.ok ? 0 : 1;
 }
 
+function recipeCommand(args) {
+  const wantsJson = args.includes("--json");
+  const target = args.find((arg) => !arg.startsWith("--"));
+  if (!target) {
+    const recipes = RECIPE_TARGETS.map(recipeSummary);
+    if (wantsJson) {
+      process.stdout.write(`${JSON.stringify({ recipes }, null, 2)}\n`);
+      return 0;
+    }
+    printRecipeList(recipes);
+    return 0;
+  }
+
+  const recipe = findRecipe(target);
+  if (!recipe) {
+    console.error(`Unknown recipe target: ${target}`);
+    console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
+    return 2;
+  }
+
+  if (wantsJson) {
+    process.stdout.write(`${JSON.stringify(recipe, null, 2)}\n`);
+    return 0;
+  }
+  printRecipe(recipe);
+  return 0;
+}
+
+function findRecipe(target) {
+  const normalized = target.toLowerCase();
+  return RECIPE_TARGETS.find((recipe) => {
+    if (recipe.id === normalized) return true;
+    return recipe.aliases.includes(normalized);
+  }) || null;
+}
+
+function recipeSummary(recipe) {
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    aliases: recipe.aliases,
+    mode: recipe.mode,
+  };
+}
+
+function printRecipeList(recipes) {
+  console.log("ACB Recipes");
+  console.log("");
+  console.log("Use a recipe to get an explicit, client-specific handoff path.");
+  console.log("");
+  for (const recipe of recipes) {
+    console.log(`- ${recipe.id}: ${recipe.title} (${recipe.mode})`);
+  }
+  console.log("");
+  console.log("Examples:");
+  console.log("  acb recipe opencode");
+  console.log("  acb recipe cline --json");
+}
+
+function printRecipe(recipe) {
+  console.log(`ACB Recipe: ${recipe.title}`);
+  console.log(`target: ${recipe.id}`);
+  if (recipe.aliases.length) console.log(`aliases: ${recipe.aliases.join(", ")}`);
+  console.log(`mode: ${recipe.mode}`);
+  console.log("");
+  console.log("Setup:");
+  for (const command of recipe.setup) console.log(`  ${command}`);
+  console.log("");
+  console.log("Client prompt:");
+  console.log(recipe.prompt);
+  console.log("");
+  console.log("Boundaries:");
+  for (const note of recipe.notes) console.log(`- ${note}`);
+}
+
 function configCommand(args) {
   const target = args[0];
   if (target !== "mcp") {
@@ -1057,8 +1763,9 @@ function configCommand(args) {
 
 function verifyCommand(args) {
   const target = args[0];
+  if (target === "workflow") return verifyWorkflowCommand(args.slice(1));
   if (target !== "mcp") {
-    console.error("Usage: acb verify mcp [--config <path>] [--name <server-name>] [--json]");
+    console.error("Usage: acb verify mcp [--config <path>] [--name <server-name>] [--json]\n       acb verify workflow <target> [--workspace <path>] [--json]");
     return 2;
   }
 
@@ -1074,13 +1781,137 @@ function verifyCommand(args) {
     return 2;
   }
 
-  const report = verifyMcpServer(selected.name, selected.server);
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const report = verifyMcpServer(selected.name, selected.server, { workspace });
   if (args.includes("--json")) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     printMcpVerifyReport(report);
   }
   return report.ok ? 0 : 1;
+}
+
+function verifyWorkflowCommand(args) {
+  const target = args.find((arg) => !arg.startsWith("--"));
+  if (!target) {
+    console.error("Usage: acb verify workflow <target> [--workspace <path>] [--json]");
+    return 2;
+  }
+  const recipe = findRecipe(target);
+  if (!recipe) {
+    console.error(`Unknown workflow target: ${target}`);
+    console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
+    return 2;
+  }
+
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const report = buildWorkflowVerifyReport(recipe, workspace, { keepArtifacts: args.includes("--keep-artifacts") });
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  } else {
+    printWorkflowVerifyReport(report);
+  }
+  return report.ok ? 0 : 1;
+}
+
+function buildWorkflowVerifyReport(recipe, workspace, { keepArtifacts = false } = {}) {
+  const oldStore = process.env.ACB_STORE;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-workflow-"));
+  const tempStore = path.join(tempDir, "packets.json");
+  let report = null;
+  process.env.ACB_STORE = tempStore;
+  try {
+    const packet = createHandoffPacket({
+      from: "acb-verify",
+      workspace,
+      summary: `Workflow smoke for ${recipe.title}`,
+      status: "local verification",
+      notes: [
+        `Target recipe: ${recipe.id}`,
+        "This verifies ACB-side handoff, brief, MCP, and dashboard surfaces without launching the third-party client.",
+      ],
+      tags: ["workflow", recipe.id],
+      body: `Recommended client prompt:\n${recipe.prompt}\n`,
+      git: null,
+    });
+    writeStore({ version: STORE_VERSION, packets: [packet] });
+
+    const localBinPath = path.resolve(process.argv[1] || "bin/acb.js");
+    const mcpConfig = mcpServerConfig({ name: "acb", command: process.execPath, args: [localBinPath, "serve"] });
+    const mcpReport = verifyMcpServer("acb", mcpConfig.mcpServers.acb, {
+      workspace,
+      expectLatestPacketId: packet.id,
+    });
+    const resumePrompt = renderHandoffPrompt(packet);
+    const brief = renderBriefPrompt(packet);
+    const dashboardState = buildDashboardState({ workspace, limit: 5 });
+    const dashboardHtml = renderDashboardHtml(dashboardState);
+    const checks = {
+      recipe_found: Boolean(recipe),
+      save_handoff: findPacket({ id: packet.id })?.id === packet.id,
+      resume_prompt: resumePrompt.includes(packet.summary) && resumePrompt.includes("Requested Behavior"),
+      brief: brief.includes(packet.summary) && brief.includes("Full Context Commands"),
+      mcp_config: Boolean(mcpConfig.mcpServers.acb.command),
+      mcp_verify: mcpReport.ok,
+      mcp_latest_handoff: mcpReport.checks.latest_handoff === true,
+      dashboard_state: dashboardState.latest_packet?.id === packet.id,
+      dashboard_html: dashboardHtml.includes("ACB Dashboard") && dashboardHtml.includes(packet.id),
+    };
+    report = {
+      ok: Object.values(checks).every(Boolean),
+      target: recipe.id,
+      title: recipe.title,
+      workspace,
+      store_path: tempStore,
+      artifacts_retained: keepArtifacts,
+      packet: packetSummary(packet),
+      checks,
+      commands: {
+        recipe: `acb recipe ${recipe.id}`,
+        handoff: `acb handoff --from codex --summary "Ready for ${recipe.title}" --git`,
+        brief: `acb brief --id ${packet.id}`,
+        resume: `acb resume --id ${packet.id}`,
+        dashboard: `acb dashboard --workspace ${workspace}`,
+        mcp_verify: "acb verify mcp --config ./mcp.json --name acb",
+      },
+      mcp: mcpReport,
+      limitation: "This verifies the ACB-side workflow only; it does not launch or mutate the third-party client.",
+    };
+    return report;
+  } finally {
+    if (oldStore === undefined) delete process.env.ACB_STORE;
+    else process.env.ACB_STORE = oldStore;
+    if (!keepArtifacts) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        if (report) report.artifacts_cleaned = true;
+      } catch (error) {
+        if (report) {
+          report.artifacts_cleaned = false;
+          report.cleanup_error = error.message;
+        }
+      }
+    }
+  }
+}
+
+function printWorkflowVerifyReport(report) {
+  console.log("ACB Workflow Verify");
+  console.log(`target: ${report.target}`);
+  console.log(`title: ${report.title}`);
+  console.log(`workspace: ${report.workspace}`);
+  console.log(`store: ${report.store_path}${report.artifacts_cleaned ? " (cleaned)" : ""}`);
+  for (const [name, ok] of Object.entries(report.checks)) {
+    console.log(`${name}: ${ok ? "ok" : "failed"}`);
+  }
+  console.log(`ok: ${report.ok ? "yes" : "no"}`);
+  console.log("next:");
+  console.log(`  ${report.commands.recipe}`);
+  console.log(`  ${report.commands.handoff}`);
+  console.log(`  ${report.commands.brief}`);
+  console.log(`  ${report.commands.resume}`);
+  console.log(`  ${report.commands.dashboard}`);
+  console.log(`limitation: ${report.limitation}`);
 }
 
 function storeCommand(args) {
@@ -1202,8 +2033,9 @@ function selectMcpServer(config, requestedName) {
   return { ok: true, name, server: { command: server.command, args: server.args || [] } };
 }
 
-function verifyMcpServer(name, server) {
-  const input = [
+function verifyMcpServer(name, server, { workspace = process.cwd(), expectLatestPacketId = null } = {}) {
+  const resolvedWorkspace = normalizeWorkspace(workspace);
+  const requests = [
     jsonRpcLine("initialize", {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
@@ -1211,7 +2043,13 @@ function verifyMcpServer(name, server) {
     }, 1),
     JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }),
     jsonRpcLine("tools/list", {}, 2),
-    jsonRpcLine("tools/call", { name: "get_workspace_status", arguments: { workspace: process.cwd() } }, 3),
+    jsonRpcLine("tools/call", { name: "get_workspace_status", arguments: { workspace: resolvedWorkspace } }, 3),
+  ];
+  if (expectLatestPacketId) {
+    requests.push(jsonRpcLine("tools/call", { name: "read_latest_handoff", arguments: { workspace: resolvedWorkspace } }, 4));
+  }
+  const input = [
+    ...requests,
     "",
   ].join("\n");
 
@@ -1227,6 +2065,7 @@ function verifyMcpServer(name, server) {
     server: name,
     command: server.command,
     args: server.args,
+    workspace: resolvedWorkspace,
     checks: {
       launch: false,
       initialize: false,
@@ -1247,12 +2086,14 @@ function verifyMcpServer(name, server) {
     report.error = `server exited with status ${result.status}`;
     return report;
   }
+  if (expectLatestPacketId) report.checks.latest_handoff = false;
 
   report.checks.launch = true;
   const messages = parseJsonRpcLines(result.stdout || "");
   const initialize = messages.find((message) => message.id === 1);
   const toolsList = messages.find((message) => message.id === 2);
   const workspaceStatus = messages.find((message) => message.id === 3);
+  const latestHandoff = messages.find((message) => message.id === 4);
 
   if (initialize?.result?.serverInfo?.name) report.checks.initialize = true;
   else if (initialize?.error) report.error = initialize.error.message || "initialize failed";
@@ -1264,35 +2105,26 @@ function verifyMcpServer(name, server) {
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["get_workspace_status", "read_latest_handoff", "save_handoff", "update_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
+  const requiredTools = ["get_workspace_status", "read_latest_handoff", "read_handoff_brief", "save_handoff", "update_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   if (workspaceStatus?.result?.isError === false && workspaceStatus.result.content?.[0]?.text?.includes("ACB Status")) {
     report.checks.workspace_status = true;
   } else if (workspaceStatus?.error) {
     report.error = workspaceStatus.error.message || "get_workspace_status failed";
   }
+  if (expectLatestPacketId) {
+    const packetId = latestHandoff?.result?.structuredContent?.packet?.id;
+    if (latestHandoff?.result?.isError === false && packetId === expectLatestPacketId) {
+      report.checks.latest_handoff = true;
+    } else if (latestHandoff?.error) {
+      report.error = latestHandoff.error.message || "read_latest_handoff failed";
+    } else if (!report.error) {
+      report.error = `read_latest_handoff did not return expected packet: ${expectLatestPacketId}`;
+    }
+  }
   report.ok = Object.values(report.checks).every(Boolean);
   if (!report.ok && !report.error) report.error = "MCP server did not expose the expected ACB tools.";
   return report;
-}
-
-function jsonRpcLine(method, params, id) {
-  return JSON.stringify({ jsonrpc: "2.0", id, method, params });
-}
-
-function parseJsonRpcLines(stdout) {
-  return stdout
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
 }
 
 function printMcpVerifyReport(report) {
@@ -1304,13 +2136,12 @@ function printMcpVerifyReport(report) {
   console.log(`tools/list: ${report.checks.tools_list ? "ok" : "failed"}`);
   console.log(`required_tools: ${report.checks.required_tools ? "ok" : "failed"}`);
   console.log(`get_workspace_status: ${report.checks.workspace_status ? "ok" : "failed"}`);
+  if (Object.prototype.hasOwnProperty.call(report.checks, "latest_handoff")) {
+    console.log(`read_latest_handoff: ${report.checks.latest_handoff ? "ok" : "failed"}`);
+  }
   console.log(`tools: ${report.tools.length ? report.tools.join(", ") : "none"}`);
   if (report.error) console.log(`error: ${report.error}`);
   if (report.stderr) console.log(`stderr: ${report.stderr}`);
-}
-
-function formatCommand(command, args) {
-  return [command, ...args].map((part) => (/\s/.test(part) ? JSON.stringify(part) : part)).join(" ");
 }
 
 function buildDoctorReport(workspace) {
@@ -1413,6 +2244,7 @@ function printQuickstartCheck(check, report) {
   if (!acbReady) console.log(`install_hint: ${check.install_command}`);
   console.log(`next_handoff: ${check.next.handoff}`);
   console.log(`next_resume: ${check.next.resume}`);
+  console.log(`next_brief: ${check.next.brief}`);
   console.log(`next_doctor: ${check.next.doctor}`);
   console.log(`next_mcp_config: ${check.next.mcp_config}`);
   console.log(`next_mcp_verify: ${check.next.mcp_verify}`);
@@ -1526,7 +2358,7 @@ function mcpInitialize(params) {
       title: "AgentContextBus",
       version: VERSION,
     },
-    instructions: "Use read_latest_handoff to pull the newest explicit local handoff packet for the current workspace.",
+    instructions: "Use read_handoff_brief for a compact takeover summary or read_latest_handoff for the full explicit local handoff packet.",
   };
 }
 
@@ -1557,6 +2389,25 @@ function mcpTools() {
           workspace: {
             type: "string",
             description: "Optional workspace path. Defaults to the MCP server process current working directory.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "read_handoff_brief",
+      title: "Read Handoff Brief",
+      description: "Read a compact ACB handoff brief by packet id, or the newest packet for a workspace.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "Optional handoff packet id. When omitted, ACB reads the latest packet for workspace.",
+          },
+          workspace: {
+            type: "string",
+            description: "Optional workspace path. Ignored when id is provided.",
           },
         },
         additionalProperties: false,
@@ -1763,6 +2614,7 @@ function mcpCallTool(params) {
   const args = params?.arguments || {};
   if (name === "get_workspace_status") return mcpGetWorkspaceStatus(args);
   if (name === "read_latest_handoff") return mcpReadLatestHandoff(args);
+  if (name === "read_handoff_brief") return mcpReadHandoffBrief(args);
   if (name === "save_handoff") return mcpSaveHandoff(args);
   if (name === "update_handoff") return mcpUpdateHandoff(args);
   if (name === "read_handoff") return mcpReadHandoff(args);
@@ -1796,6 +2648,25 @@ function mcpReadLatestHandoff(args) {
   return {
     content: [{ type: "text", text: prompt }],
     structuredContent: { packet: packetWithNextSteps(packet), prompt },
+    isError: false,
+  };
+}
+
+function mcpReadHandoffBrief(args) {
+  const id = typeof args.id === "string" && args.id.trim() ? args.id : null;
+  const workspace = args.workspace ? normalizeWorkspace(args.workspace) : normalizeWorkspace(process.cwd());
+  const packet = findPacket({ workspace: id ? null : workspace, id });
+  if (!packet) {
+    return {
+      content: [{ type: "text", text: id ? `No handoff packet found for id: ${id}` : `No handoff packet found for workspace: ${workspace}` }],
+      isError: true,
+    };
+  }
+
+  const brief = renderBriefPrompt(packet);
+  return {
+    content: [{ type: "text", text: brief }],
+    structuredContent: { packet: packetWithNextSteps(packet), brief },
     isError: false,
   };
 }
@@ -2037,8 +2908,10 @@ function packetSummary(packet) {
     body_chars: packet.body?.length || 0,
     git_dirty_files: packet.git?.status?.length || 0,
     next_resume: `acb resume --id ${packet.id}`,
+    next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_mcp_read: "read_handoff",
+    next_mcp_brief: "read_handoff_brief",
   };
 }
 
@@ -2046,8 +2919,10 @@ function packetWithNextSteps(packet) {
   return {
     ...packet,
     next_resume: `acb resume --id ${packet.id}`,
+    next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_mcp_read: "read_handoff",
+    next_mcp_brief: "read_handoff_brief",
   };
 }
 
@@ -2096,6 +2971,56 @@ function renderHandoffPrompt(packet) {
   return `${lines.join("\n")}\n`;
 }
 
+function renderBriefPrompt(packet) {
+  const lines = [
+    "You are taking over local coding work from an ACB brief.",
+    "",
+    "Use this as a compact starting point. If you need the full packet, ask the user to run the full resume command below or call the MCP read_handoff tool.",
+    "",
+    "## Brief",
+    "",
+    `- id: ${packet.id}`,
+    `- from: ${packet.from}`,
+    `- created_at: ${packet.created_at}`,
+    `- workspace: ${packet.workspace}`,
+  ];
+  if (packet.updated_at) lines.push(`- updated_at: ${packet.updated_at}`);
+  if (packet.summary) lines.push(`- summary: ${packet.summary}`);
+  if (packet.status) lines.push(`- status: ${packet.status}`);
+  if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
+  if (packet.git) {
+    lines.push(
+      `- git_branch: ${packet.git.branch || "unknown"}`,
+      `- git_head: ${packet.git.head || "unknown"}`,
+      `- git_dirty_files: ${packet.git.status?.length || 0}`,
+    );
+  }
+  if (packet.notes?.length) {
+    lines.push("", "## Notes");
+    for (const note of packet.notes.slice(0, 8)) lines.push(`- ${note}`);
+    if (packet.notes.length > 8) lines.push(`- ... ${packet.notes.length - 8} more note(s) omitted from brief`);
+  }
+  if (packet.body) {
+    lines.push("", "## Context Excerpt", "", truncateText(packet.body, BRIEF_BODY_LIMIT));
+  }
+  lines.push(
+    "",
+    "## Full Context Commands",
+    "",
+    `- Full prompt: acb resume --id ${packet.id}`,
+    `- Inspect packet: acb show ${packet.id}`,
+    "- MCP full read: read_handoff",
+    "",
+    "## Requested Behavior",
+    "",
+    "- Continue from this brief without assuming hidden state.",
+    "- Inspect the workspace before editing files.",
+    "- Ask one concise question if the brief is insufficient.",
+    "",
+  );
+  return `${lines.join("\n")}\n`;
+}
+
 function printPacket(packet) {
   console.log(`id: ${packet.id}`);
   console.log(`from: ${packet.from}`);
@@ -2112,8 +3037,10 @@ function printPacket(packet) {
   }
   if (packet.body) console.log(`body: ${packet.body.length} chars`);
   console.log(`next_resume: acb resume --id ${packet.id}`);
+  console.log(`next_brief: acb brief --id ${packet.id}`);
   console.log(`next_show_prompt: acb show ${packet.id} --prompt`);
   console.log("next_mcp_read: read_handoff");
+  console.log("next_mcp_brief: read_handoff_brief");
   if (packet.notes?.length) {
     console.log("notes:");
     for (const note of packet.notes) console.log(`- ${note}`);
@@ -2142,49 +3069,6 @@ function loadStore() {
   const result = readStore();
   if (!result.ok) throw storeError(result.error);
   return result.store;
-}
-
-function readStore() {
-  const filePath = storePath();
-  if (!fs.existsSync(filePath)) return { ok: true, store: { version: STORE_VERSION, packets: [] } };
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { ok: false, error: `ACB store is not a JSON object: ${filePath}` };
-    }
-    if (!Array.isArray(parsed.packets)) {
-      return { ok: false, error: `ACB store does not contain a packets array: ${filePath}` };
-    }
-    return { ok: true, store: { version: parsed.version || STORE_VERSION, packets: parsed.packets } };
-  } catch (error) {
-    return { ok: false, error: `Cannot read ACB store ${filePath}: ${error.message}` };
-  }
-}
-
-function storeError(message) {
-  const error = new Error(message);
-  error.code = "ACB_STORE_ERROR";
-  return error;
-}
-
-function writeStore(store) {
-  const filePath = storePath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(store, null, 2)}\n`);
-}
-
-function storePath() {
-  if (process.env.ACB_STORE) return path.resolve(process.env.ACB_STORE);
-  return path.join(os.homedir(), ".acb", "packets.json");
-}
-
-function normalizeWorkspace(workspace) {
-  const resolved = path.resolve(workspace || process.cwd());
-  try {
-    return fs.realpathSync.native(resolved);
-  } catch {
-    return resolved;
-  }
 }
 
 function createPacketId() {
@@ -2332,10 +3216,22 @@ function truncatePromptBody(body) {
   return `${normalized.slice(0, PROMPT_BODY_LIMIT).trimEnd()}\n\n[acb: context body truncated at ${PROMPT_BODY_LIMIT} characters]`;
 }
 
+function truncateText(text, limit) {
+  const normalized = String(text).replace(/\r\n/g, "\n").trimEnd();
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, limit).trimEnd()}\n\n[acb: text truncated at ${limit} characters]`;
+}
+
 function parseLimit(value) {
   if (value === undefined) return DEFAULT_LIMIT;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parsePort(value) {
+  if (value === undefined) return 8765;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65535 ? parsed : null;
 }
 
 function argValue(args, name) {
@@ -2357,52 +3253,6 @@ function argValues(args, name) {
     }
   }
   return values;
-}
-
-function copyToClipboard(text) {
-  const errors = [];
-  for (const [cmd, args] of clipboardCandidates()) {
-    const result = spawnSync(cmd, args, { input: text, encoding: "utf8" });
-    if (result.status === 0) return { ok: true };
-    errors.push(result.error?.message || result.stderr || `${cmd} exited ${result.status}`);
-  }
-  return { ok: false, error: errors.join("; ") || "no clipboard command available" };
-}
-
-function clipboardCandidates() {
-  const platform = process.platform;
-  if (platform === "darwin") return [["pbcopy", []]];
-  if (platform === "win32") return [["clip.exe", []]];
-  return [["wl-copy", []], ["xclip", ["-selection", "clipboard"]], ["xsel", ["--clipboard", "--input"]]];
-}
-
-function openFile(filePath) {
-  const platform = process.platform;
-  const command = platform === "darwin" ? "open" : platform === "win32" ? "cmd.exe" : "xdg-open";
-  const args = platform === "darwin"
-    ? [filePath]
-    : platform === "win32"
-      ? ["/c", "start", "", filePath]
-      : [filePath];
-  const result = spawnSync(command, args, { encoding: "utf8" });
-  if (result.status === 0) return { ok: true };
-  return { ok: false, error: result.error?.message || result.stderr || `${command} exited ${result.status}` };
-}
-
-function commandExists(command) {
-  const paths = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
-  const extensions = process.platform === "win32" ? ["", ".exe", ".cmd", ".bat"] : [""];
-  for (const dir of paths) {
-    for (const ext of extensions) {
-      try {
-        fs.accessSync(path.join(dir, `${command}${ext}`), fs.constants.X_OK);
-        return true;
-      } catch {
-        // Try the next PATH candidate.
-      }
-    }
-  }
-  return false;
 }
 
 function print(text) {

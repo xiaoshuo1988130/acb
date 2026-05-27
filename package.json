@@ -1,6 +1,6 @@
 {
   "name": "@xiaoshuo1988/acb",
-  "version": "0.0.3",
+  "version": "0.5.0",
   "description": "AgentContextBus local-first context handoff CLI. Install with @xiaoshuo1988/acb.",
   "type": "module",
   "bin": {
@@ -8,6 +8,7 @@
   },
   "files": [
     "bin",
+    "lib",
     "docs",
     "README.md",
     "CHANGELOG.md",
@@ -17,7 +18,7 @@
     "access": "public"
   },
   "scripts": {
-    "lint": "node --check bin/acb.js",
+    "lint": "node --check bin/acb.js && node --check lib/runtime.js",
     "test": "node --test",
     "verify": "npm run lint && npm test"
   },
@@ -41,5 +42,11 @@
   "license": "MIT",
   "engines": {
     "node": ">=20"
+  },
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "test"
   }
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -34,6 +35,45 @@ function realWorkspace(workspace) {
   return fs.realpathSync.native(workspace);
 }
 
+function waitForStdout(child, pattern) {
+  return new Promise((resolve, reject) => {
+    let output = "";
+    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${pattern}. Output: ${output}`)), 5000);
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+      const match = output.match(pattern);
+      if (match) {
+        clearTimeout(timer);
+        resolve(match);
+      }
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`Process exited before stdout matched ${pattern}: ${code}. Output: ${output}`));
+    });
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+
+function httpGet(url) {
+  return new Promise((resolve, reject) => {
+    http.get(url, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        if (response.statusCode >= 400) reject(new Error(`HTTP ${response.statusCode}: ${body}`));
+        else resolve(body);
+      });
+    }).on("error", reject);
+  });
+}
+
 test("prints version and help", () => {
   const version = run(["--version"]);
   assert.equal(version.status, 0);
@@ -43,6 +83,10 @@ test("prints version and help", () => {
   assert.equal(help.status, 0);
   assert.match(help.stdout, new RegExp(`AgentContextBus \\(acb\\) ${pkg.version}`));
   assert.match(help.stdout, /acb save/);
+  assert.match(help.stdout, /acb view/);
+  assert.match(help.stdout, /acb dashboard/);
+  assert.match(help.stdout, /acb brief/);
+  assert.match(help.stdout, /acb recipe/);
   assert.match(help.stdout, /acb quickstart/);
 
   const quickstart = run(["quickstart"]);
@@ -60,6 +104,7 @@ test("prints version and help", () => {
   assert.match(quickstartCheck.stdout, /ACB Quickstart Check/);
   assert.match(quickstartCheck.stdout, /next_handoff: acb handoff/);
   assert.match(quickstartCheck.stdout, /next_resume: acb resume/);
+  assert.match(quickstartCheck.stdout, /next_brief: acb brief/);
 
   const quickstartJson = run(["quickstart", "--check", "--workspace", workspace, "--json"], { env: { ACB_STORE: storePath } });
   assert.equal(quickstartJson.status, 0);
@@ -69,6 +114,100 @@ test("prints version and help", () => {
   assert.equal(quickstartReport.workspace, realWorkspace(workspace));
   assert.equal(quickstartReport.store_path, storePath);
   assert.equal(quickstartReport.next.resume, "acb resume");
+  assert.equal(quickstartReport.next.brief, "acb brief");
+});
+
+test("recipe lists and renders client handoff paths", () => {
+  const list = run(["recipe"]);
+  assert.equal(list.status, 0);
+  assert.match(list.stdout, /ACB Recipes/);
+  assert.match(list.stdout, /opencode/);
+  assert.match(list.stdout, /cline/);
+
+  const opencode = run(["recipe", "opencode"]);
+  assert.equal(opencode.status, 0);
+  assert.match(opencode.stdout, /ACB Recipe: OpenCode/);
+  assert.match(opencode.stdout, /acb handoff/);
+  assert.match(opencode.stdout, /Use acb to read the latest handoff/);
+  assert.match(opencode.stdout, /No hidden prompt injector|hidden prompt injector/i);
+
+  const clineJson = run(["recipe", "cline", "--json"]);
+  assert.equal(clineJson.status, 0);
+  const cline = JSON.parse(clineJson.stdout);
+  assert.equal(cline.id, "cline");
+  assert.equal(cline.title, "Cline");
+  assert.ok(cline.setup.includes("acb resume"));
+  assert.match(cline.prompt, /workspace status/);
+  assert.ok(cline.notes.some((note) => note.includes("Do not edit VS Code")));
+
+  const listJson = run(["recipe", "--json"]);
+  assert.equal(listJson.status, 0);
+  const recipes = JSON.parse(listJson.stdout);
+  assert.ok(recipes.recipes.some((recipe) => recipe.id === "claude-desktop"));
+
+  const alias = run(["recipe", "roo-code", "--json"]);
+  assert.equal(alias.status, 0);
+  assert.equal(JSON.parse(alias.stdout).id, "roo");
+
+  const missing = run(["recipe", "missing-client"]);
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /Unknown recipe target/);
+  assert.match(missing.stderr, /Available targets/);
+});
+
+test("brief renders a compact receiving-side handoff", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  const otherWorkspace = path.join(dir, "other");
+  fs.mkdirSync(workspace);
+  fs.mkdirSync(otherWorkspace);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+  const longBody = `${"body context ".repeat(260)}tail marker`;
+
+  run(["save", "--workspace", otherWorkspace, "--summary", "Other packet"], { env });
+  run([
+    "save",
+    "--workspace",
+    workspace,
+    "--from",
+    "codex",
+    "--summary",
+    "Compact takeover",
+    "--status",
+    "ready",
+    "--note",
+    "Inspect tests first",
+    "--tag",
+    "brief",
+    "--stdin",
+  ], { env, input: longBody });
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+
+  const brief = run(["brief", "--workspace", workspace, "--print-brief"], { env });
+  assert.equal(brief.status, 0);
+  assert.match(brief.stdout, /ACB brief/);
+  assert.match(brief.stdout, /Compact takeover/);
+  assert.match(brief.stdout, /Inspect tests first/);
+  assert.match(brief.stdout, /Full Context Commands/);
+  assert.match(brief.stdout, new RegExp(`acb resume --id ${packet.id}`));
+  assert.doesNotMatch(brief.stdout, /Other packet/);
+  assert.match(brief.stdout, /text truncated at 1800 characters/);
+
+  const json = run(["brief", "--id", packet.id, "--json"], { env });
+  assert.equal(json.status, 0);
+  const payload = JSON.parse(json.stdout);
+  assert.equal(payload.packet.id, packet.id);
+  assert.equal(payload.packet.next_brief, `acb brief --id ${packet.id}`);
+  assert.equal(payload.packet.next_mcp_brief, "read_handoff_brief");
+  assert.match(payload.brief, /Compact takeover/);
+
+  const missing = run(["brief", "--workspace", path.join(dir, "missing"), "--print-brief"], { env });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /No handoff packet found to brief/);
+
+  const invalid = run(["brief", "--id", packet.id, "--json", "--print-brief"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use only one brief output mode/);
 });
 
 test("runs when invoked through a bin symlink", () => {
@@ -120,7 +259,9 @@ test("save, latest, list, and prompt use local store", () => {
   assert.deepEqual(packet.notes, ["Do not publish yet"]);
   assert.deepEqual(packet.tags, ["mvp"]);
   assert.equal(packet.next_resume, `acb resume --id ${packet.id}`);
+  assert.equal(packet.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(packet.next_mcp_read, "read_handoff");
+  assert.equal(packet.next_mcp_brief, "read_handoff_brief");
 
   const status = run(["status", "--workspace", workspace], { env });
   assert.equal(status.status, 0);
@@ -128,6 +269,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(status.stdout, new RegExp(packet.id));
   assert.match(status.stdout, /next_resume/);
   assert.match(status.stdout, new RegExp(`acb resume --id ${packet.id}`));
+  assert.match(status.stdout, new RegExp(`acb brief --id ${packet.id}`));
 
   const statusJson = run(["status", "--workspace", workspace, "--json"], { env });
   assert.equal(statusJson.status, 0);
@@ -135,9 +277,11 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(statusReport.latest_packet.id, packet.id);
   assert.equal(statusReport.workspace_packets, 1);
   assert.equal(statusReport.next.resume, `acb resume --id ${packet.id}`);
+  assert.equal(statusReport.next.brief, `acb brief --id ${packet.id}`);
   assert.equal(statusReport.next.copy_prompt, `acb prompt --id ${packet.id}`);
   assert.equal(statusReport.next.mcp_status, "get_workspace_status");
   assert.equal(statusReport.next.mcp_read_latest, "read_latest_handoff");
+  assert.equal(statusReport.next.mcp_read_brief, "read_handoff_brief");
 
   const listed = run(["list", "--workspace", workspace], { env });
   assert.equal(listed.status, 0);
@@ -151,6 +295,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(workspaces.stdout, /ACB Workspaces/);
   assert.match(workspaces.stdout, new RegExp(workspace));
   assert.match(workspaces.stdout, new RegExp(`next_resume: acb resume --id ${packet.id}`));
+  assert.match(workspaces.stdout, new RegExp(`next_brief: acb brief --id ${packet.id}`));
 
   const workspacesJson = run(["workspaces", "--json"], { env });
   assert.equal(workspacesJson.status, 0);
@@ -159,6 +304,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(workspaceSummary.packets, 1);
   assert.equal(workspaceSummary.latest_packet_id, packet.id);
   assert.equal(workspaceSummary.next_resume, `acb resume --id ${packet.id}`);
+  assert.equal(workspaceSummary.next_brief, `acb brief --id ${packet.id}`);
 
   const searched = run(["search", "publish", "--workspace", workspace], { env });
   assert.equal(searched.status, 0);
@@ -180,8 +326,10 @@ test("save, latest, list, and prompt use local store", () => {
   const timelineSummary = JSON.parse(timelineJson.stdout)[0];
   assert.equal(timelineSummary.id, packet.id);
   assert.equal(timelineSummary.next_resume, `acb resume --id ${packet.id}`);
+  assert.equal(timelineSummary.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(timelineSummary.next_show_prompt, `acb show ${packet.id} --prompt`);
   assert.equal(timelineSummary.next_mcp_read, "read_handoff");
+  assert.equal(timelineSummary.next_mcp_brief, "read_handoff_brief");
 
   const markdownExport = run(["export", "--workspace", workspace], { env });
   assert.equal(markdownExport.status, 0);
@@ -226,11 +374,13 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(shown.stdout, new RegExp(packet.id));
   assert.match(shown.stdout, /Implemented local handoff/);
   assert.match(shown.stdout, new RegExp(`next_resume: acb resume --id ${packet.id}`));
+  assert.match(shown.stdout, new RegExp(`next_brief: acb brief --id ${packet.id}`));
 
   const shownJson = run(["show", packet.id, "--json"], { env });
   assert.equal(shownJson.status, 0);
   const shownJsonPacket = JSON.parse(shownJson.stdout);
   assert.equal(shownJsonPacket.id, packet.id);
+  assert.equal(shownJsonPacket.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(shownJsonPacket.next_show_prompt, `acb show ${packet.id} --prompt`);
 
   const shownPrompt = run(["show", packet.id, "--prompt"], { env });
@@ -761,6 +911,116 @@ test("export validates requested format", () => {
   assert.match(result.stderr, /--format must be markdown or json/);
 });
 
+test("view writes a standalone local HTML viewer", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "workspace");
+  const outPath = path.join(dir, "viewer", "acb.html");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: storePath };
+
+  run([
+    "save",
+    "--workspace",
+    workspace,
+    "--from",
+    "codex",
+    "--summary",
+    "Review <viewer> output",
+    "--status",
+    "ready",
+    "--note",
+    "HTML escapes unsafe text",
+    "--tag",
+    "viewer",
+  ], { env });
+
+  const viewed = run(["view", "--workspace", workspace, "--out", outPath], { env });
+  assert.equal(viewed.status, 0);
+  assert.match(viewed.stdout, /wrote local viewer/);
+  assert.ok(fs.existsSync(outPath));
+  const html = fs.readFileSync(outPath, "utf8");
+  assert.match(html, /<!doctype html>/);
+  assert.match(html, /ACB Handoff Viewer/);
+  assert.match(html, /Review &lt;viewer&gt; output/);
+  assert.match(html, /acb resume --id pkt_/);
+  assert.match(html, /acb brief --id pkt_/);
+
+  const emptyPath = path.join(dir, "empty.html");
+  const empty = run(["view", "--workspace", path.join(dir, "missing"), "--out", emptyPath], { env });
+  assert.equal(empty.status, 0);
+  assert.match(fs.readFileSync(emptyPath, "utf8"), /No handoff packets matched this view/);
+
+  const badLimit = run(["view", "--limit", "0"], { env });
+  assert.equal(badLimit.status, 2);
+  assert.match(badLimit.stderr, /--limit must be/);
+});
+
+test("dashboard serves a read-only local state view", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "workspace");
+  const otherWorkspace = path.join(dir, "other-workspace");
+  fs.mkdirSync(workspace);
+  fs.mkdirSync(otherWorkspace);
+  const env = { ...process.env, ACB_STORE: storePath };
+
+  run([
+    "save",
+    "--workspace",
+    workspace,
+    "--from",
+    "codex",
+    "--summary",
+    "Dashboard smoke",
+    "--note",
+    "Inspect local UI",
+  ], { env });
+  run([
+    "save",
+    "--workspace",
+    otherWorkspace,
+    "--from",
+    "codex",
+    "--summary",
+    "Other workspace packet",
+    "--note",
+    "Do not leak this scope",
+  ], { env });
+
+  const child = spawn(process.execPath, [bin, "dashboard", "--workspace", workspace, "--port", "0"], {
+    cwd: process.cwd(),
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  try {
+    const match = await waitForStdout(child, /dashboard: (http:\/\/127\.0\.0\.1:\d+\/)/);
+    const url = match[1];
+    const html = await httpGet(url);
+    assert.match(html, /ACB Dashboard/);
+    assert.match(html, /Dashboard smoke/);
+    assert.match(html, /acb brief --id pkt_/);
+
+    const state = JSON.parse(await httpGet(`${url}api/state`));
+    assert.equal(state.version, pkg.version);
+    assert.equal(state.workspace, realWorkspace(workspace));
+    assert.equal(state.shown_packets, 1);
+    assert.equal(state.total_packets, 1);
+    assert.equal(state.workspace_count, 1);
+    assert.deepEqual(state.workspaces.map((item) => item.workspace), [realWorkspace(workspace)]);
+    assert.equal(state.latest_packet.summary, "Dashboard smoke");
+    assert.match(state.latest_packet.next_brief, /^acb brief --id pkt_/);
+    assert.doesNotMatch(JSON.stringify(state), /Other workspace packet/);
+    assert.doesNotMatch(JSON.stringify(state), new RegExp(otherWorkspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+    const health = await httpGet(`${url}health`);
+    assert.equal(health, "ok\n");
+  } finally {
+    child.kill();
+  }
+});
+
 test("import restores JSON exports and skips duplicates", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const sourceStore = path.join(dir, "source.json");
@@ -852,6 +1112,11 @@ test("store backup copies the raw local store", () => {
   const env = { ACB_STORE: storePath };
 
   run(["save", "--summary", "backup me"], { env });
+  const firstStore = fs.readFileSync(storePath, "utf8");
+  run(["save", "--summary", "second packet"], { env });
+  assert.equal(fs.readFileSync(`${storePath}.bak`, "utf8"), firstStore);
+  assert.match(fs.readFileSync(storePath, "utf8"), /second packet/);
+
   const backup = run(["store", "backup", "--out", backupPath, "--json"], { env });
   assert.equal(backup.status, 0);
   const report = JSON.parse(backup.stdout);
@@ -950,14 +1215,60 @@ test("verify mcp smoke tests a configured stdio server", () => {
   assert.match(verified.stdout, /initialize: ok/);
   assert.match(verified.stdout, /get_workspace_status: ok/);
   assert.match(verified.stdout, /read_latest_handoff/);
+  assert.match(verified.stdout, /read_handoff_brief/);
 
   const json = run(["verify", "mcp", "--config", configPath, "--name", "local-acb", "--json"]);
   assert.equal(json.status, 0);
   const report = JSON.parse(json.stdout);
   assert.equal(report.ok, true);
   assert.equal(report.server, "local-acb");
+  assert.equal(report.workspace, realWorkspace(process.cwd()));
   assert.equal(report.checks.required_tools, true);
   assert.equal(report.checks.workspace_status, true);
+});
+
+test("verify workflow smoke tests client handoff surfaces", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+
+  const verified = run(["verify", "workflow", "opencode", "--workspace", workspace]);
+  assert.equal(verified.status, 0);
+  assert.match(verified.stdout, /ACB Workflow Verify/);
+  assert.match(verified.stdout, /target: opencode/);
+  assert.match(verified.stdout, /brief: ok/);
+  assert.match(verified.stdout, /mcp_latest_handoff: ok/);
+  assert.match(verified.stdout, /dashboard_html: ok/);
+  assert.match(verified.stdout, /mcp_verify: ok/);
+
+  const json = run(["verify", "workflow", "cline", "--workspace", workspace, "--json"]);
+  assert.equal(json.status, 0);
+  const report = JSON.parse(json.stdout);
+  assert.equal(report.ok, true);
+  assert.equal(report.target, "cline");
+  assert.equal(report.workspace, realWorkspace(workspace));
+  assert.equal(report.artifacts_retained, false);
+  assert.equal(report.artifacts_cleaned, true);
+  assert.equal(fs.existsSync(report.store_path), false);
+  assert.equal(report.checks.resume_prompt, true);
+  assert.equal(report.checks.brief, true);
+  assert.equal(report.checks.mcp_latest_handoff, true);
+  assert.equal(report.checks.dashboard_state, true);
+  assert.equal(report.mcp.checks.required_tools, true);
+  assert.equal(report.mcp.checks.latest_handoff, true);
+  assert.equal(report.mcp.workspace, realWorkspace(workspace));
+  assert.match(report.commands.dashboard, /acb dashboard --workspace/);
+
+  const retained = run(["verify", "workflow", "codex", "--workspace", workspace, "--keep-artifacts", "--json"]);
+  assert.equal(retained.status, 0);
+  const retainedReport = JSON.parse(retained.stdout);
+  assert.equal(retainedReport.artifacts_retained, true);
+  assert.equal(fs.existsSync(retainedReport.store_path), true);
+  fs.rmSync(path.dirname(retainedReport.store_path), { recursive: true, force: true });
+
+  const missing = run(["verify", "workflow", "missing-client"]);
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /Unknown workflow target/);
 });
 
 test("verify mcp reports launch failures", () => {
@@ -1053,32 +1364,41 @@ test("serve exposes handoff tools over MCP stdio", () => {
     rpc("tools/call", { name: "list_handoffs", arguments: { workspace, limit: 5 } }, 5),
     rpc("tools/call", { name: "search_handoffs", arguments: { workspace, query: "pull", limit: 5 } }, 6),
     rpc("tools/call", { name: "list_workspaces", arguments: { limit: 5 } }, 7),
+    rpc("tools/call", { name: "read_handoff_brief", arguments: { workspace } }, 8),
   ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
   assert.equal(served.stderr, "");
   const messages = parseJsonLines(served.stdout);
-  assert.equal(messages.length, 7);
+  assert.equal(messages.length, 8);
   assert.equal(messages[0].result.protocolVersion, "2025-06-18");
   assert.deepEqual(messages[0].result.capabilities, { tools: { listChanged: false } });
   assert.equal(messages[1].result.tools[0].name, "get_workspace_status");
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "read_latest_handoff"));
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "read_handoff_brief"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "search_handoffs"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "update_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "list_workspaces"));
   assert.match(messages[2].result.content[0].text, /ACB Status/);
   assert.equal(messages[2].result.structuredContent.report.workspace_packets, 1);
   assert.match(messages[2].result.structuredContent.report.next.resume, /^acb resume --id pkt_/);
+  assert.match(messages[2].result.structuredContent.report.next.brief, /^acb brief --id pkt_/);
   assert.equal(messages[2].result.structuredContent.report.next.mcp_read_latest, "read_latest_handoff");
+  assert.equal(messages[2].result.structuredContent.report.next.mcp_read_brief, "read_handoff_brief");
   assert.match(messages[3].result.content[0].text, /MCP handoff/);
   assert.equal(messages[3].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[3].result.structuredContent.packet.next_mcp_read, "read_handoff");
+  assert.equal(messages[3].result.structuredContent.packet.next_mcp_brief, "read_handoff_brief");
   assert.equal(messages[4].result.structuredContent.packets.length, 1);
   assert.equal(messages[4].result.structuredContent.packets[0].next_mcp_read, "read_handoff");
   assert.equal(messages[5].result.structuredContent.packets[0].summary, "MCP handoff");
   assert.match(messages[5].result.structuredContent.packets[0].next_resume, /^acb resume --id pkt_/);
   assert.equal(messages[6].result.structuredContent.workspaces[0].workspace, realWorkspace(workspace));
+  assert.match(messages[6].result.structuredContent.workspaces[0].next_brief, /^acb brief --id pkt_/);
+  assert.match(messages[7].result.content[0].text, /ACB brief/);
+  assert.equal(messages[7].result.structuredContent.packet.summary, "MCP handoff");
+  assert.match(messages[7].result.structuredContent.brief, /Full Context Commands/);
 
   const id = messages[4].result.structuredContent.packets[0].id;
   const readById = run(["serve"], {
