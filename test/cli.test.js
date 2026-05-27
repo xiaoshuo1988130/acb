@@ -50,6 +50,25 @@ test("prints version and help", () => {
   assert.match(quickstart.stdout, new RegExp(`npm install -g ${pkg.name.replace("/", "\\/")}`));
   assert.match(quickstart.stdout, /acb handoff/);
   assert.match(quickstart.stdout, /acb resume/);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const quickstartCheck = run(["quickstart", "--check", "--workspace", workspace], { env: { ACB_STORE: storePath } });
+  assert.equal(quickstartCheck.status, 0);
+  assert.match(quickstartCheck.stdout, /ACB Quickstart Check/);
+  assert.match(quickstartCheck.stdout, /next_handoff: acb handoff/);
+  assert.match(quickstartCheck.stdout, /next_resume: acb resume/);
+
+  const quickstartJson = run(["quickstart", "--check", "--workspace", workspace, "--json"], { env: { ACB_STORE: storePath } });
+  assert.equal(quickstartJson.status, 0);
+  const quickstartReport = JSON.parse(quickstartJson.stdout);
+  assert.equal(quickstartReport.version, pkg.version);
+  assert.equal(quickstartReport.package, pkg.name);
+  assert.equal(quickstartReport.workspace, realWorkspace(workspace));
+  assert.equal(quickstartReport.store_path, storePath);
+  assert.equal(quickstartReport.next.resume, "acb resume");
 });
 
 test("runs when invoked through a bin symlink", () => {

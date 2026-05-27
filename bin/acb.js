@@ -42,7 +42,7 @@ Usage:
   acb store path
   acb store info [--json]
   acb store backup [--out <path>] [--force] [--json]
-  acb quickstart
+  acb quickstart [--check] [--workspace <path>] [--json]
   acb --version
   acb help
 
@@ -54,6 +54,9 @@ const quickstart = `AgentContextBus quickstart
 
 Install:
   npm install -g ${PACKAGE_NAME}
+
+Check your local setup:
+  acb quickstart --check
 
 1. From the agent that has context:
   acb handoff --from codex --summary "Ready for the next agent" --git
@@ -89,7 +92,7 @@ async function main(argv = process.argv.slice(2)) {
 
   if (command === "help" || command === "--help" || command === "-h") return print(usage);
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
-  if (command === "quickstart") return print(quickstart);
+  if (command === "quickstart") return quickstartCommand(args);
   if (command === "handoff") return handoffCommand(args);
   if (command === "save") return saveCommand(args);
   if (command === "update") return updateCommand(args);
@@ -129,6 +132,43 @@ function handoffCommand(args) {
     return saveCommand(cleanArgs);
   }
   return saveCommand([...cleanArgs, "--copy"]);
+}
+
+function quickstartCommand(args) {
+  if (args.includes("--check")) {
+    const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+    const report = buildDoctorReport(workspace);
+    const check = {
+      ok: report.ok,
+      version: VERSION,
+      package: PACKAGE_NAME,
+      command_path: path.resolve(process.argv[1] || "bin/acb.js"),
+      install_command: `npm install -g ${PACKAGE_NAME}`,
+      workspace,
+      store_path: report.store_path,
+      checks: report.checks,
+      next: {
+        handoff: "acb handoff --from codex --summary \"Ready for the next agent\" --git",
+        resume: "acb resume",
+        doctor: "acb doctor",
+        mcp_config: report.mcp.config_command,
+        mcp_verify: report.mcp.verify_command,
+      },
+    };
+    if (args.includes("--json")) {
+      process.stdout.write(`${JSON.stringify(check, null, 2)}\n`);
+      return check.ok ? 0 : 1;
+    }
+    printQuickstartCheck(check, report);
+    return check.ok ? 0 : 1;
+  }
+
+  if (args.includes("--json")) {
+    console.error("Usage: acb quickstart --check --json");
+    return 2;
+  }
+
+  return print(quickstart);
 }
 
 function saveCommand(args) {
@@ -1349,6 +1389,33 @@ function printDoctorReport(report) {
   }
   console.log(`mcp_config_command: ${report.mcp.config_command}`);
   console.log(`mcp_verify_command: ${report.mcp.verify_command}`);
+}
+
+function printQuickstartCheck(check, report) {
+  const clipboardReady = check.checks.clipboard_command_available;
+  const acbReady = check.checks.acb_command_available;
+  console.log("ACB Quickstart Check");
+  console.log(`version: acb ${check.version}`);
+  console.log(`package: ${check.package}`);
+  console.log(`command_path: ${check.command_path}`);
+  console.log(`store: ${check.store_path}`);
+  console.log(`store_readable: ${check.checks.store_readable ? "yes" : "no"}`);
+  if (report.store_error) console.log(`store_error: ${report.store_error}`);
+  console.log(`workspace: ${check.workspace}`);
+  console.log(`git_available: ${check.checks.git_available ? "yes" : "no"}`);
+  console.log(`git_workspace: ${check.checks.git_workspace ? "yes" : "no"}`);
+  console.log(`clipboard_ready: ${clipboardReady ? "yes" : "no"}`);
+  if (!clipboardReady) {
+    console.log("clipboard_fallback: prompts will be printed to the terminal instead");
+    if (process.platform === "linux") console.log("clipboard_hint: install wl-clipboard, xclip, or xsel");
+  }
+  console.log(`acb_on_path: ${acbReady ? "yes" : "no"}`);
+  if (!acbReady) console.log(`install_hint: ${check.install_command}`);
+  console.log(`next_handoff: ${check.next.handoff}`);
+  console.log(`next_resume: ${check.next.resume}`);
+  console.log(`next_doctor: ${check.next.doctor}`);
+  console.log(`next_mcp_config: ${check.next.mcp_config}`);
+  console.log(`next_mcp_verify: ${check.next.mcp_verify}`);
 }
 
 function serveCommand(args) {

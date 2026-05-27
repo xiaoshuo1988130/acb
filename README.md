@@ -27,6 +27,7 @@ For the shortest flow after install:
 
 ```bash
 acb quickstart
+acb quickstart --check
 ```
 
 See [CHANGELOG.md](CHANGELOG.md) for release scope and alpha boundaries.
@@ -120,6 +121,7 @@ acb delete <packet-id>
 acb clear --workspace .
 acb clear --all
 acb doctor
+acb quickstart --check
 acb config mcp --out ./mcp.json
 acb verify mcp --config ./mcp.json
 acb serve
@@ -163,6 +165,8 @@ JSON packet summaries from `acb list`, `acb search`, and `acb timeline` include 
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 
 `acb doctor` checks the local store, current workspace packet count, Git availability, clipboard command availability, and whether `acb` is visible on `PATH` for MCP clients. If `acb` is not on `PATH`, it prints both the global install command and a local `node .../bin/acb.js serve` MCP config hint.
+
+`acb quickstart --check` prints a shorter first-run readiness report: installed version, store readability, clipboard fallback status, current workspace, and the next `handoff`, `resume`, `doctor`, and MCP commands. Use `--json` for scripts.
 
 `acb timeline` prints a compact terminal view of recent handoffs. It is the first visualization layer before any optional web viewer.
 

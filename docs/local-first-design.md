@@ -154,6 +154,8 @@ It reports:
 
 It does not copy anything to the clipboard and does not modify the packet store.
 
+`acb quickstart --check` is the new-user version of the same readiness check. It keeps the output short and reports the installed version, store readability, clipboard fallback status, current workspace, and the next `handoff`, `resume`, `doctor`, and MCP commands.
+
 If the local store is malformed, ACB fails closed: write commands do not overwrite the file. `acb doctor` reports `store_readable: no` and prints the parse or shape error so the user can inspect or restore the file manually.
 
 Use `acb store backup` before destructive maintenance:

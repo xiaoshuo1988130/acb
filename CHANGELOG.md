@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.3
+
+### Added
+
+- Added `acb quickstart --check` for a short first-run readiness report.
+
 ## 0.0.2
 
 ### Fixed
