@@ -466,6 +466,8 @@ function listCommand(args) {
     console.log(workspace ? `[acb] no packets for workspace: ${workspace}` : "[acb] no packets");
     return 0;
   }
+  console.log("ACB List");
+  console.log(workspace ? `workspace: ${workspace}` : "workspace: all");
   for (const packet of packets) {
     console.log(`${packet.id}  ${packet.created_at}  ${packet.from}  ${packet.workspace}`);
     if (packet.summary) console.log(`  ${packet.summary}`);

@@ -113,6 +113,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 
 `acb list`, `acb search`, `acb timeline`, and `acb export` also default to the current workspace. Add `--all` only when you intentionally want cross-workspace history.
 
+Human `acb list` output prints its active scope (`workspace: <path>` or `workspace: all`) so cross-project history views are visible at a glance.
+
 `acb handoff` is the primary one-step entrypoint. It behaves like `acb save --copy` by default. Use `--print-prompt` or `--json` for deterministic script output, or `--no-copy` when you want a two-step `save` then `resume` flow.
 
 `acb resume` is the downstream entrypoint. It copies the latest handoff prompt for the current workspace. Use `--print-prompt` to print it, `--json` to return both packet and prompt, or `--preview --open` to inspect the Markdown prompt before pasting.

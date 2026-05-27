@@ -95,6 +95,8 @@ test("save, latest, list, and prompt use local store", () => {
 
   const listed = run(["list", "--workspace", workspace], { env });
   assert.equal(listed.status, 0);
+  assert.match(listed.stdout, /ACB List/);
+  assert.match(listed.stdout, new RegExp(`workspace: ${realWorkspace(workspace)}`));
   assert.match(listed.stdout, new RegExp(packet.id));
   assert.match(listed.stdout, /Implemented local handoff/);
 
@@ -310,6 +312,10 @@ test("history commands default to current workspace and support all", () => {
 
   const listAll = JSON.parse(run(["list", "--all", "--json"], { env, cwd: workspaceA }).stdout);
   assert.equal(listAll.length, 2);
+
+  const listAllHuman = run(["list", "--all"], { env, cwd: workspaceA });
+  assert.equal(listAllHuman.status, 0);
+  assert.match(listAllHuman.stdout, /workspace: all/);
 
   const searchScoped = run(["search", "handoff", "--json"], { env, cwd: workspaceA });
   assert.equal(JSON.parse(searchScoped.stdout).length, 1);
