@@ -8,6 +8,21 @@ It starts with one plain problem:
 
 ACB is intentionally explicit. It does not silently inject prompts, edit third-party tool storage, or intercept traffic by default.
 
+## Install
+
+```bash
+npm install -g @xiaoshuo1988/acb
+acb --help
+```
+
+Or run without installing:
+
+```bash
+npx @xiaoshuo1988/acb --help
+```
+
+The npm package is scoped because the unscoped `acb` package name is already taken. The CLI command remains `acb`.
+
 ## MVP
 
 ```bash

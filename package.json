@@ -1,5 +1,5 @@
 {
-  "name": "acb",
+  "name": "@xiaoshuo1988/acb",
   "version": "0.0.1",
   "description": "Local-first context handoff for coding agents.",
   "type": "module",
@@ -12,6 +12,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "lint": "node --check bin/acb.js",
     "test": "node --test",
