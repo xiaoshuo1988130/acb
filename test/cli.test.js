@@ -29,6 +29,10 @@ function parseJsonLines(stdout) {
   return stdout.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
 
+function realWorkspace(workspace) {
+  return fs.realpathSync.native(workspace);
+}
+
 test("prints version and help", () => {
   const version = run(["--version"]);
   assert.equal(version.status, 0);
@@ -69,7 +73,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(latest.status, 0);
   const packet = JSON.parse(latest.stdout);
   assert.equal(packet.from, "codex");
-  assert.equal(packet.workspace, workspace);
+  assert.equal(packet.workspace, realWorkspace(workspace));
   assert.equal(packet.summary, "Implemented local handoff");
   assert.deepEqual(packet.notes, ["Do not publish yet"]);
   assert.deepEqual(packet.tags, ["mvp"]);
@@ -102,7 +106,7 @@ test("save, latest, list, and prompt use local store", () => {
   const workspacesJson = run(["workspaces", "--json"], { env });
   assert.equal(workspacesJson.status, 0);
   const workspaceSummary = JSON.parse(workspacesJson.stdout)[0];
-  assert.equal(workspaceSummary.workspace, workspace);
+  assert.equal(workspaceSummary.workspace, realWorkspace(workspace));
   assert.equal(workspaceSummary.packets, 1);
   assert.equal(workspaceSummary.latest_packet_id, packet.id);
 
@@ -295,9 +299,12 @@ test("handoff is a one-step save entrypoint", () => {
 test("resume is a downstream handoff entrypoint", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const workspace = path.join(dir, "workspace");
+  const otherWorkspace = path.join(dir, "other-workspace");
   fs.mkdirSync(workspace);
+  fs.mkdirSync(otherWorkspace);
   const env = { ACB_STORE: path.join(dir, "packets.json") };
 
+  run(["handoff", "--workspace", otherWorkspace, "--summary", "Other workspace handoff", "--no-copy"], { env });
   run([
     "handoff",
     "--workspace",
@@ -309,6 +316,11 @@ test("resume is a downstream handoff entrypoint", () => {
     "--no-copy",
   ], { env });
   const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+
+  const defaultPrompt = run(["resume", "--print-prompt"], { env, cwd: workspace });
+  assert.equal(defaultPrompt.status, 0);
+  assert.match(defaultPrompt.stdout, /Resume shortcut/);
+  assert.doesNotMatch(defaultPrompt.stdout, /Other workspace handoff/);
 
   const prompt = run(["resume", "--workspace", workspace, "--print-prompt"], { env });
   assert.equal(prompt.status, 0);
@@ -581,9 +593,9 @@ test("workspaces groups packet history by workspace", () => {
   assert.equal(result.status, 0);
   const summaries = JSON.parse(result.stdout);
   assert.equal(summaries.length, 2);
-  assert.equal(summaries[0].workspace, workspaceB);
+  assert.equal(summaries[0].workspace, realWorkspace(workspaceB));
   assert.equal(summaries[0].packets, 1);
-  assert.equal(summaries[1].workspace, workspaceA);
+  assert.equal(summaries[1].workspace, realWorkspace(workspaceA));
   assert.equal(summaries[1].packets, 2);
 
   const limited = run(["workspaces", "--limit", "1", "--json"], { env });
@@ -835,7 +847,7 @@ test("doctor reports local store and workspace state", () => {
   assert.equal(json.status, 0);
   const report = JSON.parse(json.stdout);
   assert.equal(report.store_path, storePath);
-  assert.equal(report.workspace, workspace);
+  assert.equal(report.workspace, realWorkspace(workspace));
   assert.equal(report.workspace_packets, 1);
   assert.equal(report.total_packets, 1);
   assert.equal(report.checks.store_readable, true);
@@ -902,7 +914,7 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.equal(messages[2].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[3].result.structuredContent.packets.length, 1);
   assert.equal(messages[4].result.structuredContent.packets[0].summary, "MCP handoff");
-  assert.equal(messages[5].result.structuredContent.workspaces[0].workspace, workspace);
+  assert.equal(messages[5].result.structuredContent.workspaces[0].workspace, realWorkspace(workspace));
 
   const id = messages[3].result.structuredContent.packets[0].id;
   const readById = run(["serve"], {
@@ -1122,7 +1134,7 @@ test("clear defaults to current workspace and supports all", () => {
 
   let packets = JSON.parse(run(["list", "--json"], { env }).stdout);
   assert.equal(packets.length, 1);
-  assert.equal(packets[0].workspace, workspaceB);
+  assert.equal(packets[0].workspace, realWorkspace(workspaceB));
 
   const clearedAll = run(["clear", "--all"], { env });
   assert.equal(clearedAll.status, 0);

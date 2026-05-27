@@ -323,8 +323,10 @@ function resumeCommand(args) {
     return 2;
   }
 
-  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
   const id = argValue(args, "--id");
+  const workspace = id
+    ? (args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null)
+    : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
   const packet = findPacket({ workspace, id });
   if (!packet) {
     console.error(id ? `No handoff packet found for id: ${id}` : "No handoff packet found to resume.");
@@ -1960,7 +1962,12 @@ function storePath() {
 }
 
 function normalizeWorkspace(workspace) {
-  return path.resolve(workspace || process.cwd());
+  const resolved = path.resolve(workspace || process.cwd());
+  try {
+    return fs.realpathSync.native(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 function createPacketId() {
