@@ -10,6 +10,7 @@ AgentContextBus should validate one daily pain first:
 - Generate a paste-ready prompt.
 - Copy it to clipboard by default.
 - Keep storage local and inspectable.
+- Expose explicit MCP pull mode for clients that can call local tools.
 
 ## Not In The MVP
 
@@ -21,7 +22,6 @@ AgentContextBus should validate one daily pain first:
 
 ## Later
 
-- MCP pull mode: expose `read_latest_handoff`.
 - SQLite storage.
 - Workspace-aware handoff history.
 - Optional web viewer.

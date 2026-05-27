@@ -34,6 +34,14 @@ acb save --from codex --summary "Ready for review" --git
 
 `--git` records the repository root, current branch, short HEAD, and `git status --short` output. It does not include a diff.
 
+MCP clients can pull the same handoff explicitly:
+
+```bash
+acb serve
+```
+
+Expose it as a local stdio MCP server, then ask the next agent to use `read_latest_handoff` for the current workspace.
+
 ## Commands
 
 ```bash
@@ -46,6 +54,7 @@ acb list
 acb delete <packet-id>
 acb clear --workspace .
 acb clear --all
+acb serve
 acb store path
 ```
 

@@ -83,3 +83,33 @@ ACB uses platform clipboard commands:
 - Linux X11: `xclip` or `xsel`
 
 If clipboard access fails, ACB prints the prompt. Linux users may need to install `wl-clipboard`, `xclip`, or `xsel`.
+
+## MCP Pull
+
+`acb serve` exposes the local packet store as a stdio MCP server.
+
+Initial tools:
+
+- `read_latest_handoff`: returns the newest handoff prompt for a workspace.
+- `list_handoffs`: returns recent packet summaries without expanding full body text.
+
+This keeps ingestion explicit. A downstream agent must call the tool; ACB does not silently inject context into the model request.
+
+Example MCP server config shape:
+
+```json
+{
+  "mcpServers": {
+    "acb": {
+      "command": "acb",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Recommended first message in a new session:
+
+```text
+Use acb to read the latest handoff for this workspace, then continue from it.
+```

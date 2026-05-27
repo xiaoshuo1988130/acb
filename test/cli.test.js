@@ -13,7 +13,20 @@ function run(args, options = {}) {
     env: { ...process.env, ...options.env },
     cwd: options.cwd || process.cwd(),
     input: options.input,
+    timeout: options.timeout || 5000,
   });
+}
+
+function rpc(method, params = {}, id = 1) {
+  return `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`;
+}
+
+function notification(method, params = {}) {
+  return `${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`;
+}
+
+function parseJsonLines(stdout) {
+  return stdout.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
 
 test("prints version and help", () => {
@@ -165,6 +178,53 @@ test("store path prints configured store", () => {
   const result = run(["store", "path"], { env: { ACB_STORE: storePath } });
   assert.equal(result.status, 0);
   assert.equal(result.stdout.trim(), storePath);
+});
+
+test("serve exposes handoff tools over MCP stdio", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: storePath };
+
+  const saved = run(["save", "--workspace", workspace, "--summary", "MCP handoff", "--note", "Pull me"], { env });
+  assert.equal(saved.status, 0);
+
+  const input = [
+    rpc("initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "test-client", version: "0.0.0" },
+    }, 1),
+    notification("notifications/initialized"),
+    rpc("tools/list", {}, 2),
+    rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace } }, 3),
+    rpc("tools/call", { name: "list_handoffs", arguments: { workspace, limit: 5 } }, 4),
+  ].join("");
+
+  const served = run(["serve"], { env, input });
+  assert.equal(served.status, 0);
+  assert.equal(served.stderr, "");
+  const messages = parseJsonLines(served.stdout);
+  assert.equal(messages.length, 4);
+  assert.equal(messages[0].result.protocolVersion, "2025-06-18");
+  assert.deepEqual(messages[0].result.capabilities, { tools: { listChanged: false } });
+  assert.equal(messages[1].result.tools[0].name, "read_latest_handoff");
+  assert.match(messages[2].result.content[0].text, /MCP handoff/);
+  assert.equal(messages[2].result.structuredContent.packet.summary, "MCP handoff");
+  assert.equal(messages[3].result.structuredContent.packets.length, 1);
+});
+
+test("serve returns tool errors as tool results", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+  const input = rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace: dir } }, 1);
+
+  const served = run(["serve"], { env, input });
+  assert.equal(served.status, 0);
+  const [message] = parseJsonLines(served.stdout);
+  assert.equal(message.result.isError, true);
+  assert.match(message.result.content[0].text, /No handoff packet found/);
 });
 
 test("delete removes a single packet", () => {

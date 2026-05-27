@@ -8,6 +8,7 @@ const VERSION = "0.0.1";
 const STORE_VERSION = 1;
 const DEFAULT_LIMIT = 10;
 const PROMPT_BODY_LIMIT = 12000;
+const MCP_PROTOCOL_VERSION = "2025-06-18";
 
 const usage = `AgentContextBus (acb) ${VERSION}
 
@@ -18,6 +19,7 @@ Usage:
   acb list [--workspace <path>] [--limit <n>] [--json]
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
+  acb serve
   acb store path
   acb --version
   acb help
@@ -38,6 +40,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "list") return listCommand(args);
   if (command === "delete") return deleteCommand(args);
   if (command === "clear") return clearCommand(args);
+  if (command === "serve") return serveCommand(args);
   if (command === "store") return storeCommand(args);
 
   console.error(`Unknown command: ${command}\n\n${usage}`);
@@ -203,6 +206,226 @@ function storeCommand(args) {
   }
   console.log(storePath());
   return 0;
+}
+
+function serveCommand(args) {
+  if (args.length > 0) {
+    console.error("Usage: acb serve");
+    return 2;
+  }
+  const server = new McpStdioServer();
+  server.start();
+  return new Promise(() => {});
+}
+
+class McpStdioServer {
+  constructor({ input = process.stdin, output = process.stdout } = {}) {
+    this.input = input;
+    this.output = output;
+    this.buffer = "";
+  }
+
+  start() {
+    this.input.setEncoding("utf8");
+    this.input.on("data", (chunk) => this.receive(chunk));
+    this.input.on("end", () => {
+      if (this.buffer.trim()) this.handleLine(this.buffer);
+    });
+  }
+
+  receive(chunk) {
+    this.buffer += chunk;
+    let newlineIndex = this.buffer.indexOf("\n");
+    while (newlineIndex !== -1) {
+      const line = this.buffer.slice(0, newlineIndex).trim();
+      this.buffer = this.buffer.slice(newlineIndex + 1);
+      if (line) this.handleLine(line);
+      newlineIndex = this.buffer.indexOf("\n");
+    }
+  }
+
+  handleLine(line) {
+    let message;
+    try {
+      message = JSON.parse(line);
+    } catch (error) {
+      this.sendError(null, -32700, `Parse error: ${error.message}`);
+      return;
+    }
+
+    if (Array.isArray(message)) {
+      for (const item of message) this.handleMessage(item);
+      return;
+    }
+    this.handleMessage(message);
+  }
+
+  handleMessage(message) {
+    if (!message || message.jsonrpc !== "2.0" || typeof message.method !== "string") {
+      this.sendError(message?.id ?? null, -32600, "Invalid Request");
+      return;
+    }
+
+    if (message.id === undefined) {
+      this.handleNotification(message);
+      return;
+    }
+
+    try {
+      const result = this.dispatchRequest(message.method, message.params || {});
+      this.send({ jsonrpc: "2.0", id: message.id, result });
+    } catch (error) {
+      this.sendError(message.id, error.code || -32603, error.message || "Internal error");
+    }
+  }
+
+  handleNotification(message) {
+    if (message.method === "notifications/initialized") return;
+    if (message.method === "notifications/cancelled") return;
+    console.error(`[acb mcp] ignored notification: ${message.method}`);
+  }
+
+  dispatchRequest(method, params) {
+    if (method === "initialize") return mcpInitialize(params);
+    if (method === "ping") return {};
+    if (method === "tools/list") return { tools: mcpTools() };
+    if (method === "tools/call") return mcpCallTool(params);
+    throw jsonRpcError(-32601, `Method not found: ${method}`);
+  }
+
+  send(message) {
+    this.output.write(`${JSON.stringify(message)}\n`);
+  }
+
+  sendError(id, code, message) {
+    this.send({ jsonrpc: "2.0", id, error: { code, message } });
+  }
+}
+
+function mcpInitialize(params) {
+  const requested = params?.protocolVersion;
+  return {
+    protocolVersion: requested || MCP_PROTOCOL_VERSION,
+    capabilities: {
+      tools: {
+        listChanged: false,
+      },
+    },
+    serverInfo: {
+      name: "acb",
+      title: "AgentContextBus",
+      version: VERSION,
+    },
+    instructions: "Use read_latest_handoff to pull the newest explicit local handoff packet for the current workspace.",
+  };
+}
+
+function mcpTools() {
+  return [
+    {
+      name: "read_latest_handoff",
+      title: "Read Latest Handoff",
+      description: "Read the newest local ACB handoff packet, optionally scoped to a workspace.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspace: {
+            type: "string",
+            description: "Optional workspace path. Defaults to the MCP server process current working directory.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "list_handoffs",
+      title: "List Handoffs",
+      description: "List recent local ACB handoff packets without expanding full context bodies.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspace: {
+            type: "string",
+            description: "Optional workspace path.",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 50,
+            description: "Maximum number of packets to return. Defaults to 10.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  ];
+}
+
+function mcpCallTool(params) {
+  const name = params?.name;
+  const args = params?.arguments || {};
+  if (name === "read_latest_handoff") return mcpReadLatestHandoff(args);
+  if (name === "list_handoffs") return mcpListHandoffs(args);
+  throw jsonRpcError(-32602, `Unknown tool: ${name}`);
+}
+
+function mcpReadLatestHandoff(args) {
+  const workspace = args.workspace ? normalizeWorkspace(args.workspace) : normalizeWorkspace(process.cwd());
+  const packet = findPacket({ workspace });
+  if (!packet) {
+    return {
+      content: [{ type: "text", text: `No handoff packet found for workspace: ${workspace}` }],
+      isError: true,
+    };
+  }
+
+  const prompt = renderHandoffPrompt(packet);
+  return {
+    content: [{ type: "text", text: prompt }],
+    structuredContent: { packet, prompt },
+    isError: false,
+  };
+}
+
+function mcpListHandoffs(args) {
+  const workspace = args.workspace ? normalizeWorkspace(args.workspace) : null;
+  const limit = parseLimit(args.limit);
+  if (!limit || limit > 50) {
+    return {
+      content: [{ type: "text", text: "limit must be an integer between 1 and 50." }],
+      isError: true,
+    };
+  }
+  const packets = loadStore().packets
+    .filter((packet) => !workspace || packet.workspace === workspace)
+    .slice(0, limit)
+    .map(packetSummary);
+
+  return {
+    content: [{ type: "text", text: JSON.stringify(packets, null, 2) }],
+    structuredContent: { packets },
+    isError: false,
+  };
+}
+
+function packetSummary(packet) {
+  return {
+    id: packet.id,
+    created_at: packet.created_at,
+    from: packet.from,
+    workspace: packet.workspace,
+    summary: packet.summary,
+    status: packet.status,
+    tags: packet.tags || [],
+    body_chars: packet.body?.length || 0,
+    git_dirty_files: packet.git?.status?.length || 0,
+  };
+}
+
+function jsonRpcError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
 }
 
 function renderHandoffPrompt(packet) {
