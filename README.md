@@ -29,6 +29,8 @@ For the shortest flow after install:
 acb quickstart
 ```
 
+See [CHANGELOG.md](CHANGELOG.md) for release scope and alpha boundaries.
+
 ## MVP
 
 ```bash

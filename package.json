@@ -10,6 +10,7 @@
     "bin",
     "docs",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "publishConfig": {
