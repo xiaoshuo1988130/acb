@@ -168,10 +168,11 @@ Only JSON exports are importable. Markdown remains a human review format. By def
 Initial tools:
 
 - `read_latest_handoff`: returns the newest handoff prompt for a workspace.
+- `save_handoff`: saves an explicit local handoff packet from an MCP-capable agent.
 - `read_handoff`: returns a specific handoff prompt by packet id.
 - `list_handoffs`: returns recent packet summaries without expanding full body text.
 
-This keeps ingestion explicit. A downstream agent must call the tool; ACB does not silently inject context into the model request.
+This keeps both export and ingestion explicit. An upstream agent must call `save_handoff`; a downstream agent must call a read tool. ACB does not silently inject context into the model request.
 
 Example MCP server config shape:
 

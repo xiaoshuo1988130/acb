@@ -496,16 +496,59 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.match(readMessage.result.content[0].text, /MCP handoff/);
 });
 
-test("serve returns tool errors as tool results", () => {
+test("serve can save handoff packets over MCP stdio", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
-  const env = { ACB_STORE: path.join(dir, "packets.json") };
-  const input = rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace: dir } }, 1);
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: storePath };
+
+  const input = [
+    rpc("tools/call", {
+      name: "save_handoff",
+      arguments: {
+        from: "cline",
+        workspace,
+        summary: "Saved through MCP",
+        status: "ready for another agent",
+        notes: ["Use the generated prompt"],
+        tags: ["mcp", "handoff"],
+        body: "The upstream agent completed the first pass.",
+      },
+    }, 1),
+    rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace } }, 2),
+  ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
-  const [message] = parseJsonLines(served.stdout);
+  const messages = parseJsonLines(served.stdout);
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].result.isError, false);
+  assert.match(messages[0].result.content[0].text, /Saved ACB handoff packet/);
+  assert.equal(messages[0].result.structuredContent.packet.from, "cline");
+  assert.equal(messages[1].result.structuredContent.packet.summary, "Saved through MCP");
+  assert.match(messages[1].result.content[0].text, /ready for another agent/);
+
+  const latest = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.equal(latest.summary, "Saved through MCP");
+  assert.deepEqual(latest.tags, ["mcp", "handoff"]);
+});
+
+test("serve returns tool errors as tool results", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+  const input = [
+    rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace: dir } }, 1),
+    rpc("tools/call", { name: "save_handoff", arguments: { workspace: dir } }, 2),
+  ].join("");
+
+  const served = run(["serve"], { env, input });
+  assert.equal(served.status, 0);
+  const [message, saveMessage] = parseJsonLines(served.stdout);
   assert.equal(message.result.isError, true);
   assert.match(message.result.content[0].text, /No handoff packet found/);
+  assert.equal(saveMessage.result.isError, true);
+  assert.match(saveMessage.result.content[0].text, /requires summary/);
 });
 
 test("delete removes a single packet", () => {

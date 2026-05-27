@@ -91,10 +91,7 @@ function saveCommand(args) {
     return 2;
   }
 
-  const packet = {
-    id: createPacketId(),
-    version: STORE_VERSION,
-    created_at: new Date().toISOString(),
+  const packet = createHandoffPacket({
     from,
     workspace,
     summary: summary || null,
@@ -103,7 +100,7 @@ function saveCommand(args) {
     tags,
     body: bodyResult.body || null,
     git: gitResult.snapshot,
-  };
+  });
 
   const store = loadStore();
   store.packets.unshift(packet);
@@ -113,6 +110,22 @@ function saveCommand(args) {
   console.log(`[acb] workspace: ${packet.workspace}`);
   console.log("[acb] next: acb prompt");
   return 0;
+}
+
+function createHandoffPacket({ from, workspace, summary = null, status = null, notes = [], tags = [], body = null, git = null }) {
+  return {
+    id: createPacketId(),
+    version: STORE_VERSION,
+    created_at: new Date().toISOString(),
+    from: from || "unknown",
+    workspace,
+    summary,
+    status,
+    notes,
+    tags,
+    body,
+    git,
+  };
 }
 
 function latestCommand(args) {
@@ -793,7 +806,7 @@ function verifyMcpServer(name, server) {
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["read_latest_handoff", "read_handoff", "list_handoffs"];
+  const requiredTools = ["read_latest_handoff", "save_handoff", "read_handoff", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   report.ok = Object.values(report.checks).every(Boolean);
   if (!report.ok && !report.error) report.error = "MCP server did not expose the expected ACB tools.";
@@ -1033,6 +1046,51 @@ function mcpTools() {
       },
     },
     {
+      name: "save_handoff",
+      title: "Save Handoff",
+      description: "Save an explicit local ACB handoff packet for another agent to read later.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          from: {
+            type: "string",
+            description: "Source agent or tool name. Defaults to mcp-client.",
+          },
+          workspace: {
+            type: "string",
+            description: "Workspace path. Defaults to the MCP server process current working directory.",
+          },
+          summary: {
+            type: "string",
+            description: "Short handoff summary.",
+          },
+          status: {
+            type: "string",
+            description: "Current state or progress status.",
+          },
+          notes: {
+            type: "array",
+            items: { type: "string" },
+            description: "Important next steps, risks, or blockers.",
+          },
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional packet tags.",
+          },
+          body: {
+            type: "string",
+            description: "Optional longer handoff context body.",
+          },
+          include_git: {
+            type: "boolean",
+            description: "Attach a lightweight Git snapshot when the workspace is a Git repository.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
       name: "read_handoff",
       title: "Read Handoff",
       description: "Read a specific local ACB handoff packet by id.",
@@ -1076,6 +1134,7 @@ function mcpCallTool(params) {
   const name = params?.name;
   const args = params?.arguments || {};
   if (name === "read_latest_handoff") return mcpReadLatestHandoff(args);
+  if (name === "save_handoff") return mcpSaveHandoff(args);
   if (name === "read_handoff") return mcpReadHandoff(args);
   if (name === "list_handoffs") return mcpListHandoffs(args);
   throw jsonRpcError(-32602, `Unknown tool: ${name}`);
@@ -1095,6 +1154,50 @@ function mcpReadLatestHandoff(args) {
   return {
     content: [{ type: "text", text: prompt }],
     structuredContent: { packet, prompt },
+    isError: false,
+  };
+}
+
+function mcpSaveHandoff(args) {
+  const workspace = args.workspace ? normalizeWorkspace(args.workspace) : normalizeWorkspace(process.cwd());
+  const notes = normalizeStringArray(args.notes);
+  const tags = normalizeStringArray(args.tags);
+  const summary = typeof args.summary === "string" && args.summary.trim() ? args.summary : null;
+  const status = typeof args.status === "string" && args.status.trim() ? args.status : null;
+  const body = typeof args.body === "string" && args.body.trim() ? args.body : null;
+
+  if (!summary && !status && notes.length === 0 && !body && !args.include_git) {
+    return {
+      content: [{ type: "text", text: "save_handoff requires summary, status, notes, body, or include_git." }],
+      isError: true,
+    };
+  }
+
+  const gitResult = args.include_git ? readGitSnapshot(workspace) : { ok: true, snapshot: null };
+  if (!gitResult.ok) {
+    return {
+      content: [{ type: "text", text: gitResult.error }],
+      isError: true,
+    };
+  }
+
+  const packet = createHandoffPacket({
+    from: typeof args.from === "string" && args.from.trim() ? args.from : "mcp-client",
+    workspace,
+    summary,
+    status,
+    notes,
+    tags,
+    body,
+    git: gitResult.snapshot,
+  });
+  const store = loadStore();
+  store.packets.unshift(packet);
+  writeStore(store);
+
+  return {
+    content: [{ type: "text", text: `Saved ACB handoff packet: ${packet.id}` }],
+    structuredContent: { packet },
     isError: false,
   };
 }
@@ -1120,6 +1223,11 @@ function mcpReadHandoff(args) {
     structuredContent: { packet, prompt },
     isError: false,
   };
+}
+
+function normalizeStringArray(value) {
+  if (Array.isArray(value)) return value.filter((item) => typeof item === "string" && item.trim());
+  return [];
 }
 
 function mcpListHandoffs(args) {
