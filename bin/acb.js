@@ -22,6 +22,7 @@ Usage:
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb preview [--workspace <path>] [--id <packet-id>] [--out <path>] [--open]
   acb list [--workspace <path>] [--limit <n>] [--json]
+  acb workspaces [--limit <n>] [--json]
   acb search <query> [--workspace <path>] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--limit <n>] [--json]
   acb export [--workspace <path>] [--limit <n>] [--format markdown|json] [--out <path>]
@@ -54,6 +55,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "prompt") return promptCommand(args);
   if (command === "preview") return previewCommand(args);
   if (command === "list") return listCommand(args);
+  if (command === "workspaces") return workspacesCommand(args);
   if (command === "search") return searchCommand(args);
   if (command === "timeline") return timelineCommand(args);
   if (command === "export") return exportCommand(args);
@@ -282,6 +284,33 @@ function listCommand(args) {
   for (const packet of packets) {
     console.log(`${packet.id}  ${packet.created_at}  ${packet.from}  ${packet.workspace}`);
     if (packet.summary) console.log(`  ${packet.summary}`);
+  }
+  return 0;
+}
+
+function workspacesCommand(args) {
+  const limit = parseLimit(argValue(args, "--limit"));
+  if (!limit) {
+    console.error("--limit must be a positive integer.");
+    return 2;
+  }
+  const workspaces = listWorkspaceSummaries(limit);
+
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(workspaces, null, 2)}\n`);
+    return 0;
+  }
+  if (workspaces.length === 0) {
+    console.log("[acb] no workspaces");
+    return 0;
+  }
+
+  console.log("ACB Workspaces");
+  for (const item of workspaces) {
+    console.log(`${item.workspace}`);
+    console.log(`  packets: ${item.packets}`);
+    console.log(`  latest: ${item.latest_packet_id}  ${item.latest_created_at}  ${item.latest_from}`);
+    if (item.latest_summary) console.log(`  summary: ${item.latest_summary}`);
   }
   return 0;
 }
@@ -587,6 +616,30 @@ function searchablePacketText(packet) {
     .toLowerCase();
 }
 
+function listWorkspaceSummaries(limit = DEFAULT_LIMIT) {
+  const byWorkspace = new Map();
+  for (const packet of loadStore().packets) {
+    const current = byWorkspace.get(packet.workspace);
+    if (!current) {
+      byWorkspace.set(packet.workspace, {
+        workspace: packet.workspace,
+        packets: 1,
+        latest_packet_id: packet.id,
+        latest_created_at: packet.created_at,
+        latest_from: packet.from,
+        latest_summary: packet.summary,
+        latest_status: packet.status,
+        latest_tags: packet.tags || [],
+        latest_body_chars: packet.body?.length || 0,
+        latest_git_dirty_files: packet.git?.status?.length || 0,
+      });
+    } else {
+      current.packets += 1;
+    }
+  }
+  return [...byWorkspace.values()].slice(0, limit);
+}
+
 function buildStatusReport(workspace) {
   const store = loadStore();
   const packets = store.packets.filter((packet) => packet.workspace === workspace);
@@ -830,7 +883,7 @@ function verifyMcpServer(name, server) {
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["read_latest_handoff", "save_handoff", "read_handoff", "search_handoffs", "list_handoffs"];
+  const requiredTools = ["read_latest_handoff", "save_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   report.ok = Object.values(report.checks).every(Boolean);
   if (!report.ok && !report.error) report.error = "MCP server did not expose the expected ACB tools.";
@@ -1166,6 +1219,23 @@ function mcpTools() {
       },
     },
     {
+      name: "list_workspaces",
+      title: "List Workspaces",
+      description: "List local workspaces with ACB handoff history and latest packet summaries.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 50,
+            description: "Maximum number of workspaces to return. Defaults to 10.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
       name: "list_handoffs",
       title: "List Handoffs",
       description: "List recent local ACB handoff packets without expanding full context bodies.",
@@ -1196,6 +1266,7 @@ function mcpCallTool(params) {
   if (name === "save_handoff") return mcpSaveHandoff(args);
   if (name === "read_handoff") return mcpReadHandoff(args);
   if (name === "search_handoffs") return mcpSearchHandoffs(args);
+  if (name === "list_workspaces") return mcpListWorkspaces(args);
   if (name === "list_handoffs") return mcpListHandoffs(args);
   throw jsonRpcError(-32602, `Unknown tool: ${name}`);
 }
@@ -1342,6 +1413,22 @@ function mcpSearchHandoffs(args) {
   return {
     content: [{ type: "text", text: JSON.stringify(packets, null, 2) }],
     structuredContent: { packets },
+    isError: false,
+  };
+}
+
+function mcpListWorkspaces(args) {
+  const limit = parseLimit(args.limit);
+  if (!limit || limit > 50) {
+    return {
+      content: [{ type: "text", text: "limit must be an integer between 1 and 50." }],
+      isError: true,
+    };
+  }
+  const workspaces = listWorkspaceSummaries(limit);
+  return {
+    content: [{ type: "text", text: JSON.stringify(workspaces, null, 2) }],
+    structuredContent: { workspaces },
     isError: false,
   };
 }

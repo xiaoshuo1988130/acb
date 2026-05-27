@@ -57,6 +57,7 @@ acb show <packet-id> --prompt
 acb prompt
 acb preview
 acb list
+acb workspaces
 acb search <query>
 acb timeline
 acb export --format markdown --out ./handoffs.md
@@ -82,6 +83,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb preview` writes the latest handoff prompt to a Markdown file for review. Add `--open` when you want ACB to open it with the system default app.
 
 `acb search` finds older handoff packets by text in summaries, status, notes, tags, body, workspace, or lightweight Git metadata.
+
+`acb workspaces` shows which local workspaces have handoff history and the latest packet for each one.
 
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 

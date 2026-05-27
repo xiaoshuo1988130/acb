@@ -91,6 +91,18 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(listed.stdout, new RegExp(packet.id));
   assert.match(listed.stdout, /Implemented local handoff/);
 
+  const workspaces = run(["workspaces"], { env });
+  assert.equal(workspaces.status, 0);
+  assert.match(workspaces.stdout, /ACB Workspaces/);
+  assert.match(workspaces.stdout, new RegExp(workspace));
+
+  const workspacesJson = run(["workspaces", "--json"], { env });
+  assert.equal(workspacesJson.status, 0);
+  const workspaceSummary = JSON.parse(workspacesJson.stdout)[0];
+  assert.equal(workspaceSummary.workspace, workspace);
+  assert.equal(workspaceSummary.packets, 1);
+  assert.equal(workspaceSummary.latest_packet_id, packet.id);
+
   const searched = run(["search", "publish", "--workspace", workspace], { env });
   assert.equal(searched.status, 0);
   assert.match(searched.stdout, /ACB Search: publish/);
@@ -319,6 +331,36 @@ test("search handles empty matches and validates limit", () => {
   assert.match(empty.stdout, /no packets matched/);
 });
 
+test("workspaces groups packet history by workspace", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspaceA = path.join(dir, "a");
+  const workspaceB = path.join(dir, "b");
+  fs.mkdirSync(workspaceA);
+  fs.mkdirSync(workspaceB);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run(["save", "--workspace", workspaceA, "--summary", "a1"], { env });
+  run(["save", "--workspace", workspaceA, "--summary", "a2"], { env });
+  run(["save", "--workspace", workspaceB, "--summary", "b1"], { env });
+
+  const result = run(["workspaces", "--json"], { env });
+  assert.equal(result.status, 0);
+  const summaries = JSON.parse(result.stdout);
+  assert.equal(summaries.length, 2);
+  assert.equal(summaries[0].workspace, workspaceB);
+  assert.equal(summaries[0].packets, 1);
+  assert.equal(summaries[1].workspace, workspaceA);
+  assert.equal(summaries[1].packets, 2);
+
+  const limited = run(["workspaces", "--limit", "1", "--json"], { env });
+  assert.equal(limited.status, 0);
+  assert.equal(JSON.parse(limited.stdout).length, 1);
+
+  const badLimit = run(["workspaces", "--limit", "0"], { env });
+  assert.equal(badLimit.status, 2);
+  assert.match(badLimit.stderr, /--limit must be/);
+});
+
 test("export validates requested format", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const result = run(["export", "--format", "html"], { env: { ACB_STORE: path.join(dir, "packets.json") } });
@@ -518,21 +560,24 @@ test("serve exposes handoff tools over MCP stdio", () => {
     rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace } }, 3),
     rpc("tools/call", { name: "list_handoffs", arguments: { workspace, limit: 5 } }, 4),
     rpc("tools/call", { name: "search_handoffs", arguments: { workspace, query: "pull", limit: 5 } }, 5),
+    rpc("tools/call", { name: "list_workspaces", arguments: { limit: 5 } }, 6),
   ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
   assert.equal(served.stderr, "");
   const messages = parseJsonLines(served.stdout);
-  assert.equal(messages.length, 5);
+  assert.equal(messages.length, 6);
   assert.equal(messages[0].result.protocolVersion, "2025-06-18");
   assert.deepEqual(messages[0].result.capabilities, { tools: { listChanged: false } });
   assert.equal(messages[1].result.tools[0].name, "read_latest_handoff");
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "search_handoffs"));
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "list_workspaces"));
   assert.match(messages[2].result.content[0].text, /MCP handoff/);
   assert.equal(messages[2].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[3].result.structuredContent.packets.length, 1);
   assert.equal(messages[4].result.structuredContent.packets[0].summary, "MCP handoff");
+  assert.equal(messages[5].result.structuredContent.workspaces[0].workspace, workspace);
 
   const id = messages[3].result.structuredContent.packets[0].id;
   const readById = run(["serve"], {
@@ -623,17 +668,20 @@ test("serve returns tool errors as tool results", () => {
     rpc("tools/call", { name: "read_latest_handoff", arguments: { workspace: dir } }, 1),
     rpc("tools/call", { name: "save_handoff", arguments: { workspace: dir } }, 2),
     rpc("tools/call", { name: "search_handoffs", arguments: { query: "" } }, 3),
+    rpc("tools/call", { name: "list_workspaces", arguments: { limit: 0 } }, 4),
   ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
-  const [message, saveMessage, searchMessage] = parseJsonLines(served.stdout);
+  const [message, saveMessage, searchMessage, workspaceMessage] = parseJsonLines(served.stdout);
   assert.equal(message.result.isError, true);
   assert.match(message.result.content[0].text, /No handoff packet found/);
   assert.equal(saveMessage.result.isError, true);
   assert.match(saveMessage.result.content[0].text, /requires summary/);
   assert.equal(searchMessage.result.isError, true);
   assert.match(searchMessage.result.content[0].text, /query is required/);
+  assert.equal(workspaceMessage.result.isError, true);
+  assert.match(workspaceMessage.result.content[0].text, /limit must be/);
 });
 
 test("delete removes a single packet", () => {

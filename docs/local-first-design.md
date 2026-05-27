@@ -118,6 +118,15 @@ It does not copy anything to the clipboard and does not modify the packet store.
 
 ## Terminal Timeline
 
+`acb workspaces` lists local workspaces that have handoff history:
+
+```bash
+acb workspaces
+acb workspaces --json
+```
+
+This is the first multi-project view. It shows packet counts and the latest packet per workspace without assuming any third-party client integration.
+
 `acb search` keeps local history useful once packets accumulate:
 
 ```bash
@@ -173,6 +182,7 @@ Initial tools:
 - `save_handoff`: saves an explicit local handoff packet from an MCP-capable agent.
 - `read_handoff`: returns a specific handoff prompt by packet id.
 - `search_handoffs`: searches local handoff history.
+- `list_workspaces`: lists local workspaces with handoff history.
 - `list_handoffs`: returns recent packet summaries without expanding full body text.
 
 This keeps both export and ingestion explicit. An upstream agent must call `save_handoff`; a downstream agent must call a read tool. ACB does not silently inject context into the model request.
