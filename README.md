@@ -16,6 +16,14 @@ acb handoff --from codex --summary "Implemented probe report decision output" --
 
 `acb handoff` saves a packet, copies a handoff prompt to your clipboard, and leaves the packet in local history. Paste it into the next agent.
 
+On the next side, use:
+
+```bash
+acb resume
+```
+
+`acb resume` copies the latest handoff prompt for the current workspace.
+
 For a one-step handoff, save and copy in the same command:
 
 ```bash
@@ -70,6 +78,7 @@ acb status
 acb latest
 acb show <packet-id>
 acb show <packet-id> --prompt
+acb resume
 acb prompt
 acb preview
 acb list
@@ -95,6 +104,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb status` prints the current workspace handoff state and the next commands to copy or inspect the latest packet.
 
 `acb handoff` is the primary one-step entrypoint. It behaves like `acb save --copy` by default. Use `--print-prompt` or `--json` for deterministic script output, or `--no-copy` when you want the older two-step `save` then `prompt` flow.
+
+`acb resume` is the downstream entrypoint. It copies the latest handoff prompt for the current workspace. Use `--print-prompt` to print it or `--json` to return both packet and prompt.
 
 `acb save --copy` saves the packet and immediately copies its rendered prompt. `acb save --print-prompt` is the deterministic terminal-only version for scripts and tests. `acb save --json` returns the created packet for automation.
 

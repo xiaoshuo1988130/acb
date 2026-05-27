@@ -66,6 +66,16 @@ acb save --summary "Scripted handoff" --json
 
 `acb handoff` is the primary one-step entrypoint and defaults to copying the rendered prompt. `--copy` writes the rendered handoff prompt to the system clipboard. If clipboard access fails, ACB prints the prompt instead. `--print-prompt` skips the clipboard and writes the rendered prompt to stdout. `--json` skips human output and writes the created packet as JSON.
 
+The downstream side uses `resume`:
+
+```bash
+acb resume
+acb resume --workspace /path/to/workspace --print-prompt
+acb resume --id pkt_20260527123000_abc123 --json
+```
+
+`acb resume` copies the latest handoff prompt for the current workspace. It is a named entrypoint for the receiving side of the handoff; the older `acb prompt` command remains available.
+
 Existing packets can be corrected without deleting and recreating them:
 
 ```bash

@@ -288,6 +288,45 @@ test("handoff is a one-step save entrypoint", () => {
   assert.match(invalid.stderr, /Use only one handoff output mode/);
 });
 
+test("resume is a downstream handoff entrypoint", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run([
+    "handoff",
+    "--workspace",
+    workspace,
+    "--summary",
+    "Resume shortcut",
+    "--note",
+    "Continue from here",
+    "--no-copy",
+  ], { env });
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+
+  const prompt = run(["resume", "--workspace", workspace, "--print-prompt"], { env });
+  assert.equal(prompt.status, 0);
+  assert.match(prompt.stdout, /You are taking over work/);
+  assert.match(prompt.stdout, /Resume shortcut/);
+  assert.match(prompt.stdout, /Continue from here/);
+
+  const json = run(["resume", "--id", packet.id, "--json"], { env });
+  assert.equal(json.status, 0);
+  const payload = JSON.parse(json.stdout);
+  assert.equal(payload.packet.id, packet.id);
+  assert.match(payload.prompt, /Resume shortcut/);
+
+  const missing = run(["resume", "--workspace", path.join(dir, "missing"), "--print-prompt"], { env });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /No handoff packet found to resume/);
+
+  const invalid = run(["resume", "--id", packet.id, "--json", "--print-prompt"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use only one resume output mode/);
+});
+
 test("update edits packet metadata, tags, notes, and body", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");

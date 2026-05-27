@@ -21,6 +21,7 @@ Usage:
   acb latest [--workspace <path>] [--json]
   acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
+  acb resume [--workspace <path>] [--id <packet-id>] [--no-copy | --print-prompt | --json]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb preview [--workspace <path>] [--id <packet-id>] [--out <path>] [--open]
   acb list [--workspace <path>] [--limit <n>] [--json]
@@ -58,6 +59,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "latest") return latestCommand(args);
   if (command === "status") return statusCommand(args);
   if (command === "show") return showCommand(args);
+  if (command === "resume") return resumeCommand(args);
   if (command === "prompt") return promptCommand(args);
   if (command === "preview") return previewCommand(args);
   if (command === "list") return listCommand(args);
@@ -312,6 +314,47 @@ function showCommand(args) {
   }
   printPacket(packet);
   return 0;
+}
+
+function resumeCommand(args) {
+  if (resumeOutputModes(args).length > 1) {
+    console.error("Use only one resume output mode: --no-copy, --print-prompt, or --json.");
+    return 2;
+  }
+
+  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const id = argValue(args, "--id");
+  const packet = findPacket({ workspace, id });
+  if (!packet) {
+    console.error(id ? `No handoff packet found for id: ${id}` : "No handoff packet found to resume.");
+    return 1;
+  }
+
+  const prompt = renderHandoffPrompt(packet);
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify({ packet, prompt }, null, 2)}\n`);
+    return 0;
+  }
+  if (args.includes("--no-copy") || args.includes("--print-prompt")) {
+    process.stdout.write(prompt);
+    return 0;
+  }
+
+  const copied = copyToClipboard(prompt);
+  if (copied.ok) {
+    console.log("[acb] resume prompt copied to clipboard.");
+    console.log("[acb] paste it into the current agent session.");
+    return 0;
+  }
+
+  console.error(`[acb] clipboard unavailable: ${copied.error}`);
+  console.error("[acb] printing resume prompt instead:\n");
+  process.stdout.write(prompt);
+  return 0;
+}
+
+function resumeOutputModes(args) {
+  return ["--no-copy", "--print-prompt", "--json"].filter((flag) => args.includes(flag));
 }
 
 function promptCommand(args) {
