@@ -1,5 +1,5 @@
 {
-  "name": "@xiaoshuo1988/acb",
+  "name": "@xiaoshuo1988/agent-context-bus",
   "version": "0.0.1",
   "description": "Local-first context handoff for coding agents.",
   "type": "module",

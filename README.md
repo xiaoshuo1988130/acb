@@ -1,6 +1,6 @@
 # AgentContextBus
 
-`acb` is a local-first context handoff tool for coding agents.
+AgentContextBus is a local-first context handoff tool for coding agents. Its short CLI alias is `acb`.
 
 It starts with one plain problem:
 
@@ -11,17 +11,17 @@ ACB is intentionally explicit. It does not silently inject prompts, edit third-p
 ## Install
 
 ```bash
-npm install -g @xiaoshuo1988/acb
+npm install -g @xiaoshuo1988/agent-context-bus
 acb --help
 ```
 
 Or run without installing:
 
 ```bash
-npx @xiaoshuo1988/acb --help
+npx @xiaoshuo1988/agent-context-bus --help
 ```
 
-The npm package is scoped because the unscoped `acb` package name is already taken. The CLI command remains `acb`.
+The npm package uses the full project name. The installed CLI command remains the short alias `acb`.
 
 ## MVP
 
