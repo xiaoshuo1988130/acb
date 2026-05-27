@@ -179,10 +179,10 @@ This is the first multi-project view. It shows packet counts and the latest pack
 ```bash
 acb search "schema"
 acb search "handoff" --workspace .
-acb search "blocked" --json
+acb search "blocked" --all --json
 ```
 
-It searches packet ids, source agent names, workspace paths, summaries, statuses, notes, tags, body text, and lightweight Git metadata.
+It searches packet ids, source agent names, workspace paths, summaries, statuses, notes, tags, body text, and lightweight Git metadata. It defaults to the current workspace; use `--all` for cross-workspace search.
 
 `acb timeline` is the first visualization layer.
 
@@ -197,6 +197,8 @@ It prints recent handoff packets with:
 
 This deliberately comes before a web dashboard. It validates whether handoff history is useful in daily work without adding frontend complexity.
 
+`acb list`, `acb timeline`, and `acb export` also default to the current workspace. Use `--all` when you intentionally want to inspect or export cross-workspace history.
+
 ## Export
 
 `acb export` is a read-only bridge from local packets to portable artifacts.
@@ -206,6 +208,7 @@ Examples:
 ```bash
 acb export --workspace . --format markdown --out ./handoffs.md
 acb export --workspace . --format json --out ./handoffs.json
+acb export --all --format markdown --out ./all-handoffs.md
 ```
 
 Markdown export is for human review and copy/paste sharing. JSON export is for future viewers, scripts, or local analysis.

@@ -293,6 +293,38 @@ test("latest defaults to current workspace and supports all", () => {
   assert.match(invalid.stderr, /Use either --workspace or --all/);
 });
 
+test("history commands default to current workspace and support all", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspaceA = path.join(dir, "a");
+  const workspaceB = path.join(dir, "b");
+  fs.mkdirSync(workspaceA);
+  fs.mkdirSync(workspaceB);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run(["save", "--workspace", workspaceA, "--summary", "Alpha handoff"], { env });
+  run(["save", "--workspace", workspaceB, "--summary", "Beta handoff"], { env });
+
+  const listScoped = JSON.parse(run(["list", "--json"], { env, cwd: workspaceA }).stdout);
+  assert.equal(listScoped.length, 1);
+  assert.equal(listScoped[0].summary, "Alpha handoff");
+
+  const listAll = JSON.parse(run(["list", "--all", "--json"], { env, cwd: workspaceA }).stdout);
+  assert.equal(listAll.length, 2);
+
+  const searchScoped = run(["search", "handoff", "--json"], { env, cwd: workspaceA });
+  assert.equal(JSON.parse(searchScoped.stdout).length, 1);
+
+  const timelineAll = JSON.parse(run(["timeline", "--all", "--json"], { env, cwd: workspaceA }).stdout);
+  assert.equal(timelineAll.length, 2);
+
+  const exportScoped = run(["export", "--format", "json"], { env, cwd: workspaceA });
+  assert.equal(JSON.parse(exportScoped.stdout).length, 1);
+
+  const invalid = run(["list", "--workspace", workspaceA, "--all"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use either --workspace or --all/);
+});
+
 test("handoff is a one-step save entrypoint", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const env = { ACB_STORE: path.join(dir, "packets.json") };
@@ -665,19 +697,19 @@ test("import restores JSON exports and skips duplicates", () => {
   assert.equal(imported.status, 0);
   assert.match(imported.stdout, /imported 1 handoff packet/);
 
-  const packets = JSON.parse(run(["list", "--json"], { env: targetEnv }).stdout);
+  const packets = JSON.parse(run(["list", "--all", "--json"], { env: targetEnv }).stdout);
   assert.equal(packets.length, 1);
   assert.equal(packets[0].summary, "portable packet");
 
   const duplicate = run(["import", "--file", exportPath], { env: targetEnv });
   assert.equal(duplicate.status, 0);
   assert.match(duplicate.stdout, /skipped 1 duplicate/);
-  assert.equal(JSON.parse(run(["list", "--json"], { env: targetEnv }).stdout).length, 1);
+  assert.equal(JSON.parse(run(["list", "--all", "--json"], { env: targetEnv }).stdout).length, 1);
 
   const replaced = run(["import", "--file", exportPath, "--replace"], { env: targetEnv });
   assert.equal(replaced.status, 0);
   assert.match(replaced.stdout, /imported 1 handoff packet/);
-  assert.equal(JSON.parse(run(["list", "--json"], { env: targetEnv }).stdout).length, 1);
+  assert.equal(JSON.parse(run(["list", "--all", "--json"], { env: targetEnv }).stdout).length, 1);
 });
 
 test("import validates JSON packet shape", () => {
@@ -1165,7 +1197,7 @@ test("clear defaults to current workspace and supports all", () => {
   assert.equal(clearedWorkspace.status, 0);
   assert.match(clearedWorkspace.stdout, /cleared 2 handoff packet/);
 
-  let packets = JSON.parse(run(["list", "--json"], { env }).stdout);
+  let packets = JSON.parse(run(["list", "--all", "--json"], { env }).stdout);
   assert.equal(packets.length, 1);
   assert.equal(packets[0].workspace, realWorkspace(workspaceB));
 
@@ -1173,6 +1205,6 @@ test("clear defaults to current workspace and supports all", () => {
   assert.equal(clearedAll.status, 0);
   assert.match(clearedAll.stdout, /cleared 1 handoff packet/);
 
-  packets = JSON.parse(run(["list", "--json"], { env }).stdout);
+  packets = JSON.parse(run(["list", "--all", "--json"], { env }).stdout);
   assert.equal(packets.length, 0);
 });

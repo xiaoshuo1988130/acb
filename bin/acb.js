@@ -24,11 +24,11 @@ Usage:
   acb resume [--workspace <path>] [--id <packet-id>] [--no-copy | --print-prompt | --json | --preview] [--out <path>] [--open]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb preview [--workspace <path>] [--id <packet-id>] [--out <path>] [--open]
-  acb list [--workspace <path>] [--limit <n>] [--json]
+  acb list [--workspace <path>] [--all] [--limit <n>] [--json]
   acb workspaces [--limit <n>] [--json]
-  acb search <query> [--workspace <path>] [--limit <n>] [--json]
-  acb timeline [--workspace <path>] [--limit <n>] [--json]
-  acb export [--workspace <path>] [--limit <n>] [--format markdown|json] [--out <path>]
+  acb search <query> [--workspace <path>] [--all] [--limit <n>] [--json]
+  acb timeline [--workspace <path>] [--all] [--limit <n>] [--json]
+  acb export [--workspace <path>] [--all] [--limit <n>] [--format markdown|json] [--out <path>]
   acb import --file <path> [--replace]
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
@@ -442,7 +442,12 @@ function writePromptPreview(packet, args) {
 }
 
 function listCommand(args) {
-  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const scope = resolveHistoryScope(args);
+  if (!scope.ok) {
+    console.error(scope.error);
+    return 2;
+  }
+  const { workspace } = scope;
   const limit = parseLimit(argValue(args, "--limit"));
   if (!limit) {
     console.error("--limit must be a positive integer.");
@@ -498,10 +503,15 @@ function workspacesCommand(args) {
 function searchCommand(args) {
   const query = args.find((arg) => !arg.startsWith("--"));
   if (!query) {
-    console.error("Usage: acb search <query> [--workspace <path>] [--limit <n>] [--json]");
+    console.error("Usage: acb search <query> [--workspace <path>] [--all] [--limit <n>] [--json]");
     return 2;
   }
-  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const scope = resolveHistoryScope(args);
+  if (!scope.ok) {
+    console.error(scope.error);
+    return 2;
+  }
+  const { workspace } = scope;
   const limit = parseLimit(argValue(args, "--limit"));
   if (!limit) {
     console.error("--limit must be a positive integer.");
@@ -532,7 +542,12 @@ function searchCommand(args) {
 }
 
 function timelineCommand(args) {
-  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const scope = resolveHistoryScope(args);
+  if (!scope.ok) {
+    console.error(scope.error);
+    return 2;
+  }
+  const { workspace } = scope;
   const limit = parseLimit(argValue(args, "--limit"));
   if (!limit) {
     console.error("--limit must be a positive integer.");
@@ -559,7 +574,12 @@ function timelineCommand(args) {
 }
 
 function exportCommand(args) {
-  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const scope = resolveHistoryScope(args);
+  if (!scope.ok) {
+    console.error(scope.error);
+    return 2;
+  }
+  const { workspace } = scope;
   const limit = parseLimit(argValue(args, "--limit"));
   const format = argValue(args, "--format") || "markdown";
   const outPath = argValue(args, "--out");
@@ -589,6 +609,16 @@ function exportCommand(args) {
 
   process.stdout.write(content);
   return 0;
+}
+
+function resolveHistoryScope(args) {
+  if (args.includes("--workspace") && args.includes("--all")) {
+    return { ok: false, error: "Use either --workspace or --all, not both." };
+  }
+  return {
+    ok: true,
+    workspace: args.includes("--all") ? null : normalizeWorkspace(argValue(args, "--workspace") || process.cwd()),
+  };
 }
 
 function importCommand(args) {
