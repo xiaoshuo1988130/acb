@@ -1128,6 +1128,7 @@ function verifyMcpServer(name, server) {
     }, 1),
     JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }),
     jsonRpcLine("tools/list", {}, 2),
+    jsonRpcLine("tools/call", { name: "get_workspace_status", arguments: { workspace: process.cwd() } }, 3),
     "",
   ].join("\n");
 
@@ -1148,6 +1149,7 @@ function verifyMcpServer(name, server) {
       initialize: false,
       tools_list: false,
       required_tools: false,
+      workspace_status: false,
     },
     tools: [],
     error: null,
@@ -1167,6 +1169,7 @@ function verifyMcpServer(name, server) {
   const messages = parseJsonRpcLines(result.stdout || "");
   const initialize = messages.find((message) => message.id === 1);
   const toolsList = messages.find((message) => message.id === 2);
+  const workspaceStatus = messages.find((message) => message.id === 3);
 
   if (initialize?.result?.serverInfo?.name) report.checks.initialize = true;
   else if (initialize?.error) report.error = initialize.error.message || "initialize failed";
@@ -1180,6 +1183,11 @@ function verifyMcpServer(name, server) {
 
   const requiredTools = ["get_workspace_status", "read_latest_handoff", "save_handoff", "update_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
+  if (workspaceStatus?.result?.isError === false && workspaceStatus.result.content?.[0]?.text?.includes("ACB Status")) {
+    report.checks.workspace_status = true;
+  } else if (workspaceStatus?.error) {
+    report.error = workspaceStatus.error.message || "get_workspace_status failed";
+  }
   report.ok = Object.values(report.checks).every(Boolean);
   if (!report.ok && !report.error) report.error = "MCP server did not expose the expected ACB tools.";
   return report;
@@ -1212,6 +1220,7 @@ function printMcpVerifyReport(report) {
   console.log(`initialize: ${report.checks.initialize ? "ok" : "failed"}`);
   console.log(`tools/list: ${report.checks.tools_list ? "ok" : "failed"}`);
   console.log(`required_tools: ${report.checks.required_tools ? "ok" : "failed"}`);
+  console.log(`get_workspace_status: ${report.checks.workspace_status ? "ok" : "failed"}`);
   console.log(`tools: ${report.tools.length ? report.tools.join(", ") : "none"}`);
   if (report.error) console.log(`error: ${report.error}`);
   if (report.stderr) console.log(`stderr: ${report.stderr}`);

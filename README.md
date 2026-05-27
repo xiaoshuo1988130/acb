@@ -149,7 +149,7 @@ Human `acb list`, `acb search`, and `acb timeline` output prints its active scop
 
 `acb config mcp` prints or writes a copyable stdio MCP server config for clients that support MCP.
 
-`acb verify mcp` reads an MCP config, launches the selected stdio server, and checks that the ACB handoff tools are available before you paste that config into a client.
+`acb verify mcp` reads an MCP config, launches the selected stdio server, checks that the ACB handoff tools are available, and calls `get_workspace_status` once before you paste that config into a client.
 
 ## Boundaries
 

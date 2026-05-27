@@ -886,6 +886,7 @@ test("verify mcp smoke tests a configured stdio server", () => {
   assert.equal(verified.status, 0);
   assert.match(verified.stdout, /ACB MCP Verify/);
   assert.match(verified.stdout, /initialize: ok/);
+  assert.match(verified.stdout, /get_workspace_status: ok/);
   assert.match(verified.stdout, /read_latest_handoff/);
 
   const json = run(["verify", "mcp", "--config", configPath, "--name", "local-acb", "--json"]);
@@ -894,6 +895,7 @@ test("verify mcp smoke tests a configured stdio server", () => {
   assert.equal(report.ok, true);
   assert.equal(report.server, "local-acb");
   assert.equal(report.checks.required_tools, true);
+  assert.equal(report.checks.workspace_status, true);
 });
 
 test("verify mcp reports launch failures", () => {

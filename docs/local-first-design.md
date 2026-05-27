@@ -270,7 +270,7 @@ acb verify mcp --config ./mcp.json --name acb
 acb verify mcp --config ./mcp.json --name acb --json
 ```
 
-`verify mcp` launches the configured stdio server, sends `initialize`, then checks `tools/list` for the expected ACB handoff tools. It does not modify any client config.
+`verify mcp` launches the configured stdio server, sends `initialize`, checks `tools/list` for the expected ACB handoff tools, and calls `get_workspace_status` once. It does not modify any client config.
 
 Recommended first message in a new session:
 
