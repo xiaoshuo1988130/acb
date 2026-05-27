@@ -74,6 +74,18 @@ test("save, latest, list, and prompt use local store", () => {
   assert.deepEqual(packet.notes, ["Do not publish yet"]);
   assert.deepEqual(packet.tags, ["mvp"]);
 
+  const status = run(["status", "--workspace", workspace], { env });
+  assert.equal(status.status, 0);
+  assert.match(status.stdout, /ACB Status/);
+  assert.match(status.stdout, new RegExp(packet.id));
+  assert.match(status.stdout, /next_copy_prompt/);
+
+  const statusJson = run(["status", "--workspace", workspace, "--json"], { env });
+  assert.equal(statusJson.status, 0);
+  const statusReport = JSON.parse(statusJson.stdout);
+  assert.equal(statusReport.latest_packet.id, packet.id);
+  assert.equal(statusReport.workspace_packets, 1);
+
   const listed = run(["list", "--workspace", workspace], { env });
   assert.equal(listed.status, 0);
   assert.match(listed.stdout, new RegExp(packet.id));
@@ -208,6 +220,16 @@ test("save requires useful handoff content", () => {
   const result = run(["save"], { env: { ACB_STORE: path.join(dir, "packets.json") } });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /needs at least/);
+});
+
+test("status reports an empty workspace without failing", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const result = run(["status", "--workspace", workspace], { env: { ACB_STORE: path.join(dir, "packets.json") } });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /latest_packet: none/);
+  assert.match(result.stdout, /acb save --summary/);
 });
 
 test("export validates requested format", () => {

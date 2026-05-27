@@ -15,6 +15,7 @@ const usage = `AgentContextBus (acb) ${VERSION}
 Usage:
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin] [--git]
   acb latest [--workspace <path>] [--json]
+  acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb list [--workspace <path>] [--limit <n>] [--json]
@@ -43,6 +44,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
   if (command === "save") return saveCommand(args);
   if (command === "latest") return latestCommand(args);
+  if (command === "status") return statusCommand(args);
   if (command === "show") return showCommand(args);
   if (command === "prompt") return promptCommand(args);
   if (command === "list") return listCommand(args);
@@ -121,6 +123,17 @@ function latestCommand(args) {
     return 0;
   }
   printPacket(packet);
+  return 0;
+}
+
+function statusCommand(args) {
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const report = buildStatusReport(workspace);
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+  printStatusReport(report);
   return 0;
 }
 
@@ -418,6 +431,62 @@ function printTimelinePacket(packet) {
   console.log(`  ${summary}`);
   console.log(`  workspace: ${packet.workspace}`);
   if (facts.length) console.log(`  ${facts.join("  ")}`);
+}
+
+function buildStatusReport(workspace) {
+  const store = loadStore();
+  const packets = store.packets.filter((packet) => packet.workspace === workspace);
+  const latest = packets[0] || null;
+  const gitAvailable = commandExists("git");
+  const gitRootResult = gitAvailable ? runGit(workspace, ["rev-parse", "--show-toplevel"]) : { status: 1 };
+  const gitRoot = gitRootResult.status === 0 ? gitRootResult.stdout.trim() : null;
+  const git = gitRoot ? {
+    root: gitRoot,
+    branch: runGit(gitRoot, ["branch", "--show-current"]).stdout.trim() || null,
+    head: runGit(gitRoot, ["rev-parse", "--short", "HEAD"]).stdout.trim() || null,
+    dirty_files: runGit(gitRoot, ["status", "--short"]).stdout.split("\n").filter(Boolean).length,
+  } : null;
+
+  return {
+    workspace,
+    store_path: storePath(),
+    workspace_packets: packets.length,
+    latest_packet: latest ? packetSummary(latest) : null,
+    git,
+    next: latest ? {
+      copy_prompt: `acb prompt --id ${latest.id}`,
+      show_prompt: `acb show ${latest.id} --prompt`,
+      mcp_pull: "Use acb to read the latest handoff for this workspace.",
+    } : {
+      save: "acb save --summary \"...\" --git",
+    },
+  };
+}
+
+function printStatusReport(report) {
+  console.log("ACB Status");
+  console.log(`workspace: ${report.workspace}`);
+  console.log(`store: ${report.store_path}`);
+  console.log(`workspace_packets: ${report.workspace_packets}`);
+  if (report.git) {
+    console.log(`git_branch: ${report.git.branch || "unknown"}`);
+    console.log(`git_head: ${report.git.head || "unknown"}`);
+    console.log(`git_dirty_files: ${report.git.dirty_files}`);
+  } else {
+    console.log("git: unavailable");
+  }
+  if (!report.latest_packet) {
+    console.log("latest_packet: none");
+    console.log(`next: ${report.next.save}`);
+    return;
+  }
+  console.log(`latest_packet: ${report.latest_packet.id}`);
+  console.log(`latest_from: ${report.latest_packet.from}`);
+  console.log(`latest_created_at: ${report.latest_packet.created_at}`);
+  if (report.latest_packet.summary) console.log(`latest_summary: ${report.latest_packet.summary}`);
+  if (report.latest_packet.status) console.log(`latest_status: ${report.latest_packet.status}`);
+  console.log(`next_copy_prompt: ${report.next.copy_prompt}`);
+  console.log(`next_show_prompt: ${report.next.show_prompt}`);
 }
 
 function clearCommand(args) {

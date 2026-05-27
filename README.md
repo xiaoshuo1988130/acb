@@ -48,6 +48,7 @@ Expose it as a local stdio MCP server, then ask the next agent to use `read_late
 acb save --from <agent> --summary <text> --status <text> --note <text> --tag <tag> --file <path>
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
+acb status
 acb latest
 acb show <packet-id>
 acb show <packet-id> --prompt
@@ -67,6 +68,8 @@ acb store path
 ```
 
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
+
+`acb status` prints the current workspace handoff state and the next commands to copy or inspect the latest packet.
 
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 
