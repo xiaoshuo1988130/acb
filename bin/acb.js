@@ -1924,6 +1924,9 @@ function packetSummary(packet) {
     tags: packet.tags || [],
     body_chars: packet.body?.length || 0,
     git_dirty_files: packet.git?.status?.length || 0,
+    next_resume: `acb resume --id ${packet.id}`,
+    next_show_prompt: `acb show ${packet.id} --prompt`,
+    next_mcp_read: "read_handoff",
   };
 }
 

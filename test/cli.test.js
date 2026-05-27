@@ -133,7 +133,11 @@ test("save, latest, list, and prompt use local store", () => {
 
   const timelineJson = run(["timeline", "--workspace", workspace, "--json"], { env });
   assert.equal(timelineJson.status, 0);
-  assert.equal(JSON.parse(timelineJson.stdout)[0].id, packet.id);
+  const timelineSummary = JSON.parse(timelineJson.stdout)[0];
+  assert.equal(timelineSummary.id, packet.id);
+  assert.equal(timelineSummary.next_resume, `acb resume --id ${packet.id}`);
+  assert.equal(timelineSummary.next_show_prompt, `acb show ${packet.id} --prompt`);
+  assert.equal(timelineSummary.next_mcp_read, "read_handoff");
 
   const markdownExport = run(["export", "--workspace", workspace], { env });
   assert.equal(markdownExport.status, 0);
@@ -322,7 +326,9 @@ test("history commands default to current workspace and support all", () => {
   assert.match(listAllHuman.stdout, /workspace: all/);
 
   const searchScoped = run(["search", "handoff", "--json"], { env, cwd: workspaceA });
-  assert.equal(JSON.parse(searchScoped.stdout).length, 1);
+  const searchScopedPackets = JSON.parse(searchScoped.stdout);
+  assert.equal(searchScopedPackets.length, 1);
+  assert.match(searchScopedPackets[0].next_resume, /^acb resume --id pkt_/);
 
   const searchAllHuman = run(["search", "handoff", "--all"], { env, cwd: workspaceA });
   assert.equal(searchAllHuman.status, 0);
@@ -1015,7 +1021,9 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.match(messages[3].result.content[0].text, /MCP handoff/);
   assert.equal(messages[3].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[4].result.structuredContent.packets.length, 1);
+  assert.equal(messages[4].result.structuredContent.packets[0].next_mcp_read, "read_handoff");
   assert.equal(messages[5].result.structuredContent.packets[0].summary, "MCP handoff");
+  assert.match(messages[5].result.structuredContent.packets[0].next_resume, /^acb resume --id pkt_/);
   assert.equal(messages[6].result.structuredContent.workspaces[0].workspace, realWorkspace(workspace));
 
   const id = messages[4].result.structuredContent.packets[0].id;

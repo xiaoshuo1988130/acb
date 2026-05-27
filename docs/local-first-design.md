@@ -184,6 +184,8 @@ acb search "blocked" --all --json
 
 It searches packet ids, source agent names, workspace paths, summaries, statuses, notes, tags, body text, and lightweight Git metadata. It defaults to the current workspace; use `--all` for cross-workspace search.
 
+JSON packet summaries include `next_resume`, `next_show_prompt`, and `next_mcp_read` so scripts and MCP-capable clients can move from discovery to ingestion without reconstructing commands.
+
 `acb timeline` is the first visualization layer.
 
 It prints recent handoff packets with:
