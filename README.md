@@ -131,7 +131,7 @@ Human `acb list`, `acb search`, and `acb timeline` output prints its active scop
 
 `acb search` finds older handoff packets by text in summaries, status, notes, tags, body, workspace, or lightweight Git metadata.
 
-`acb workspaces` shows which local workspaces have handoff history and the latest packet for each one.
+`acb workspaces` shows which local workspaces have handoff history, the latest packet for each one, and a copyable `next_resume` command.
 
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 

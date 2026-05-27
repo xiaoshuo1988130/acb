@@ -498,6 +498,7 @@ function workspacesCommand(args) {
     console.log(`  packets: ${item.packets}`);
     console.log(`  latest: ${item.latest_packet_id}  ${item.latest_created_at}  ${item.latest_from}`);
     if (item.latest_summary) console.log(`  summary: ${item.latest_summary}`);
+    console.log(`  next_resume: ${item.next_resume}`);
   }
   return 0;
 }
@@ -846,6 +847,7 @@ function listWorkspaceSummaries(limit = DEFAULT_LIMIT) {
         latest_tags: packet.tags || [],
         latest_body_chars: packet.body?.length || 0,
         latest_git_dirty_files: packet.git?.status?.length || 0,
+        next_resume: `acb resume --id ${packet.id}`,
       });
     } else {
       current.packets += 1;

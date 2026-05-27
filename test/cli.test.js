@@ -104,6 +104,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(workspaces.status, 0);
   assert.match(workspaces.stdout, /ACB Workspaces/);
   assert.match(workspaces.stdout, new RegExp(workspace));
+  assert.match(workspaces.stdout, new RegExp(`next_resume: acb resume --id ${packet.id}`));
 
   const workspacesJson = run(["workspaces", "--json"], { env });
   assert.equal(workspacesJson.status, 0);
@@ -111,6 +112,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(workspaceSummary.workspace, realWorkspace(workspace));
   assert.equal(workspaceSummary.packets, 1);
   assert.equal(workspaceSummary.latest_packet_id, packet.id);
+  assert.equal(workspaceSummary.next_resume, `acb resume --id ${packet.id}`);
 
   const searched = run(["search", "publish", "--workspace", workspace], { env });
   assert.equal(searched.status, 0);

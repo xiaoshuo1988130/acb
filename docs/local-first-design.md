@@ -172,7 +172,7 @@ acb workspaces
 acb workspaces --json
 ```
 
-This is the first multi-project view. It shows packet counts and the latest packet per workspace without assuming any third-party client integration.
+This is the first multi-project view. It shows packet counts, the latest packet per workspace, and a copyable `next_resume` command without assuming any third-party client integration.
 
 `acb search` keeps local history useful once packets accumulate:
 
