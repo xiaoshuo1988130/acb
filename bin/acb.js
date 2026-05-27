@@ -15,6 +15,7 @@ const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>]
+  acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]
   acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
   acb latest [--workspace <path>] [--json]
   acb status [--workspace <path>] [--json]
@@ -48,6 +49,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "help" || command === "--help" || command === "-h") return print(usage);
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
   if (command === "save") return saveCommand(args);
+  if (command === "update") return updateCommand(args);
   if (command === "diff-preview") return diffPreviewCommand(args);
   if (command === "latest") return latestCommand(args);
   if (command === "status") return statusCommand(args);
@@ -133,6 +135,67 @@ function createHandoffPacket({ from, workspace, summary = null, status = null, n
     body,
     git,
   };
+}
+
+function updateCommand(args) {
+  const id = args[0] || argValue(args, "--id");
+  if (!id) {
+    console.error("Usage: acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]");
+    return 2;
+  }
+  if (!hasUpdateArgs(args)) {
+    console.error("acb update needs at least one change: --summary, --status, --note, --tag, --file, --stdin, --diff, --git, --clear-notes, or --clear-tags.");
+    return 2;
+  }
+
+  const store = loadStore();
+  const index = store.packets.findIndex((packet) => packet.id === id);
+  if (index === -1) {
+    console.error(`No handoff packet found for id: ${id}`);
+    return 1;
+  }
+
+  const packet = { ...store.packets[index] };
+  if (argValue(args, "--summary") !== undefined) packet.summary = argValue(args, "--summary") || null;
+  if (argValue(args, "--status") !== undefined) packet.status = argValue(args, "--status") || null;
+
+  const notes = argValues(args, "--note");
+  if (args.includes("--clear-notes")) packet.notes = [];
+  if (notes.length) packet.notes = [...(packet.notes || []), ...notes];
+
+  const tags = argValues(args, "--tag");
+  if (args.includes("--clear-tags")) packet.tags = [];
+  if (tags.length) packet.tags = uniqueStrings([...(packet.tags || []), ...tags]);
+
+  if (hasBodySource(args)) {
+    const bodyResult = readSaveBody(args, packet.workspace);
+    if (!bodyResult.ok) {
+      console.error(bodyResult.error);
+      return 2;
+    }
+    packet.body = bodyResult.body || null;
+  }
+
+  if (args.includes("--git") || args.includes("--diff")) {
+    const gitResult = readGitSnapshot(packet.workspace);
+    if (!gitResult.ok) {
+      console.error(gitResult.error);
+      return 2;
+    }
+    packet.git = gitResult.snapshot;
+  }
+
+  packet.updated_at = new Date().toISOString();
+  store.packets[index] = packet;
+  writeStore(store);
+
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(packet, null, 2)}\n`);
+    return 0;
+  }
+  console.log(`[acb] updated handoff packet: ${packet.id}`);
+  console.log(`[acb] next: acb show ${packet.id}`);
+  return 0;
 }
 
 function diffPreviewCommand(args) {
@@ -491,6 +554,7 @@ function normalizeImportedPacket(packet) {
     id: packet?.id,
     version: packet?.version || STORE_VERSION,
     created_at: packet?.created_at,
+    updated_at: packet?.updated_at || null,
     from: packet?.from || "imported",
     workspace: packet?.workspace,
     summary: packet?.summary || null,
@@ -539,6 +603,7 @@ function renderMarkdownExport(packets, { workspace = null } = {}) {
       `- created_at: ${packet.created_at}`,
       `- workspace: ${packet.workspace}`,
     );
+    if (packet.updated_at) lines.push(`- updated_at: ${packet.updated_at}`);
     if (packet.status) lines.push(`- status: ${packet.status}`);
     if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
     if (packet.git) {
@@ -1437,6 +1502,7 @@ function packetSummary(packet) {
   return {
     id: packet.id,
     created_at: packet.created_at,
+    updated_at: packet.updated_at || null,
     from: packet.from,
     workspace: packet.workspace,
     summary: packet.summary,
@@ -1466,6 +1532,7 @@ function renderHandoffPrompt(packet) {
     `- created_at: ${packet.created_at}`,
     `- workspace: ${packet.workspace}`,
   ];
+  if (packet.updated_at) lines.push(`- updated_at: ${packet.updated_at}`);
   if (packet.summary) lines.push(`- summary: ${packet.summary}`);
   if (packet.status) lines.push(`- status: ${packet.status}`);
   if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
@@ -1495,6 +1562,7 @@ function printPacket(packet) {
   console.log(`id: ${packet.id}`);
   console.log(`from: ${packet.from}`);
   console.log(`created_at: ${packet.created_at}`);
+  if (packet.updated_at) console.log(`updated_at: ${packet.updated_at}`);
   console.log(`workspace: ${packet.workspace}`);
   if (packet.summary) console.log(`summary: ${packet.summary}`);
   if (packet.status) console.log(`status: ${packet.status}`);
@@ -1562,6 +1630,25 @@ function readSaveBody(args, workspace) {
   if (wantsStdin) return readBodyStdin();
   if (wantsDiff) return readGitDiffBody(workspace, argValue(args, "--diff-limit"));
   return { ok: true, body: "" };
+}
+
+function hasBodySource(args) {
+  return Boolean(argValue(args, "--file") || args.includes("--stdin") || args.includes("--diff"));
+}
+
+function hasUpdateArgs(args) {
+  return argValue(args, "--summary") !== undefined
+    || argValue(args, "--status") !== undefined
+    || argValues(args, "--note").length > 0
+    || argValues(args, "--tag").length > 0
+    || args.includes("--clear-notes")
+    || args.includes("--clear-tags")
+    || args.includes("--git")
+    || hasBodySource(args);
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.trim()))];
 }
 
 function readBodyFile(filePath) {

@@ -34,6 +34,14 @@ acb save --from codex --summary "Ready for review" --git
 
 `--git` records the repository root, current branch, short HEAD, and `git status --short` output. It does not include a diff.
 
+If a packet needs a follow-up correction, update it in place:
+
+```bash
+acb update <packet-id> --status "ready for review" --note "Added final test notes"
+```
+
+`acb update` preserves the original `created_at` and records `updated_at`.
+
 MCP clients can pull the same handoff explicitly:
 
 ```bash
@@ -49,6 +57,7 @@ acb save --from <agent> --summary <text> --status <text> --note <text> --tag <ta
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
 acb save --from <agent> --summary <text> --diff
+acb update <packet-id> --status <text> --note <text>
 acb diff-preview
 acb status
 acb latest
@@ -79,6 +88,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb save --diff` stores a bounded tracked Git diff body and a lightweight Git snapshot. It is useful when the next agent needs to inspect current code changes.
 
 `acb diff-preview` prints or writes the same bounded Git diff body without saving a packet.
+
+`acb update` edits an existing local packet. Use it to correct summary/status, append notes/tags, reset notes/tags with `--clear-notes` or `--clear-tags`, replace the context body with `--file`, `--stdin`, or `--diff`, or refresh the lightweight Git snapshot with `--git`.
 
 `acb preview` writes the latest handoff prompt to a Markdown file for review. Add `--open` when you want ACB to open it with the system default app.
 

@@ -23,6 +23,7 @@ ACB_STORE=./tmp/acb-packets.json acb save --summary "..."
   "id": "pkt_20260527123000_abc123",
   "version": 1,
   "created_at": "2026-05-27T12:30:00.000Z",
+  "updated_at": "2026-05-27T12:45:00.000Z",
   "from": "codex",
   "workspace": "/path/to/workspace",
   "summary": "What changed",
@@ -53,6 +54,16 @@ cat ./agent-output.txt | acb save --summary "Prior agent output" --stdin
 `--file` and `--stdin` are mutually exclusive. ACB stores the body locally, and `acb prompt` includes it under `## Context Body`.
 
 Prompt rendering caps the body section so a very large log does not accidentally flood the next agent context. The local packet still keeps the original body.
+
+Existing packets can be corrected without deleting and recreating them:
+
+```bash
+acb update pkt_20260527123000_abc123 --status "ready" --note "Follow-up tests passed"
+acb update pkt_20260527123000_abc123 --clear-tags --tag review
+acb update pkt_20260527123000_abc123 --file ./updated-handoff.md
+```
+
+`acb update` preserves `created_at` and sets `updated_at`. Notes and tags are appended by default; use `--clear-notes` or `--clear-tags` when you intentionally want to replace those lists.
 
 `acb preview` writes the rendered handoff prompt to a Markdown file:
 

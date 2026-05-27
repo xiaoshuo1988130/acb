@@ -200,6 +200,101 @@ test("save reads handoff body from stdin", () => {
   assert.match(packet.body, /failing smoke test/);
 });
 
+test("update edits packet metadata, tags, notes, and body", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const bodyPath = path.join(dir, "updated.md");
+  fs.writeFileSync(bodyPath, "Updated body from a follow-up pass.\n", "utf8");
+  const env = { ACB_STORE: storePath };
+
+  run([
+    "save",
+    "--from",
+    "codex",
+    "--summary",
+    "Original handoff",
+    "--status",
+    "draft",
+    "--note",
+    "old note",
+    "--tag",
+    "old",
+  ], { env });
+  const original = JSON.parse(run(["latest", "--json"], { env }).stdout);
+
+  const updated = run([
+    "update",
+    original.id,
+    "--summary",
+    "Updated handoff",
+    "--status",
+    "ready",
+    "--note",
+    "new note",
+    "--tag",
+    "new",
+    "--file",
+    bodyPath,
+    "--json",
+  ], { env });
+  assert.equal(updated.status, 0);
+  const packet = JSON.parse(updated.stdout);
+  assert.equal(packet.id, original.id);
+  assert.equal(packet.created_at, original.created_at);
+  assert.match(packet.updated_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(packet.summary, "Updated handoff");
+  assert.equal(packet.status, "ready");
+  assert.deepEqual(packet.notes, ["old note", "new note"]);
+  assert.deepEqual(packet.tags, ["old", "new"]);
+  assert.match(packet.body, /Updated body/);
+
+  const shown = run(["show", original.id], { env });
+  assert.equal(shown.status, 0);
+  assert.match(shown.stdout, /updated_at:/);
+  assert.match(shown.stdout, /Updated handoff/);
+
+  const prompt = run(["show", original.id, "--prompt"], { env });
+  assert.equal(prompt.status, 0);
+  assert.match(prompt.stdout, /updated_at:/);
+  assert.match(prompt.stdout, /Updated body from a follow-up pass/);
+
+  const reset = run([
+    "update",
+    original.id,
+    "--clear-notes",
+    "--note",
+    "only note",
+    "--clear-tags",
+    "--tag",
+    "solo",
+    "--json",
+  ], { env });
+  assert.equal(reset.status, 0);
+  const resetPacket = JSON.parse(reset.stdout);
+  assert.deepEqual(resetPacket.notes, ["only note"]);
+  assert.deepEqual(resetPacket.tags, ["solo"]);
+
+  const markdownExport = run(["export"], { env });
+  assert.equal(markdownExport.status, 0);
+  assert.match(markdownExport.stdout, /updated_at:/);
+});
+
+test("update validates packet id and requested changes", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run(["save", "--summary", "original"], { env });
+  const packet = JSON.parse(run(["latest", "--json"], { env }).stdout);
+
+  const noChange = run(["update", packet.id], { env });
+  assert.equal(noChange.status, 2);
+  assert.match(noChange.stderr, /needs at least one change/);
+
+  const missing = run(["update", "pkt_missing", "--summary", "x"], { env });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /No handoff packet found/);
+});
+
 test("save can attach an explicit git snapshot", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const workspace = path.join(dir, "repo");
