@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 const bin = path.resolve("bin/acb.js");
+const pkg = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
 
 function run(args, options = {}) {
   return spawnSync(process.execPath, [bin, ...args], {
@@ -36,11 +37,11 @@ function realWorkspace(workspace) {
 test("prints version and help", () => {
   const version = run(["--version"]);
   assert.equal(version.status, 0);
-  assert.equal(version.stdout.trim(), "acb 0.0.1");
+  assert.equal(version.stdout.trim(), `acb ${pkg.version}`);
 
   const help = run(["help"]);
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /AgentContextBus/);
+  assert.match(help.stdout, new RegExp(`AgentContextBus \\(acb\\) ${pkg.version}`));
   assert.match(help.stdout, /acb save/);
 });
 
@@ -962,11 +963,11 @@ test("doctor reports local store and workspace state", () => {
   assert.equal(typeof report.checks.clipboard_command_available, "boolean");
   assert.equal(typeof report.checks.acb_command_available, "boolean");
   assert.equal(report.mcp.config_command, "acb config mcp --out ./mcp.json");
-  assert.equal(report.mcp.install_command, "npm install -g @xiaoshuo1988/acb");
+  assert.equal(report.mcp.install_command, `npm install -g ${pkg.name}`);
   assert.match(report.mcp.local_config_command, /acb config mcp --command node --arg/);
   assert.match(human.stdout, /mcp_config_command/);
   if (!report.mcp.default_command_available) {
-    assert.match(human.stdout, /mcp_install_hint: npm install -g @xiaoshuo1988\/acb/);
+    assert.match(human.stdout, new RegExp(`mcp_install_hint: npm install -g ${pkg.name.replace("/", "\\/")}`));
     assert.match(human.stdout, /mcp_local_config_hint:/);
   }
 });

@@ -4,8 +4,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const VERSION = "0.0.1";
-const PACKAGE_NAME = "@xiaoshuo1988/acb";
+const PACKAGE_META = readPackageMeta();
+const VERSION = PACKAGE_META.version;
+const PACKAGE_NAME = PACKAGE_META.name;
 const STORE_VERSION = 1;
 const DEFAULT_LIMIT = 10;
 const PROMPT_BODY_LIMIT = 12000;
@@ -46,6 +47,19 @@ Usage:
 Purpose:
   Save a local handoff packet and turn it into a paste-ready prompt for another coding agent.
 `;
+
+function readPackageMeta() {
+  try {
+    const packageUrl = new URL("../package.json", import.meta.url);
+    const parsed = JSON.parse(fs.readFileSync(packageUrl, "utf8"));
+    return {
+      name: parsed.name || "@xiaoshuo1988/acb",
+      version: parsed.version || "0.0.0",
+    };
+  } catch {
+    return { name: "@xiaoshuo1988/acb", version: "0.0.0" };
+  }
+}
 
 async function main(argv = process.argv.slice(2)) {
   const command = argv[0] || "help";
