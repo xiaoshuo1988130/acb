@@ -26,10 +26,15 @@ acb save --from <agent> --summary <text> --status <text> --note <text> --tag <ta
 acb latest
 acb prompt
 acb list
+acb delete <packet-id>
+acb clear --workspace .
+acb clear --all
 acb store path
 ```
 
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
+
+`acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 
 ## Boundaries
 

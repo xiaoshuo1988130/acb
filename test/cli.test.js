@@ -86,3 +86,55 @@ test("store path prints configured store", () => {
   assert.equal(result.status, 0);
   assert.equal(result.stdout.trim(), storePath);
 });
+
+test("delete removes a single packet", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const env = { ACB_STORE: storePath };
+
+  run(["save", "--summary", "first"], { env });
+  run(["save", "--summary", "second"], { env });
+  const packets = JSON.parse(run(["list", "--json"], { env }).stdout);
+  assert.equal(packets.length, 2);
+
+  const deleted = run(["delete", packets[0].id], { env });
+  assert.equal(deleted.status, 0);
+  assert.match(deleted.stdout, /deleted handoff packet/);
+
+  const remaining = JSON.parse(run(["list", "--json"], { env }).stdout);
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].id, packets[1].id);
+
+  const missing = run(["delete", "pkt_missing"], { env });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /No handoff packet found/);
+});
+
+test("clear defaults to current workspace and supports all", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspaceA = path.join(dir, "a");
+  const workspaceB = path.join(dir, "b");
+  fs.mkdirSync(workspaceA);
+  fs.mkdirSync(workspaceB);
+  const env = { ACB_STORE: storePath };
+
+  run(["save", "--workspace", workspaceA, "--summary", "a1"], { env });
+  run(["save", "--workspace", workspaceA, "--summary", "a2"], { env });
+  run(["save", "--workspace", workspaceB, "--summary", "b1"], { env });
+
+  const clearedWorkspace = run(["clear", "--workspace", workspaceA], { env });
+  assert.equal(clearedWorkspace.status, 0);
+  assert.match(clearedWorkspace.stdout, /cleared 2 handoff packet/);
+
+  let packets = JSON.parse(run(["list", "--json"], { env }).stdout);
+  assert.equal(packets.length, 1);
+  assert.equal(packets[0].workspace, workspaceB);
+
+  const clearedAll = run(["clear", "--all"], { env });
+  assert.equal(clearedAll.status, 0);
+  assert.match(clearedAll.stdout, /cleared 1 handoff packet/);
+
+  packets = JSON.parse(run(["list", "--json"], { env }).stdout);
+  assert.equal(packets.length, 0);
+});

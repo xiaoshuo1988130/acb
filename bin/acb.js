@@ -15,6 +15,8 @@ Usage:
   acb latest [--workspace <path>] [--json]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb list [--workspace <path>] [--limit <n>] [--json]
+  acb delete <packet-id>
+  acb clear [--workspace <path>] [--all]
   acb store path
   acb --version
   acb help
@@ -33,6 +35,8 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "latest") return latestCommand(args);
   if (command === "prompt") return promptCommand(args);
   if (command === "list") return listCommand(args);
+  if (command === "delete") return deleteCommand(args);
+  if (command === "clear") return clearCommand(args);
   if (command === "store") return storeCommand(args);
 
   console.error(`Unknown command: ${command}\n\n${usage}`);
@@ -141,6 +145,40 @@ function listCommand(args) {
     console.log(`${packet.id}  ${packet.created_at}  ${packet.from}  ${packet.workspace}`);
     if (packet.summary) console.log(`  ${packet.summary}`);
   }
+  return 0;
+}
+
+function deleteCommand(args) {
+  const id = args[0] || argValue(args, "--id");
+  if (!id) {
+    console.error("Usage: acb delete <packet-id>");
+    return 2;
+  }
+  const store = loadStore();
+  const before = store.packets.length;
+  store.packets = store.packets.filter((packet) => packet.id !== id);
+  if (store.packets.length === before) {
+    console.error(`No handoff packet found for id: ${id}`);
+    return 1;
+  }
+  writeStore(store);
+  console.log(`[acb] deleted handoff packet: ${id}`);
+  return 0;
+}
+
+function clearCommand(args) {
+  const clearAll = args.includes("--all");
+  const workspace = clearAll ? null : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const store = loadStore();
+  const before = store.packets.length;
+
+  if (clearAll) store.packets = [];
+  else store.packets = store.packets.filter((packet) => packet.workspace !== workspace);
+
+  const removed = before - store.packets.length;
+  writeStore(store);
+  if (clearAll) console.log(`[acb] cleared ${removed} handoff packet(s).`);
+  else console.log(`[acb] cleared ${removed} handoff packet(s) for workspace: ${workspace}`);
   return 0;
 }
 
