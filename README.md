@@ -154,7 +154,7 @@ JSON packet summaries from `acb list`, `acb search`, and `acb timeline` include 
 
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 
-`acb doctor` checks the local store, current workspace packet count, Git availability, clipboard command availability, and whether `acb` is visible on `PATH` for MCP clients.
+`acb doctor` checks the local store, current workspace packet count, Git availability, clipboard command availability, and whether `acb` is visible on `PATH` for MCP clients. If `acb` is not on `PATH`, it prints both the global install command and a local `node .../bin/acb.js serve` MCP config hint.
 
 `acb timeline` prints a compact terminal view of recent handoffs. It is the first visualization layer before any optional web viewer.
 
@@ -174,7 +174,7 @@ JSON packet summaries from `acb list`, `acb search`, and `acb timeline` include 
 
 - Local JSON storage first.
 - Explicit copy/paste handoff first.
-- MCP server later.
+- Explicit MCP pull mode.
 - No black-box prompt injection.
 - No VS Code extension storage mutation.
 - No cross-agent automation until the handoff packet format earns trust.

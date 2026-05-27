@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 const VERSION = "0.0.1";
+const PACKAGE_NAME = "@xiaoshuo1988/acb";
 const STORE_VERSION = 1;
 const DEFAULT_LIMIT = 10;
 const PROMPT_BODY_LIMIT = 12000;
@@ -1244,6 +1245,7 @@ function buildDoctorReport(workspace) {
     available: commandExists(command),
   }));
   const acbCommandAvailable = commandExists("acb");
+  const localBinPath = path.resolve(process.argv[1] || "bin/acb.js");
   const gitAvailable = commandExists("git");
   const gitRootResult = gitAvailable ? runGit(workspace, ["rev-parse", "--show-toplevel"]) : { status: 1 };
   const gitRoot = gitRootResult.status === 0 ? gitRootResult.stdout.trim() : null;
@@ -1276,6 +1278,8 @@ function buildDoctorReport(workspace) {
       default_command_available: acbCommandAvailable,
       config_command: "acb config mcp --out ./mcp.json",
       verify_command: "acb verify mcp --config ./mcp.json --name acb",
+      install_command: `npm install -g ${PACKAGE_NAME}`,
+      local_config_command: formatCommand("acb", ["config", "mcp", "--command", "node", "--arg", localBinPath, "--arg", "serve", "--out", "./mcp.json"]),
     },
   };
 }
@@ -1302,6 +1306,10 @@ function printDoctorReport(report) {
     console.log("clipboard_hint: install wl-clipboard, xclip, or xsel");
   }
   console.log(`mcp_default_command_available: ${report.mcp.default_command_available ? "yes" : "no"}`);
+  if (!report.mcp.default_command_available) {
+    console.log(`mcp_install_hint: ${report.mcp.install_command}`);
+    console.log(`mcp_local_config_hint: ${report.mcp.local_config_command}`);
+  }
   console.log(`mcp_config_command: ${report.mcp.config_command}`);
   console.log(`mcp_verify_command: ${report.mcp.verify_command}`);
 }

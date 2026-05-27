@@ -150,6 +150,7 @@ It reports:
 - Clipboard command availability
 - Whether the default `acb` command is visible on `PATH` for MCP clients
 - Copyable MCP config and verify commands
+- Install and local MCP config hints when `acb` is not available on `PATH`
 
 It does not copy anything to the clipboard and does not modify the packet store.
 

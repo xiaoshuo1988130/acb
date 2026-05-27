@@ -962,7 +962,13 @@ test("doctor reports local store and workspace state", () => {
   assert.equal(typeof report.checks.clipboard_command_available, "boolean");
   assert.equal(typeof report.checks.acb_command_available, "boolean");
   assert.equal(report.mcp.config_command, "acb config mcp --out ./mcp.json");
+  assert.equal(report.mcp.install_command, "npm install -g @xiaoshuo1988/acb");
+  assert.match(report.mcp.local_config_command, /acb config mcp --command node --arg/);
   assert.match(human.stdout, /mcp_config_command/);
+  if (!report.mcp.default_command_available) {
+    assert.match(human.stdout, /mcp_install_hint: npm install -g @xiaoshuo1988\/acb/);
+    assert.match(human.stdout, /mcp_local_config_hint:/);
+  }
 });
 
 test("doctor reports corrupt stores without overwriting them", () => {
