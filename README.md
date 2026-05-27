@@ -53,6 +53,7 @@ acb show <packet-id>
 acb show <packet-id> --prompt
 acb prompt
 acb list
+acb timeline
 acb delete <packet-id>
 acb clear --workspace .
 acb clear --all
@@ -66,6 +67,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 
 `acb doctor` checks the local store, current workspace packet count, Git availability, and clipboard command availability without writing anything.
+
+`acb timeline` prints a compact terminal view of recent handoffs. It is the first visualization layer before any optional web viewer.
 
 ## Boundaries
 

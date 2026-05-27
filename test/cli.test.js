@@ -79,6 +79,16 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(listed.stdout, new RegExp(packet.id));
   assert.match(listed.stdout, /Implemented local handoff/);
 
+  const timeline = run(["timeline", "--workspace", workspace], { env });
+  assert.equal(timeline.status, 0);
+  assert.match(timeline.stdout, /ACB Timeline/);
+  assert.match(timeline.stdout, new RegExp(packet.id));
+  assert.match(timeline.stdout, /Implemented local handoff/);
+
+  const timelineJson = run(["timeline", "--workspace", workspace, "--json"], { env });
+  assert.equal(timelineJson.status, 0);
+  assert.equal(JSON.parse(timelineJson.stdout)[0].id, packet.id);
+
   const prompt = run(["prompt", "--id", packet.id, "--no-copy"], { env });
   assert.equal(prompt.status, 0);
   assert.match(prompt.stdout, /You are taking over work from another local coding agent/);

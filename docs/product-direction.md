@@ -11,6 +11,7 @@ AgentContextBus should validate one daily pain first:
 - Copy it to clipboard by default.
 - Keep storage local and inspectable.
 - Expose explicit MCP pull mode for clients that can call local tools.
+- Provide a terminal timeline before investing in a dashboard.
 
 ## Not In The MVP
 

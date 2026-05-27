@@ -98,6 +98,21 @@ It reports:
 
 It does not copy anything to the clipboard and does not modify the packet store.
 
+## Terminal Timeline
+
+`acb timeline` is the first visualization layer.
+
+It prints recent handoff packets with:
+
+- Timestamp
+- Source agent
+- Packet id
+- Summary or status
+- Workspace
+- Compact facts such as note count, body size, dirty file count, and tags
+
+This deliberately comes before a web dashboard. It validates whether handoff history is useful in daily work without adding frontend complexity.
+
 ## MCP Pull
 
 `acb serve` exposes the local packet store as a stdio MCP server.

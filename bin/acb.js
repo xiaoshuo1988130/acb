@@ -18,6 +18,7 @@ Usage:
   acb show <packet-id> [--json | --prompt]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb list [--workspace <path>] [--limit <n>] [--json]
+  acb timeline [--workspace <path>] [--limit <n>] [--json]
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
@@ -41,6 +42,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "show") return showCommand(args);
   if (command === "prompt") return promptCommand(args);
   if (command === "list") return listCommand(args);
+  if (command === "timeline") return timelineCommand(args);
   if (command === "delete") return deleteCommand(args);
   if (command === "clear") return clearCommand(args);
   if (command === "doctor") return doctorCommand(args);
@@ -192,6 +194,33 @@ function listCommand(args) {
   return 0;
 }
 
+function timelineCommand(args) {
+  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const limit = parseLimit(argValue(args, "--limit"));
+  if (!limit) {
+    console.error("--limit must be a positive integer.");
+    return 2;
+  }
+  const packets = loadStore().packets
+    .filter((packet) => !workspace || packet.workspace === workspace)
+    .slice(0, limit);
+
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(packets.map(packetSummary), null, 2)}\n`);
+    return 0;
+  }
+
+  if (packets.length === 0) {
+    console.log(workspace ? `[acb] no timeline packets for workspace: ${workspace}` : "[acb] no timeline packets");
+    return 0;
+  }
+
+  console.log("ACB Timeline");
+  if (workspace) console.log(`workspace: ${workspace}`);
+  for (const packet of packets) printTimelinePacket(packet);
+  return 0;
+}
+
 function deleteCommand(args) {
   const id = args[0] || argValue(args, "--id");
   if (!id) {
@@ -208,6 +237,19 @@ function deleteCommand(args) {
   writeStore(store);
   console.log(`[acb] deleted handoff packet: ${id}`);
   return 0;
+}
+
+function printTimelinePacket(packet) {
+  const summary = packet.summary || packet.status || "(no summary)";
+  const facts = [];
+  if (packet.body) facts.push(`body:${packet.body.length}`);
+  if (packet.notes?.length) facts.push(`notes:${packet.notes.length}`);
+  if (packet.git?.status?.length) facts.push(`dirty:${packet.git.status.length}`);
+  if (packet.tags?.length) facts.push(`tags:${packet.tags.join(",")}`);
+  console.log(`* ${packet.created_at}  ${packet.from}  ${packet.id}`);
+  console.log(`  ${summary}`);
+  console.log(`  workspace: ${packet.workspace}`);
+  if (facts.length) console.log(`  ${facts.join("  ")}`);
 }
 
 function clearCommand(args) {
