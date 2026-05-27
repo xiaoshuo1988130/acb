@@ -137,6 +137,8 @@ It reports the current workspace, packet count, latest packet summary, Git state
 
 `acb latest` also defaults to the current workspace. Use `acb latest --all` only when you explicitly want the newest packet across every workspace.
 
+Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, and `read_handoff`) return the stored packet plus derived `next_resume`, `next_show_prompt`, and `next_mcp_read` fields. These fields are not written back into the packet store.
+
 `acb doctor` is a read-only local environment check.
 
 It reports:

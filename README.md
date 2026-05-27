@@ -111,6 +111,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 
 `acb latest` reads the newest handoff for the current workspace. Use `--all` when you intentionally want the newest packet across every workspace.
 
+Single-packet reads from `acb latest --json`, `acb show --json`, and MCP read tools include the same next-step fields as packet summaries.
+
 `acb list`, `acb search`, `acb timeline`, and `acb export` also default to the current workspace. Add `--all` only when you intentionally want cross-workspace history.
 
 Human `acb list`, `acb search`, and `acb timeline` output prints its active scope (`workspace: <path>` or `workspace: all`) so cross-project history views are visible at a glance.

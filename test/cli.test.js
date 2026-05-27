@@ -77,6 +77,8 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(packet.summary, "Implemented local handoff");
   assert.deepEqual(packet.notes, ["Do not publish yet"]);
   assert.deepEqual(packet.tags, ["mvp"]);
+  assert.equal(packet.next_resume, `acb resume --id ${packet.id}`);
+  assert.equal(packet.next_mcp_read, "read_handoff");
 
   const status = run(["status", "--workspace", workspace], { env });
   assert.equal(status.status, 0);
@@ -181,10 +183,13 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(shown.status, 0);
   assert.match(shown.stdout, new RegExp(packet.id));
   assert.match(shown.stdout, /Implemented local handoff/);
+  assert.match(shown.stdout, new RegExp(`next_resume: acb resume --id ${packet.id}`));
 
   const shownJson = run(["show", packet.id, "--json"], { env });
   assert.equal(shownJson.status, 0);
-  assert.equal(JSON.parse(shownJson.stdout).id, packet.id);
+  const shownJsonPacket = JSON.parse(shownJson.stdout);
+  assert.equal(shownJsonPacket.id, packet.id);
+  assert.equal(shownJsonPacket.next_show_prompt, `acb show ${packet.id} --prompt`);
 
   const shownPrompt = run(["show", packet.id, "--prompt"], { env });
   assert.equal(shownPrompt.status, 0);
@@ -1020,6 +1025,7 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.equal(messages[2].result.structuredContent.report.next.mcp_read_latest, "read_latest_handoff");
   assert.match(messages[3].result.content[0].text, /MCP handoff/);
   assert.equal(messages[3].result.structuredContent.packet.summary, "MCP handoff");
+  assert.equal(messages[3].result.structuredContent.packet.next_mcp_read, "read_handoff");
   assert.equal(messages[4].result.structuredContent.packets.length, 1);
   assert.equal(messages[4].result.structuredContent.packets[0].next_mcp_read, "read_handoff");
   assert.equal(messages[5].result.structuredContent.packets[0].summary, "MCP handoff");
@@ -1034,6 +1040,7 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.equal(readById.status, 0);
   const [readMessage] = parseJsonLines(readById.stdout);
   assert.equal(readMessage.result.structuredContent.packet.id, id);
+  assert.equal(readMessage.result.structuredContent.packet.next_show_prompt, `acb show ${id} --prompt`);
   assert.match(readMessage.result.content[0].text, /MCP handoff/);
 });
 

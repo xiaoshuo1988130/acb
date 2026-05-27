@@ -281,7 +281,7 @@ function latestCommand(args) {
     return 1;
   }
   if (args.includes("--json")) {
-    process.stdout.write(`${JSON.stringify(packet, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(packetWithNextSteps(packet), null, 2)}\n`);
     return 0;
   }
   printPacket(packet);
@@ -311,7 +311,7 @@ function showCommand(args) {
     return 1;
   }
   if (args.includes("--json")) {
-    process.stdout.write(`${JSON.stringify(packet, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(packetWithNextSteps(packet), null, 2)}\n`);
     return 0;
   }
   if (args.includes("--prompt")) {
@@ -1683,7 +1683,7 @@ function mcpReadLatestHandoff(args) {
   const prompt = renderHandoffPrompt(packet);
   return {
     content: [{ type: "text", text: prompt }],
-    structuredContent: { packet, prompt },
+    structuredContent: { packet: packetWithNextSteps(packet), prompt },
     isError: false,
   };
 }
@@ -1761,7 +1761,7 @@ function mcpReadHandoff(args) {
   const prompt = renderHandoffPrompt(packet);
   return {
     content: [{ type: "text", text: prompt }],
-    structuredContent: { packet, prompt },
+    structuredContent: { packet: packetWithNextSteps(packet), prompt },
     isError: false,
   };
 }
@@ -1930,6 +1930,15 @@ function packetSummary(packet) {
   };
 }
 
+function packetWithNextSteps(packet) {
+  return {
+    ...packet,
+    next_resume: `acb resume --id ${packet.id}`,
+    next_show_prompt: `acb show ${packet.id} --prompt`,
+    next_mcp_read: "read_handoff",
+  };
+}
+
 function jsonRpcError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -1990,6 +1999,9 @@ function printPacket(packet) {
     console.log(`git_dirty_files: ${packet.git.status?.length || 0}`);
   }
   if (packet.body) console.log(`body: ${packet.body.length} chars`);
+  console.log(`next_resume: acb resume --id ${packet.id}`);
+  console.log(`next_show_prompt: acb show ${packet.id} --prompt`);
+  console.log("next_mcp_read: read_handoff");
   if (packet.notes?.length) {
     console.log("notes:");
     for (const note of packet.notes) console.log(`- ${note}`);
