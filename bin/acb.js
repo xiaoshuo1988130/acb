@@ -14,7 +14,7 @@ const MCP_PROTOCOL_VERSION = "2025-06-18";
 const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
-  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--copy | --print-prompt]
+  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--copy | --print-prompt | --json]
   acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]
   acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
   acb latest [--workspace <path>] [--json]
@@ -75,8 +75,8 @@ async function main(argv = process.argv.slice(2)) {
 }
 
 function saveCommand(args) {
-  if (args.includes("--copy") && args.includes("--print-prompt")) {
-    console.error("Use only one save output mode: --copy or --print-prompt.");
+  if (saveOutputModes(args).length > 1) {
+    console.error("Use only one save output mode: --copy, --print-prompt, or --json.");
     return 2;
   }
 
@@ -120,6 +120,11 @@ function saveCommand(args) {
   store.packets.unshift(packet);
   writeStore(store);
 
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(packet, null, 2)}\n`);
+    return 0;
+  }
+
   if (args.includes("--print-prompt")) {
     process.stdout.write(renderHandoffPrompt(packet));
     return 0;
@@ -143,6 +148,10 @@ function saveCommand(args) {
   console.log(`[acb] workspace: ${packet.workspace}`);
   console.log("[acb] next: acb prompt");
   return 0;
+}
+
+function saveOutputModes(args) {
+  return ["--copy", "--print-prompt", "--json"].filter((flag) => args.includes(flag));
 }
 
 function createHandoffPacket({ from, workspace, summary = null, status = null, notes = [], tags = [], body = null, git = null }) {

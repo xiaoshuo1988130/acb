@@ -227,6 +227,32 @@ test("save can immediately render a handoff prompt", () => {
   assert.match(invalid.stderr, /Use only one save output mode/);
 });
 
+test("save can return the created packet as JSON", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const saved = run([
+    "save",
+    "--from",
+    "script",
+    "--summary",
+    "Machine readable packet",
+    "--json",
+  ], { env });
+  assert.equal(saved.status, 0);
+  const packet = JSON.parse(saved.stdout);
+  assert.match(packet.id, /^pkt_/);
+  assert.equal(packet.from, "script");
+  assert.equal(packet.summary, "Machine readable packet");
+
+  const latest = JSON.parse(run(["latest", "--json"], { env }).stdout);
+  assert.equal(latest.id, packet.id);
+
+  const invalid = run(["save", "--summary", "bad", "--json", "--copy"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use only one save output mode/);
+});
+
 test("update edits packet metadata, tags, notes, and body", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");

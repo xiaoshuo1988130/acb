@@ -63,6 +63,7 @@ acb save --from <agent> --summary <text> --status <text> --note <text> --tag <ta
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
 acb save --from <agent> --summary <text> --diff
+acb save --from <agent> --summary <text> --json
 acb update <packet-id> --status <text> --note <text>
 acb diff-preview
 acb status
@@ -91,7 +92,7 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 
 `acb status` prints the current workspace handoff state and the next commands to copy or inspect the latest packet.
 
-`acb save --copy` saves the packet and immediately copies its rendered prompt. `acb save --print-prompt` is the deterministic terminal-only version for scripts and tests.
+`acb save --copy` saves the packet and immediately copies its rendered prompt. `acb save --print-prompt` is the deterministic terminal-only version for scripts and tests. `acb save --json` returns the created packet for automation.
 
 `acb save --diff` stores a bounded tracked Git diff body and a lightweight Git snapshot. It is useful when the next agent needs to inspect current code changes.
 

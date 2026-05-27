@@ -60,9 +60,10 @@ When the user is ready to move immediately, `save` can render the prompt in the 
 ```bash
 acb save --summary "Ready for another agent" --git --copy
 acb save --summary "Scripted handoff" --stdin --print-prompt
+acb save --summary "Scripted handoff" --json
 ```
 
-`--copy` writes the rendered handoff prompt to the system clipboard. If clipboard access fails, ACB prints the prompt instead. `--print-prompt` skips the clipboard and writes the rendered prompt to stdout.
+`--copy` writes the rendered handoff prompt to the system clipboard. If clipboard access fails, ACB prints the prompt instead. `--print-prompt` skips the clipboard and writes the rendered prompt to stdout. `--json` skips human output and writes the created packet as JSON.
 
 Existing packets can be corrected without deleting and recreating them:
 
