@@ -26,11 +26,20 @@ acb save --from codex --summary "Proxy investigation context" --file ./handoff.m
 git diff -- README.md | acb save --from opencode --summary "README diff to review" --stdin
 ```
 
+For coding work, add a lightweight Git snapshot:
+
+```bash
+acb save --from codex --summary "Ready for review" --git
+```
+
+`--git` records the repository root, current branch, short HEAD, and `git status --short` output. It does not include a diff.
+
 ## Commands
 
 ```bash
 acb save --from <agent> --summary <text> --status <text> --note <text> --tag <tag> --file <path>
 acb save --from <agent> --summary <text> --stdin
+acb save --from <agent> --summary <text> --git
 acb latest
 acb prompt
 acb list

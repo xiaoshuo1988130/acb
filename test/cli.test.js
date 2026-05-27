@@ -108,6 +108,37 @@ test("save reads handoff body from stdin", () => {
   assert.match(packet.body, /failing smoke test/);
 });
 
+test("save can attach an explicit git snapshot", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const saved = run(["save", "--workspace", workspace, "--summary", "Captured git state", "--git"], { env });
+  assert.equal(saved.status, 0);
+
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.equal(packet.git.root, fs.realpathSync(workspace));
+  assert.equal(packet.git.status.length, 1);
+  assert.match(packet.git.status[0], /\?\? README\.md/);
+
+  const prompt = run(["prompt", "--id", packet.id, "--no-copy"], { env });
+  assert.equal(prompt.status, 0);
+  assert.match(prompt.stdout, /## Git Snapshot/);
+  assert.match(prompt.stdout, /dirty_files: 1/);
+});
+
+test("save rejects git snapshot outside a git workspace", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const saved = run(["save", "--workspace", dir, "--summary", "not git", "--git"], { env });
+  assert.equal(saved.status, 2);
+  assert.match(saved.stderr, /requires a Git workspace/);
+});
+
 test("save rejects invalid body sources", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const env = { ACB_STORE: path.join(dir, "packets.json") };

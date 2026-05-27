@@ -12,7 +12,7 @@ const PROMPT_BODY_LIMIT = 12000;
 const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
-  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin]
+  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin] [--git]
   acb latest [--workspace <path>] [--json]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb list [--workspace <path>] [--limit <n>] [--json]
@@ -52,14 +52,19 @@ function saveCommand(args) {
   const tags = argValues(args, "--tag");
   const from = argValue(args, "--from") || process.env.ACB_AGENT || "unknown";
   const bodyResult = readSaveBody(args);
+  const gitResult = args.includes("--git") ? readGitSnapshot(workspace) : { ok: true, snapshot: null };
 
   if (!bodyResult.ok) {
     console.error(bodyResult.error);
     return 2;
   }
+  if (!gitResult.ok) {
+    console.error(gitResult.error);
+    return 2;
+  }
 
-  if (!summary && !status && notes.length === 0 && !bodyResult.body) {
-    console.error("acb save needs at least --summary, --status, --note, --file, or --stdin.");
+  if (!summary && !status && notes.length === 0 && !bodyResult.body && !gitResult.snapshot) {
+    console.error("acb save needs at least --summary, --status, --note, --file, --stdin, or --git.");
     return 2;
   }
 
@@ -74,6 +79,7 @@ function saveCommand(args) {
     notes,
     tags,
     body: bodyResult.body || null,
+    git: gitResult.snapshot,
   };
 
   const store = loadStore();
@@ -215,6 +221,9 @@ function renderHandoffPrompt(packet) {
   if (packet.summary) lines.push(`- summary: ${packet.summary}`);
   if (packet.status) lines.push(`- status: ${packet.status}`);
   if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
+  if (packet.git) {
+    lines.push("", "## Git Snapshot", "", renderGitSnapshot(packet.git));
+  }
   if (packet.notes?.length) {
     lines.push("", "## Notes");
     for (const note of packet.notes) lines.push(`- ${note}`);
@@ -242,6 +251,11 @@ function printPacket(packet) {
   if (packet.summary) console.log(`summary: ${packet.summary}`);
   if (packet.status) console.log(`status: ${packet.status}`);
   if (packet.tags?.length) console.log(`tags: ${packet.tags.join(", ")}`);
+  if (packet.git) {
+    console.log(`git_branch: ${packet.git.branch || "unknown"}`);
+    console.log(`git_head: ${packet.git.head || "unknown"}`);
+    console.log(`git_dirty_files: ${packet.git.status?.length || 0}`);
+  }
   if (packet.body) console.log(`body: ${packet.body.length} chars`);
   if (packet.notes?.length) {
     console.log("notes:");
@@ -320,6 +334,51 @@ function readBodyStdin() {
   } catch (error) {
     return { ok: false, error: `Cannot read --stdin: ${error.message}` };
   }
+}
+
+function readGitSnapshot(workspace) {
+  const rootResult = runGit(workspace, ["rev-parse", "--show-toplevel"]);
+  if (rootResult.status !== 0) {
+    return { ok: false, error: `--git requires a Git workspace: ${workspace}` };
+  }
+
+  const root = rootResult.stdout.trim();
+  const branch = runGit(root, ["branch", "--show-current"]).stdout.trim();
+  const head = runGit(root, ["rev-parse", "--short", "HEAD"]).stdout.trim();
+  const status = runGit(root, ["status", "--short"]).stdout
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+
+  return {
+    ok: true,
+    snapshot: {
+      root,
+      branch: branch || null,
+      head: head || null,
+      status,
+    },
+  };
+}
+
+function runGit(workspace, args) {
+  return spawnSync("git", ["-C", workspace, ...args], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  });
+}
+
+function renderGitSnapshot(git) {
+  const lines = [
+    `- root: ${git.root}`,
+    `- branch: ${git.branch || "unknown"}`,
+    `- head: ${git.head || "unknown"}`,
+    `- dirty_files: ${git.status?.length || 0}`,
+  ];
+  if (git.status?.length) {
+    lines.push("", "```text", ...git.status, "```");
+  }
+  return lines.join("\n");
 }
 
 function truncatePromptBody(body) {

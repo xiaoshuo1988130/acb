@@ -29,7 +29,13 @@ ACB_STORE=./tmp/acb-packets.json acb save --summary "..."
   "status": "Current state",
   "notes": ["Risks, blockers, next steps"],
   "tags": ["local", "handoff"],
-  "body": "Optional longer context loaded from --file or --stdin"
+  "body": "Optional longer context loaded from --file or --stdin",
+  "git": {
+    "root": "/path/to/workspace",
+    "branch": "main",
+    "head": "abc1234",
+    "status": [" M README.md", "?? docs/notes.md"]
+  }
 }
 ```
 
@@ -47,6 +53,25 @@ cat ./agent-output.txt | acb save --summary "Prior agent output" --stdin
 `--file` and `--stdin` are mutually exclusive. ACB stores the body locally, and `acb prompt` includes it under `## Context Body`.
 
 Prompt rendering caps the body section so a very large log does not accidentally flood the next agent context. The local packet still keeps the original body.
+
+## Git Snapshot
+
+Coding-agent handoff often needs one small fact: what files are dirty right now?
+
+Use `--git` to attach a lightweight snapshot:
+
+```bash
+acb save --summary "Ready for another agent" --git
+```
+
+ACB records:
+
+- Repository root
+- Current branch
+- Short HEAD
+- `git status --short`
+
+It intentionally does not capture `git diff` by default. Large diffs should be passed explicitly with `--file` or `--stdin` when the user wants that context in the packet.
 
 ## Clipboard
 
