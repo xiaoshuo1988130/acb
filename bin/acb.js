@@ -19,6 +19,7 @@ Usage:
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
   acb list [--workspace <path>] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--limit <n>] [--json]
+  acb export [--workspace <path>] [--limit <n>] [--format markdown|json] [--out <path>]
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
@@ -43,6 +44,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "prompt") return promptCommand(args);
   if (command === "list") return listCommand(args);
   if (command === "timeline") return timelineCommand(args);
+  if (command === "export") return exportCommand(args);
   if (command === "delete") return deleteCommand(args);
   if (command === "clear") return clearCommand(args);
   if (command === "doctor") return doctorCommand(args);
@@ -221,6 +223,39 @@ function timelineCommand(args) {
   return 0;
 }
 
+function exportCommand(args) {
+  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const limit = parseLimit(argValue(args, "--limit"));
+  const format = argValue(args, "--format") || "markdown";
+  const outPath = argValue(args, "--out");
+  if (!limit) {
+    console.error("--limit must be a positive integer.");
+    return 2;
+  }
+  if (!["markdown", "json"].includes(format)) {
+    console.error("--format must be markdown or json.");
+    return 2;
+  }
+
+  const packets = loadStore().packets
+    .filter((packet) => !workspace || packet.workspace === workspace)
+    .slice(0, limit);
+  const content = format === "json"
+    ? `${JSON.stringify(packets, null, 2)}\n`
+    : renderMarkdownExport(packets, { workspace });
+
+  if (outPath) {
+    const resolved = path.resolve(outPath);
+    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    fs.writeFileSync(resolved, content);
+    console.log(`[acb] exported ${packets.length} handoff packet(s) to ${resolved}`);
+    return 0;
+  }
+
+  process.stdout.write(content);
+  return 0;
+}
+
 function deleteCommand(args) {
   const id = args[0] || argValue(args, "--id");
   if (!id) {
@@ -237,6 +272,46 @@ function deleteCommand(args) {
   writeStore(store);
   console.log(`[acb] deleted handoff packet: ${id}`);
   return 0;
+}
+
+function renderMarkdownExport(packets, { workspace = null } = {}) {
+  const lines = [
+    "# ACB Handoff Export",
+    "",
+    `Generated: ${new Date().toISOString()}`,
+    `Packet count: ${packets.length}`,
+  ];
+  if (workspace) lines.push(`Workspace: ${workspace}`);
+  if (packets.length === 0) {
+    lines.push("", "_No handoff packets matched this export._", "");
+    return lines.join("\n");
+  }
+
+  for (const packet of packets) {
+    lines.push(
+      "",
+      `## ${packet.summary || packet.status || packet.id}`,
+      "",
+      `- id: ${packet.id}`,
+      `- from: ${packet.from}`,
+      `- created_at: ${packet.created_at}`,
+      `- workspace: ${packet.workspace}`,
+    );
+    if (packet.status) lines.push(`- status: ${packet.status}`);
+    if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
+    if (packet.git) {
+      lines.push("", "### Git", "", renderGitSnapshot(packet.git));
+    }
+    if (packet.notes?.length) {
+      lines.push("", "### Notes");
+      for (const note of packet.notes) lines.push(`- ${note}`);
+    }
+    if (packet.body) {
+      lines.push("", "### Context Body", "", truncatePromptBody(packet.body));
+    }
+  }
+  lines.push("");
+  return lines.join("\n");
 }
 
 function printTimelinePacket(packet) {

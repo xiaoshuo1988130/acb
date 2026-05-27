@@ -113,6 +113,19 @@ It prints recent handoff packets with:
 
 This deliberately comes before a web dashboard. It validates whether handoff history is useful in daily work without adding frontend complexity.
 
+## Export
+
+`acb export` is a read-only bridge from local packets to portable artifacts.
+
+Examples:
+
+```bash
+acb export --workspace . --format markdown --out ./handoffs.md
+acb export --workspace . --format json --out ./handoffs.json
+```
+
+Markdown export is for human review and copy/paste sharing. JSON export is for future viewers, scripts, or local analysis.
+
 ## MCP Pull
 
 `acb serve` exposes the local packet store as a stdio MCP server.

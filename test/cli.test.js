@@ -89,6 +89,21 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(timelineJson.status, 0);
   assert.equal(JSON.parse(timelineJson.stdout)[0].id, packet.id);
 
+  const markdownExport = run(["export", "--workspace", workspace], { env });
+  assert.equal(markdownExport.status, 0);
+  assert.match(markdownExport.stdout, /# ACB Handoff Export/);
+  assert.match(markdownExport.stdout, /Implemented local handoff/);
+
+  const jsonExport = run(["export", "--workspace", workspace, "--format", "json"], { env });
+  assert.equal(jsonExport.status, 0);
+  assert.equal(JSON.parse(jsonExport.stdout)[0].id, packet.id);
+
+  const outPath = path.join(dir, "export.md");
+  const fileExport = run(["export", "--workspace", workspace, "--out", outPath], { env });
+  assert.equal(fileExport.status, 0);
+  assert.match(fileExport.stdout, /exported 1 handoff packet/);
+  assert.match(fs.readFileSync(outPath, "utf8"), /Implemented local handoff/);
+
   const prompt = run(["prompt", "--id", packet.id, "--no-copy"], { env });
   assert.equal(prompt.status, 0);
   assert.match(prompt.stdout, /You are taking over work from another local coding agent/);
@@ -193,6 +208,13 @@ test("save requires useful handoff content", () => {
   const result = run(["save"], { env: { ACB_STORE: path.join(dir, "packets.json") } });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /needs at least/);
+});
+
+test("export validates requested format", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const result = run(["export", "--format", "html"], { env: { ACB_STORE: path.join(dir, "packets.json") } });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /--format must be markdown or json/);
 });
 
 test("store path prints configured store", () => {
