@@ -53,6 +53,7 @@ acb latest
 acb show <packet-id>
 acb show <packet-id> --prompt
 acb prompt
+acb preview
 acb list
 acb timeline
 acb export --format markdown --out ./handoffs.md
@@ -70,6 +71,8 @@ acb store path
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
 
 `acb status` prints the current workspace handoff state and the next commands to copy or inspect the latest packet.
+
+`acb preview` writes the latest handoff prompt to a Markdown file for review. Add `--open` when you want ACB to open it with the system default app.
 
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
 

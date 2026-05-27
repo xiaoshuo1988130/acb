@@ -18,6 +18,7 @@ Usage:
   acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
+  acb preview [--workspace <path>] [--id <packet-id>] [--out <path>] [--open]
   acb list [--workspace <path>] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--limit <n>] [--json]
   acb export [--workspace <path>] [--limit <n>] [--format markdown|json] [--out <path>]
@@ -47,6 +48,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "status") return statusCommand(args);
   if (command === "show") return showCommand(args);
   if (command === "prompt") return promptCommand(args);
+  if (command === "preview") return previewCommand(args);
   if (command === "list") return listCommand(args);
   if (command === "timeline") return timelineCommand(args);
   if (command === "export") return exportCommand(args);
@@ -185,6 +187,36 @@ function promptCommand(args) {
   console.error(`[acb] clipboard unavailable: ${copied.error}`);
   console.error("[acb] printing prompt instead:\n");
   process.stdout.write(prompt);
+  return 0;
+}
+
+function previewCommand(args) {
+  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  const id = argValue(args, "--id");
+  const packet = findPacket({ workspace, id });
+  if (!packet) {
+    console.error(id ? `No handoff packet found for id: ${id}` : "No handoff packet found.");
+    return 1;
+  }
+
+  const outPath = argValue(args, "--out") || defaultPreviewPath(packet);
+  const resolved = path.resolve(outPath);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  fs.writeFileSync(resolved, renderPromptPreview(packet));
+
+  if (args.includes("--open")) {
+    const opened = openFile(resolved);
+    if (!opened.ok) {
+      console.error(`[acb] wrote prompt preview to ${resolved}`);
+      console.error(`[acb] cannot open preview: ${opened.error}`);
+      return 1;
+    }
+    console.log(`[acb] opened prompt preview: ${resolved}`);
+    return 0;
+  }
+
+  console.log(`[acb] wrote prompt preview to ${resolved}`);
+  console.log("[acb] add --open to open it with your system default app.");
   return 0;
 }
 
@@ -418,6 +450,25 @@ function renderMarkdownExport(packets, { workspace = null } = {}) {
   }
   lines.push("");
   return lines.join("\n");
+}
+
+function renderPromptPreview(packet) {
+  return [
+    "# ACB Handoff Prompt Preview",
+    "",
+    `Packet: ${packet.id}`,
+    `Workspace: ${packet.workspace}`,
+    `Generated: ${new Date().toISOString()}`,
+    "",
+    "---",
+    "",
+    renderHandoffPrompt(packet).trimEnd(),
+    "",
+  ].join("\n");
+}
+
+function defaultPreviewPath(packet) {
+  return path.join(os.tmpdir(), "acb", "previews", `${packet.id}.md`);
 }
 
 function printTimelinePacket(packet) {
@@ -1270,6 +1321,19 @@ function clipboardCandidates() {
   if (platform === "darwin") return [["pbcopy", []]];
   if (platform === "win32") return [["clip.exe", []]];
   return [["wl-copy", []], ["xclip", ["-selection", "clipboard"]], ["xsel", ["--clipboard", "--input"]]];
+}
+
+function openFile(filePath) {
+  const platform = process.platform;
+  const command = platform === "darwin" ? "open" : platform === "win32" ? "cmd.exe" : "xdg-open";
+  const args = platform === "darwin"
+    ? [filePath]
+    : platform === "win32"
+      ? ["/c", "start", "", filePath]
+      : [filePath];
+  const result = spawnSync(command, args, { encoding: "utf8" });
+  if (result.status === 0) return { ok: true };
+  return { ok: false, error: result.error?.message || result.stderr || `${command} exited ${result.status}` };
 }
 
 function commandExists(command) {

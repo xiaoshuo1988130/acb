@@ -54,6 +54,16 @@ cat ./agent-output.txt | acb save --summary "Prior agent output" --stdin
 
 Prompt rendering caps the body section so a very large log does not accidentally flood the next agent context. The local packet still keeps the original body.
 
+`acb preview` writes the rendered handoff prompt to a Markdown file:
+
+```bash
+acb preview
+acb preview --id pkt_20260527123000_abc123 --out ./handoff-preview.md
+acb preview --open
+```
+
+This is an explicit review path. It does not inject anything into another tool.
+
 ## Git Snapshot
 
 Coding-agent handoff often needs one small fact: what files are dirty right now?

@@ -122,6 +122,14 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(prompt.stdout, /Implemented local handoff/);
   assert.match(prompt.stdout, /Do not publish yet/);
 
+  const previewPath = path.join(dir, "preview", "handoff.md");
+  const preview = run(["preview", "--id", packet.id, "--out", previewPath], { env });
+  assert.equal(preview.status, 0);
+  assert.match(preview.stdout, /wrote prompt preview/);
+  const previewContent = fs.readFileSync(previewPath, "utf8");
+  assert.match(previewContent, /# ACB Handoff Prompt Preview/);
+  assert.match(previewContent, /Implemented local handoff/);
+
   const shown = run(["show", packet.id], { env });
   assert.equal(shown.status, 0);
   assert.match(shown.stdout, new RegExp(packet.id));
@@ -230,6 +238,13 @@ test("status reports an empty workspace without failing", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /latest_packet: none/);
   assert.match(result.stdout, /acb save --summary/);
+});
+
+test("preview reports missing packets", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const result = run(["preview", "--id", "pkt_missing"], { env: { ACB_STORE: path.join(dir, "packets.json") } });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /No handoff packet found/);
 });
 
 test("export validates requested format", () => {
