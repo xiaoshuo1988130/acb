@@ -23,6 +23,12 @@ npx @xiaoshuo1988/acb --help
 
 Use the scoped package name above. The unscoped `acb` package name is already taken by another npm package.
 
+For the shortest flow after install:
+
+```bash
+acb quickstart
+```
+
 ## MVP
 
 ```bash

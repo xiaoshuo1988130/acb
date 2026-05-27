@@ -43,6 +43,13 @@ test("prints version and help", () => {
   assert.equal(help.status, 0);
   assert.match(help.stdout, new RegExp(`AgentContextBus \\(acb\\) ${pkg.version}`));
   assert.match(help.stdout, /acb save/);
+  assert.match(help.stdout, /acb quickstart/);
+
+  const quickstart = run(["quickstart"]);
+  assert.equal(quickstart.status, 0);
+  assert.match(quickstart.stdout, new RegExp(`npm install -g ${pkg.name.replace("/", "\\/")}`));
+  assert.match(quickstart.stdout, /acb handoff/);
+  assert.match(quickstart.stdout, /acb resume/);
 });
 
 test("save, latest, list, and prompt use local store", () => {

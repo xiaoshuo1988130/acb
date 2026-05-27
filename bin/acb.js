@@ -41,11 +41,32 @@ Usage:
   acb store path
   acb store info [--json]
   acb store backup [--out <path>] [--force] [--json]
+  acb quickstart
   acb --version
   acb help
 
 Purpose:
   Save a local handoff packet and turn it into a paste-ready prompt for another coding agent.
+`;
+
+const quickstart = `AgentContextBus quickstart
+
+Install:
+  npm install -g ${PACKAGE_NAME}
+
+1. From the agent that has context:
+  acb handoff --from codex --summary "Ready for the next agent" --git
+
+2. In the next agent's workspace:
+  acb resume
+
+3. Paste the copied handoff prompt into the next agent.
+
+For explicit MCP pull mode:
+  acb config mcp --out ./mcp.json
+  acb verify mcp --config ./mcp.json --name acb
+
+Use the scoped package name ${PACKAGE_NAME}; the unscoped acb package name is already taken.
 `;
 
 function readPackageMeta() {
@@ -67,6 +88,7 @@ async function main(argv = process.argv.slice(2)) {
 
   if (command === "help" || command === "--help" || command === "-h") return print(usage);
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
+  if (command === "quickstart") return print(quickstart);
   if (command === "handoff") return handoffCommand(args);
   if (command === "save") return saveCommand(args);
   if (command === "update") return updateCommand(args);
