@@ -269,6 +269,30 @@ test("save can return the created packet as JSON", () => {
   assert.match(invalid.stderr, /Use only one save output mode/);
 });
 
+test("latest defaults to current workspace and supports all", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspaceA = path.join(dir, "a");
+  const workspaceB = path.join(dir, "b");
+  fs.mkdirSync(workspaceA);
+  fs.mkdirSync(workspaceB);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run(["save", "--workspace", workspaceA, "--summary", "Workspace A"], { env });
+  run(["save", "--workspace", workspaceB, "--summary", "Workspace B"], { env });
+
+  const scoped = run(["latest", "--json"], { env, cwd: workspaceA });
+  assert.equal(scoped.status, 0);
+  assert.equal(JSON.parse(scoped.stdout).summary, "Workspace A");
+
+  const global = run(["latest", "--all", "--json"], { env, cwd: workspaceA });
+  assert.equal(global.status, 0);
+  assert.equal(JSON.parse(global.stdout).summary, "Workspace B");
+
+  const invalid = run(["latest", "--workspace", workspaceA, "--all"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use either --workspace or --all/);
+});
+
 test("handoff is a one-step save entrypoint", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const env = { ACB_STORE: path.join(dir, "packets.json") };

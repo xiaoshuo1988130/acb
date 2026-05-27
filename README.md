@@ -76,6 +76,7 @@ acb update <packet-id> --status <text> --note <text>
 acb diff-preview
 acb status
 acb latest
+acb latest --all
 acb show <packet-id>
 acb show <packet-id> --prompt
 acb resume
@@ -103,6 +104,8 @@ acb store backup --out ./acb-store.backup.json
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
 
 `acb status` prints the current workspace handoff state and the next commands to resume or inspect the latest packet.
+
+`acb latest` reads the newest handoff for the current workspace. Use `--all` when you intentionally want the newest packet across every workspace.
 
 `acb handoff` is the primary one-step entrypoint. It behaves like `acb save --copy` by default. Use `--print-prompt` or `--json` for deterministic script output, or `--no-copy` when you want a two-step `save` then `resume` flow.
 

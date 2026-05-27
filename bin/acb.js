@@ -18,7 +18,7 @@ Usage:
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--copy | --print-prompt | --json]
   acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]
   acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
-  acb latest [--workspace <path>] [--json]
+  acb latest [--workspace <path>] [--all] [--json]
   acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
   acb resume [--workspace <path>] [--id <packet-id>] [--no-copy | --print-prompt | --json | --preview] [--out <path>] [--open]
@@ -268,7 +268,13 @@ function diffPreviewCommand(args) {
 }
 
 function latestCommand(args) {
-  const workspace = args.includes("--workspace") ? normalizeWorkspace(argValue(args, "--workspace")) : null;
+  if (args.includes("--workspace") && args.includes("--all")) {
+    console.error("Use either --workspace or --all, not both.");
+    return 2;
+  }
+  const workspace = args.includes("--all")
+    ? null
+    : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
   const packet = findPacket({ workspace });
   if (!packet) {
     console.error(workspace ? `No handoff packet found for workspace: ${workspace}` : "No handoff packets found.");

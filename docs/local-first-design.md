@@ -135,6 +135,8 @@ If clipboard access fails, ACB prints the prompt. Linux users may need to instal
 
 It reports the current workspace, packet count, latest packet summary, Git state, and the next concrete commands to resume or inspect the handoff prompt.
 
+`acb latest` also defaults to the current workspace. Use `acb latest --all` only when you explicitly want the newest packet across every workspace.
+
 `acb doctor` is a read-only local environment check.
 
 It reports:
