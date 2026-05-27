@@ -56,6 +56,7 @@ acb list
 acb delete <packet-id>
 acb clear --workspace .
 acb clear --all
+acb doctor
 acb serve
 acb store path
 ```
@@ -63,6 +64,8 @@ acb store path
 Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff state outside the default `~/.acb/packets.json`.
 
 `acb clear` only clears the current workspace by default. Use `--all` only when you intentionally want to remove every local handoff packet in the store.
+
+`acb doctor` checks the local store, current workspace packet count, Git availability, and clipboard command availability without writing anything.
 
 ## Boundaries
 

@@ -20,6 +20,7 @@ Usage:
   acb list [--workspace <path>] [--limit <n>] [--json]
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
+  acb doctor [--workspace <path>] [--json]
   acb serve
   acb store path
   acb --version
@@ -42,6 +43,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "list") return listCommand(args);
   if (command === "delete") return deleteCommand(args);
   if (command === "clear") return clearCommand(args);
+  if (command === "doctor") return doctorCommand(args);
   if (command === "serve") return serveCommand(args);
   if (command === "store") return storeCommand(args);
 
@@ -224,6 +226,17 @@ function clearCommand(args) {
   return 0;
 }
 
+function doctorCommand(args) {
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const report = buildDoctorReport(workspace);
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+  printDoctorReport(report);
+  return report.ok ? 0 : 1;
+}
+
 function storeCommand(args) {
   if (args[0] !== "path") {
     console.error("Usage: acb store path");
@@ -231,6 +244,63 @@ function storeCommand(args) {
   }
   console.log(storePath());
   return 0;
+}
+
+function buildDoctorReport(workspace) {
+  const store = loadStore();
+  const workspacePackets = store.packets.filter((packet) => packet.workspace === workspace);
+  const clipboardCommands = clipboardCandidates().map(([command]) => ({
+    command,
+    available: commandExists(command),
+  }));
+  const gitAvailable = commandExists("git");
+  const gitRootResult = gitAvailable ? runGit(workspace, ["rev-parse", "--show-toplevel"]) : { status: 1 };
+  const gitRoot = gitRootResult.status === 0 ? gitRootResult.stdout.trim() : null;
+
+  return {
+    ok: true,
+    store_path: storePath(),
+    total_packets: store.packets.length,
+    workspace,
+    workspace_packets: workspacePackets.length,
+    latest_workspace_packet_id: workspacePackets[0]?.id || null,
+    checks: {
+      store_readable: true,
+      git_available: gitAvailable,
+      git_workspace: Boolean(gitRoot),
+      clipboard_command_available: clipboardCommands.some((item) => item.available),
+    },
+    git: {
+      root: gitRoot,
+      branch: gitRoot ? runGit(gitRoot, ["branch", "--show-current"]).stdout.trim() || null : null,
+      head: gitRoot ? runGit(gitRoot, ["rev-parse", "--short", "HEAD"]).stdout.trim() || null : null,
+    },
+    clipboard: {
+      platform: process.platform,
+      commands: clipboardCommands,
+    },
+  };
+}
+
+function printDoctorReport(report) {
+  console.log("ACB Doctor");
+  console.log(`store: ${report.store_path}`);
+  console.log(`total_packets: ${report.total_packets}`);
+  console.log(`workspace: ${report.workspace}`);
+  console.log(`workspace_packets: ${report.workspace_packets}`);
+  if (report.latest_workspace_packet_id) console.log(`latest_workspace_packet_id: ${report.latest_workspace_packet_id}`);
+  console.log(`git_available: ${report.checks.git_available ? "yes" : "no"}`);
+  console.log(`git_workspace: ${report.checks.git_workspace ? "yes" : "no"}`);
+  if (report.git.root) {
+    console.log(`git_root: ${report.git.root}`);
+    console.log(`git_branch: ${report.git.branch || "unknown"}`);
+    console.log(`git_head: ${report.git.head || "unknown"}`);
+  }
+  const availableClipboard = report.clipboard.commands.filter((item) => item.available).map((item) => item.command);
+  console.log(`clipboard_commands: ${availableClipboard.length ? availableClipboard.join(", ") : "none"}`);
+  if (!availableClipboard.length && process.platform === "linux") {
+    console.log("clipboard_hint: install wl-clipboard, xclip, or xsel");
+  }
 }
 
 function serveCommand(args) {
@@ -703,21 +773,36 @@ function argValues(args, name) {
 }
 
 function copyToClipboard(text) {
-  const platform = process.platform;
-  const candidates = [];
-  if (platform === "darwin") candidates.push(["pbcopy", []]);
-  else if (platform === "win32") candidates.push(["clip.exe", []]);
-  else {
-    candidates.push(["wl-copy", []], ["xclip", ["-selection", "clipboard"]], ["xsel", ["--clipboard", "--input"]]);
-  }
-
   const errors = [];
-  for (const [cmd, args] of candidates) {
+  for (const [cmd, args] of clipboardCandidates()) {
     const result = spawnSync(cmd, args, { input: text, encoding: "utf8" });
     if (result.status === 0) return { ok: true };
     errors.push(result.error?.message || result.stderr || `${cmd} exited ${result.status}`);
   }
   return { ok: false, error: errors.join("; ") || "no clipboard command available" };
+}
+
+function clipboardCandidates() {
+  const platform = process.platform;
+  if (platform === "darwin") return [["pbcopy", []]];
+  if (platform === "win32") return [["clip.exe", []]];
+  return [["wl-copy", []], ["xclip", ["-selection", "clipboard"]], ["xsel", ["--clipboard", "--input"]]];
+}
+
+function commandExists(command) {
+  const paths = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  const extensions = process.platform === "win32" ? ["", ".exe", ".cmd", ".bat"] : [""];
+  for (const dir of paths) {
+    for (const ext of extensions) {
+      try {
+        fs.accessSync(path.join(dir, `${command}${ext}`), fs.constants.X_OK);
+        return true;
+      } catch {
+        // Try the next PATH candidate.
+      }
+    }
+  }
+  return false;
 }
 
 function print(text) {

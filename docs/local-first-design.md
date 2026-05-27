@@ -84,6 +84,20 @@ ACB uses platform clipboard commands:
 
 If clipboard access fails, ACB prints the prompt. Linux users may need to install `wl-clipboard`, `xclip`, or `xsel`.
 
+## Doctor
+
+`acb doctor` is a read-only local environment check.
+
+It reports:
+
+- Store path
+- Total packet count
+- Current workspace packet count
+- Git command availability and workspace detection
+- Clipboard command availability
+
+It does not copy anything to the clipboard and does not modify the packet store.
+
 ## MCP Pull
 
 `acb serve` exposes the local packet store as a stdio MCP server.

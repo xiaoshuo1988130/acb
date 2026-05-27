@@ -193,6 +193,32 @@ test("store path prints configured store", () => {
   assert.equal(result.stdout.trim(), storePath);
 });
 
+test("doctor reports local store and workspace state", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: storePath };
+
+  run(["save", "--workspace", workspace, "--summary", "doctor packet"], { env });
+
+  const human = run(["doctor", "--workspace", workspace], { env });
+  assert.equal(human.status, 0);
+  assert.match(human.stdout, /ACB Doctor/);
+  assert.match(human.stdout, /workspace_packets: 1/);
+
+  const json = run(["doctor", "--workspace", workspace, "--json"], { env });
+  assert.equal(json.status, 0);
+  const report = JSON.parse(json.stdout);
+  assert.equal(report.store_path, storePath);
+  assert.equal(report.workspace, workspace);
+  assert.equal(report.workspace_packets, 1);
+  assert.equal(report.total_packets, 1);
+  assert.equal(report.checks.store_readable, true);
+  assert.equal(typeof report.checks.git_available, "boolean");
+  assert.equal(typeof report.checks.clipboard_command_available, "boolean");
+});
+
 test("serve exposes handoff tools over MCP stdio", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");
