@@ -52,6 +52,21 @@ test("prints version and help", () => {
   assert.match(quickstart.stdout, /acb resume/);
 });
 
+test("runs when invoked through a bin symlink", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const linkPath = path.join(dir, "acb");
+  fs.symlinkSync(bin, linkPath);
+
+  const version = spawnSync(linkPath, ["--version"], {
+    encoding: "utf8",
+    env: process.env,
+    cwd: process.cwd(),
+  });
+
+  assert.equal(version.status, 0);
+  assert.equal(version.stdout.trim(), `acb ${pkg.version}`);
+});
+
 test("save, latest, list, and prompt use local store", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");

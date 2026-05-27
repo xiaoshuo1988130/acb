@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.2
+
+### Fixed
+
+- Fixed npm-installed `acb` bin execution when npm invokes the CLI through a symlink.
+
 ## 0.0.1
 
 Initial local alpha for AgentContextBus (`acb`).

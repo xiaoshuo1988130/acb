@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PACKAGE_META = readPackageMeta();
 const VERSION = PACKAGE_META.version;
@@ -2342,7 +2343,16 @@ function print(text) {
   return 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isDirectRun() {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync.native(process.argv[1]) === fs.realpathSync.native(fileURLToPath(import.meta.url));
+  } catch {
+    return path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+  }
+}
+
+if (isDirectRun()) {
   Promise.resolve(main()).then((code) => {
     process.exitCode = code;
   }).catch((error) => {
