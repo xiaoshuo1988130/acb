@@ -24,6 +24,7 @@ Usage:
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
+  acb config mcp [--command <path-or-command>] [--name <server-name>]
   acb serve
   acb store path
   acb --version
@@ -50,6 +51,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "delete") return deleteCommand(args);
   if (command === "clear") return clearCommand(args);
   if (command === "doctor") return doctorCommand(args);
+  if (command === "config") return configCommand(args);
   if (command === "serve") return serveCommand(args);
   if (command === "store") return storeCommand(args);
 
@@ -441,6 +443,26 @@ function doctorCommand(args) {
   }
   printDoctorReport(report);
   return report.ok ? 0 : 1;
+}
+
+function configCommand(args) {
+  const target = args[0];
+  if (target !== "mcp") {
+    console.error("Usage: acb config mcp [--command <path-or-command>] [--name <server-name>]");
+    return 2;
+  }
+  const command = argValue(args, "--command") || "acb";
+  const name = argValue(args, "--name") || "acb";
+  const config = {
+    mcpServers: {
+      [name]: {
+        command,
+        args: ["serve"],
+      },
+    },
+  };
+  process.stdout.write(`${JSON.stringify(config, null, 2)}\n`);
+  return 0;
 }
 
 function storeCommand(args) {

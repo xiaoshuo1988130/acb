@@ -60,6 +60,7 @@ acb delete <packet-id>
 acb clear --workspace .
 acb clear --all
 acb doctor
+acb config mcp
 acb serve
 acb store path
 ```
@@ -75,6 +76,8 @@ Use `ACB_STORE=/path/to/packets.json` to keep test or project-specific handoff s
 `acb export` writes recent handoffs as Markdown or JSON for sharing, review, or a future viewer.
 
 `acb import` restores JSON exports into the local packet store. Duplicate packet ids are skipped unless `--replace` is used.
+
+`acb config mcp` prints a copyable stdio MCP server config for clients that support MCP.
 
 ## Boundaries
 

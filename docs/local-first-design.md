@@ -149,6 +149,15 @@ This keeps ingestion explicit. A downstream agent must call the tool; ACB does n
 
 Example MCP server config shape:
 
+Generate it:
+
+```bash
+acb config mcp
+acb config mcp --command /absolute/path/to/acb --name local-acb
+```
+
+Example output:
+
 ```json
 {
   "mcpServers": {

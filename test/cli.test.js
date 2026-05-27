@@ -268,6 +268,24 @@ test("store path prints configured store", () => {
   assert.equal(result.stdout.trim(), storePath);
 });
 
+test("config mcp prints a copyable MCP server snippet", () => {
+  const config = run(["config", "mcp"]);
+  assert.equal(config.status, 0);
+  assert.deepEqual(JSON.parse(config.stdout), {
+    mcpServers: {
+      acb: {
+        command: "acb",
+        args: ["serve"],
+      },
+    },
+  });
+
+  const localConfig = run(["config", "mcp", "--command", "/tmp/acb/bin/acb.js", "--name", "local-acb"]);
+  assert.equal(localConfig.status, 0);
+  const parsed = JSON.parse(localConfig.stdout);
+  assert.equal(parsed.mcpServers["local-acb"].command, "/tmp/acb/bin/acb.js");
+});
+
 test("doctor reports local store and workspace state", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");
