@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+Chinese onboarding.
+
+### Added
+
+- Added `README.zh-CN.md` as a Simplified Chinese project overview and install guide.
+- Added `docs/zh-CN/quickstart.md` for a shorter Chinese first-run path from `quickstart --check` to `handoff`, `resume`, `setup --check`, and `dashboard`.
+- Added language links from the English README and included the Chinese README in the npm package.
+
 ## 0.6.0
 
 Client setup guide.

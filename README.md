@@ -1,5 +1,7 @@
 # AgentContextBus (`acb`)
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 AgentContextBus is a local-first handoff tool for coding agents.
 
 It solves one daily problem:
