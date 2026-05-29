@@ -39,6 +39,12 @@ acb dashboard --workspace .
 
 Use the dashboard when you want copy buttons for recipe/config/verify commands or a click-driven ACB-side workflow check.
 
+Before a release or larger recipe change, run the whole ACB-side matrix:
+
+```bash
+acb verify workflow --all
+```
+
 Before wiring a client manually, smoke-test the ACB side:
 
 ```bash

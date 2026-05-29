@@ -60,7 +60,7 @@ Usage:
   acb setup [target] [--workspace <path>] [--check] [--keep-artifacts] [--json]
   acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
   acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
-  acb verify workflow <target> [--workspace <path>] [--keep-artifacts] [--json]
+  acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]
   acb serve
   acb store path
   acb store info [--json]
@@ -2836,7 +2836,7 @@ function verifyCommand(args) {
   const target = args[0];
   if (target === "workflow") return verifyWorkflowCommand(args.slice(1));
   if (target !== "mcp") {
-    console.error("Usage: acb verify mcp [--config <path>] [--name <server-name>] [--json]\n       acb verify workflow <target> [--workspace <path>] [--json]");
+    console.error("Usage: acb verify mcp [--config <path>] [--name <server-name>] [--json]\n       acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]");
     return 2;
   }
 
@@ -2864,8 +2864,20 @@ function verifyCommand(args) {
 
 function verifyWorkflowCommand(args) {
   const target = args.find((arg) => !arg.startsWith("--"));
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  if (args.includes("--all")) {
+    const report = buildWorkflowMatrixReport(RECIPE_TARGETS, workspace, {
+      keepArtifacts: args.includes("--keep-artifacts"),
+    });
+    if (args.includes("--json")) {
+      process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    } else {
+      printWorkflowMatrixReport(report);
+    }
+    return report.ok ? 0 : 1;
+  }
   if (!target) {
-    console.error("Usage: acb verify workflow <target> [--workspace <path>] [--json]");
+    console.error("Usage: acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]");
     return 2;
   }
   const recipe = findRecipe(target);
@@ -2875,7 +2887,6 @@ function verifyWorkflowCommand(args) {
     return 2;
   }
 
-  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
   const report = buildWorkflowVerifyReport(recipe, workspace, { keepArtifacts: args.includes("--keep-artifacts") });
   if (args.includes("--json")) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -2883,6 +2894,30 @@ function verifyWorkflowCommand(args) {
     printWorkflowVerifyReport(report);
   }
   return report.ok ? 0 : 1;
+}
+
+function buildWorkflowMatrixReport(recipes, workspace, { keepArtifacts = false } = {}) {
+  const reports = recipes.map((recipe) => buildWorkflowVerifyReport(recipe, workspace, { keepArtifacts }));
+  const passed = reports.filter((report) => report.ok).length;
+  const failed = reports.length - passed;
+  return {
+    ok: failed === 0,
+    workspace,
+    target_count: reports.length,
+    passed,
+    failed,
+    targets: reports.map((report) => ({
+      target: report.target,
+      title: report.title,
+      ok: report.ok,
+      checks: report.checks,
+      store_path: report.store_path,
+      artifacts_retained: report.artifacts_retained,
+      artifacts_cleaned: report.artifacts_cleaned,
+      limitation: report.limitation,
+    })),
+    limitation: "This verifies ACB-side workflows only; it does not launch or mutate third-party clients.",
+  };
 }
 
 function buildWorkflowVerifyReport(recipe, workspace, { keepArtifacts = false } = {}) {
@@ -2982,6 +3017,20 @@ function printWorkflowVerifyReport(report) {
   console.log(`  ${report.commands.brief}`);
   console.log(`  ${report.commands.resume}`);
   console.log(`  ${report.commands.dashboard}`);
+  console.log(`limitation: ${report.limitation}`);
+}
+
+function printWorkflowMatrixReport(report) {
+  console.log("ACB Workflow Matrix Verify");
+  console.log(`workspace: ${report.workspace}`);
+  console.log(`targets: ${report.passed}/${report.target_count} ok`);
+  for (const target of report.targets) {
+    console.log(`${target.target}: ${target.ok ? "ok" : "failed"}`);
+    for (const [name, ok] of Object.entries(target.checks)) {
+      console.log(`  ${name}: ${ok ? "ok" : "failed"}`);
+    }
+  }
+  console.log(`ok: ${report.ok ? "yes" : "no"}`);
   console.log(`limitation: ${report.limitation}`);
 }
 

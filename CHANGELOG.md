@@ -12,6 +12,7 @@ Client setup guide.
 - Added `acb setup [target]` to render the same client setup guide from the CLI as text or JSON, with automatic target selection when no target is provided.
 - Added `acb setup --check` to run the ACB-side workflow smoke test from the setup guide before the user configures a third-party client.
 - Added recommended setup, dashboard, and workflow verification next steps to `acb quickstart --check`.
+- Added `acb verify workflow --all` to run the ACB-side smoke matrix across every supported client target before a release.
 
 ## 0.5.2
 

@@ -173,10 +173,11 @@ Before trying a client by hand, run an ACB-side workflow smoke test:
 ```bash
 acb verify workflow opencode
 acb verify workflow cline --json
+acb verify workflow --all
 acb setup codex --check
 ```
 
-This verifies the local recipe, handoff packet, brief, full resume prompt, MCP server, and dashboard state. The dashboard can run the same ACB-side check from the selected client's setup guide. It does not launch or mutate the third-party client.
+This verifies the local recipe, handoff packet, brief, full resume prompt, MCP server, and dashboard state. Use `--all` as the release-readiness matrix across every supported client target. The dashboard can run the same ACB-side check from the selected client's setup guide. It does not launch or mutate the third-party client.
 
 ## Examples
 

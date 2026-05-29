@@ -314,11 +314,12 @@ acb verify mcp --config ./mcp.json --name acb --json
 ```bash
 acb verify workflow opencode
 acb verify workflow cline --json
+acb verify workflow --all
 acb verify workflow codex --keep-artifacts --json
 acb setup codex --check
 ```
 
-It uses a temporary store and verifies recipe lookup, handoff save, full resume prompt, compact brief, MCP server readiness against the target workspace, dashboard state, and dashboard HTML. The temporary store is cleaned by default; use `--keep-artifacts` for debugging. This is the project-level smoke test for real client workflows while keeping third-party app setup explicit.
+It uses a temporary store and verifies recipe lookup, handoff save, full resume prompt, compact brief, MCP server readiness against the target workspace, dashboard state, and dashboard HTML. The temporary store is cleaned by default; use `--keep-artifacts` for debugging. `--all` runs the same ACB-side matrix across every supported recipe target. This is the project-level smoke test for real client workflows while keeping third-party app setup explicit.
 
 Recommended first message in a new session:
 

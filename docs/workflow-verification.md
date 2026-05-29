@@ -5,6 +5,7 @@
 ```bash
 acb verify workflow opencode
 acb verify workflow cline --workspace .
+acb verify workflow --all
 acb verify workflow claude-desktop --json
 acb verify workflow codex --keep-artifacts --json
 acb setup codex --check
@@ -32,6 +33,8 @@ The command uses a temporary local store and checks:
 - Dashboard state and dashboard HTML can render the packet.
 
 The temporary store is deleted by default after the report is built. Use `--keep-artifacts` only when you need to inspect the generated smoke-test store. The command prints next commands for the real workflow after the smoke test passes.
+
+Use `acb verify workflow --all` before releases or larger workflow changes. It runs the same temporary ACB-side smoke test for every supported target and prints a compact matrix.
 
 The dashboard exposes the same ACB-side check as `Run ACB-side Check` in the selected client's setup guide. That button calls local `/api/verify-workflow`, runs the temporary smoke test, and reports the same pass/fail checks without launching the client.
 

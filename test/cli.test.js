@@ -1423,6 +1423,25 @@ test("verify workflow smoke tests client handoff surfaces", () => {
   assert.equal(fs.existsSync(retainedReport.store_path), true);
   fs.rmSync(path.dirname(retainedReport.store_path), { recursive: true, force: true });
 
+  const matrix = run(["verify", "workflow", "--all", "--workspace", workspace]);
+  assert.equal(matrix.status, 0);
+  assert.match(matrix.stdout, /ACB Workflow Matrix Verify/);
+  assert.match(matrix.stdout, /targets: 6\/6 ok/);
+  assert.match(matrix.stdout, /opencode: ok/);
+  assert.match(matrix.stdout, /generic-mcp: ok/);
+
+  const matrixJson = run(["verify", "workflow", "--all", "--workspace", workspace, "--json"]);
+  assert.equal(matrixJson.status, 0);
+  const matrixReport = JSON.parse(matrixJson.stdout);
+  assert.equal(matrixReport.ok, true);
+  assert.equal(matrixReport.workspace, realWorkspace(workspace));
+  assert.equal(matrixReport.target_count, 6);
+  assert.equal(matrixReport.passed, 6);
+  assert.equal(matrixReport.failed, 0);
+  assert.ok(matrixReport.targets.every((target) => target.ok));
+  assert.ok(matrixReport.targets.some((target) => target.target === "codex"));
+  assert.ok(matrixReport.targets.every((target) => target.artifacts_cleaned === true));
+
   const missing = run(["verify", "workflow", "missing-client"]);
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /Unknown workflow target/);
