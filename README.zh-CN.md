@@ -22,6 +22,7 @@ ACB 的边界很明确：
 
 ```bash
 npx @xiaoshuo1988/acb quickstart --check
+npx @xiaoshuo1988/acb verify first-run --lang zh-CN
 ```
 
 npm 包名是 `@xiaoshuo1988/acb`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。
@@ -60,6 +61,12 @@ npx @xiaoshuo1988/acb quickstart --check
 ```bash
 acb demo --lang zh-CN
 acb dashboard --workspace . --lang zh-CN
+```
+
+如果想先验证完整首次路径但不写入真实 store：
+
+```bash
+acb verify first-run --lang zh-CN
 ```
 
 ## 60 秒流程
@@ -234,6 +241,7 @@ acb resume
 acb brief
 acb dashboard --workspace .
 acb setup --check
+acb verify first-run --lang zh-CN
 acb verify workflow --all
 acb doctor
 acb config mcp --out ./mcp.json

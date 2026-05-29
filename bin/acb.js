@@ -61,6 +61,7 @@ Usage:
   acb recipe [target] [--json]
   acb setup [target] [--workspace <path>] [--check] [--keep-artifacts] [--lang en|zh-CN] [--json]
   acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
+  acb verify first-run [--workspace <path>] [--target <target>] [--lang en|zh-CN] [--keep-artifacts] [--json]
   acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
   acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]
   acb serve
@@ -3326,9 +3327,10 @@ function configCommand(args) {
 
 function verifyCommand(args) {
   const target = args[0];
+  if (target === "first-run") return verifyFirstRunCommand(args.slice(1));
   if (target === "workflow") return verifyWorkflowCommand(args.slice(1));
   if (target !== "mcp") {
-    console.error("Usage: acb verify mcp [--config <path>] [--name <server-name>] [--json]\n       acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]");
+    console.error("Usage: acb verify first-run [--workspace <path>] [--target <target>] [--keep-artifacts] [--json]\n       acb verify mcp [--config <path>] [--name <server-name>] [--json]\n       acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]");
     return 2;
   }
 
@@ -3350,6 +3352,31 @@ function verifyCommand(args) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     printMcpVerifyReport(report);
+  }
+  return report.ok ? 0 : 1;
+}
+
+function verifyFirstRunCommand(args) {
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const lang = resolveLanguage(args);
+  const target = argValue(args, "--target") || null;
+  const setupResult = buildSetupGuideForTarget({ target, workspace });
+  if (!setupResult.ok) {
+    console.error(setupResult.error);
+    console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
+    return 2;
+  }
+
+  const report = buildFirstRunVerifyReport({
+    workspace,
+    lang,
+    setupResult,
+    keepArtifacts: args.includes("--keep-artifacts"),
+  });
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  } else {
+    printFirstRunVerifyReport(report, { lang });
   }
   return report.ok ? 0 : 1;
 }
@@ -3410,6 +3437,75 @@ function buildWorkflowMatrixReport(recipes, workspace, { keepArtifacts = false }
     })),
     limitation: "This verifies ACB-side workflows only; it does not launch or mutate third-party clients.",
   };
+}
+
+function buildFirstRunVerifyReport({ workspace, lang = "en", setupResult, keepArtifacts = false }) {
+  const oldStore = process.env.ACB_STORE;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-first-run-"));
+  const tempStore = path.join(tempDir, "packets.json");
+  let report = null;
+  process.env.ACB_STORE = tempStore;
+  try {
+    const quickstart = buildDoctorReport(workspace);
+    const packet = createDemoPacket({ workspace, from: "acb-verify", lang });
+    writeStore({ version: STORE_VERSION, packets: [packet] });
+    const latest = findPacket({ id: packet.id });
+    const brief = renderBriefPrompt(packet);
+    const resumePrompt = renderHandoffPrompt(packet);
+    const dashboardState = buildDashboardState({ workspace, limit: 5 });
+    const dashboardHtml = renderDashboardHtml(dashboardState, { lang });
+    const workflow = buildWorkflowVerifyReport(setupResult.recipe, workspace, { keepArtifacts });
+    const checks = {
+      quickstart: quickstart.ok && quickstart.checks.store_readable,
+      demo_packet: latest?.id === packet.id && packet.tags.includes("demo"),
+      brief: brief.includes(packet.summary) && brief.includes("Full Context Commands"),
+      resume_prompt: resumePrompt.includes(packet.summary) && resumePrompt.includes("Requested Behavior"),
+      dashboard_state: dashboardState.latest_packet?.id === packet.id,
+      dashboard_html: dashboardHtml.includes(packet.id) && dashboardHtml.includes("api/state"),
+      setup_guide: setupResult.ok && setupResult.guide.workflow_verify_command.includes(setupResult.recipe.id),
+      setup_workflow: workflow.ok,
+    };
+    report = {
+      ok: Object.values(checks).every(Boolean),
+      workspace,
+      target: setupResult.recipe.id,
+      title: setupResult.recipe.title,
+      auto_selected: setupResult.guide.auto_selected,
+      lang,
+      store_path: tempStore,
+      artifacts_retained: keepArtifacts,
+      packet: packetSummary(packet),
+      checks,
+      commands: {
+        quickstart: formatCommand("acb", ["quickstart", "--check", "--workspace", workspace, ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
+        demo: formatCommand("acb", ["demo", "--workspace", workspace, ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
+        dashboard: formatCommand("acb", ["dashboard", "--workspace", workspace, ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
+        brief: `acb brief --id ${packet.id}`,
+        setup: formatCommand("acb", ["setup", setupResult.recipe.id, "--workspace", workspace, "--check", ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
+      },
+      quickstart: {
+        ok: quickstart.ok,
+        checks: quickstart.checks,
+      },
+      workflow,
+      limitation: "This verifies the local ACB first-run path only; it does not launch or mutate third-party clients.",
+    };
+    return report;
+  } finally {
+    if (oldStore === undefined) delete process.env.ACB_STORE;
+    else process.env.ACB_STORE = oldStore;
+    if (!keepArtifacts) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        if (report) report.artifacts_cleaned = true;
+      } catch (error) {
+        if (report) {
+          report.artifacts_cleaned = false;
+          report.cleanup_error = error.message;
+        }
+      }
+    }
+  }
 }
 
 function buildWorkflowVerifyReport(recipe, workspace, { keepArtifacts = false } = {}) {
@@ -3509,6 +3605,40 @@ function printWorkflowVerifyReport(report) {
   console.log(`  ${report.commands.brief}`);
   console.log(`  ${report.commands.resume}`);
   console.log(`  ${report.commands.dashboard}`);
+  console.log(`limitation: ${report.limitation}`);
+}
+
+function printFirstRunVerifyReport(report, { lang = "en" } = {}) {
+  if (isChinese(lang)) {
+    console.log("ACB 首次运行验证");
+    console.log(`工作区：${report.workspace}`);
+    console.log(`目标：${report.target} (${report.title})${report.auto_selected ? " 自动选择" : ""}`);
+    console.log(`store：${report.store_path}${report.artifacts_cleaned ? " (已清理)" : ""}`);
+    for (const [name, ok] of Object.entries(report.checks)) {
+      console.log(`${name}: ${ok ? "ok" : "failed"}`);
+    }
+    console.log(`通过：${yesNo(report.ok, lang)}`);
+    console.log("下一步：");
+    console.log(`  ${report.commands.quickstart}`);
+    console.log(`  ${report.commands.demo}`);
+    console.log(`  ${report.commands.dashboard}`);
+    console.log(`  ${report.commands.setup}`);
+    console.log("边界：这只验证本地 ACB 首次运行路径；不会启动或修改第三方客户端。");
+    return;
+  }
+  console.log("ACB First-Run Verify");
+  console.log(`workspace: ${report.workspace}`);
+  console.log(`target: ${report.target} (${report.title})${report.auto_selected ? " auto-selected" : ""}`);
+  console.log(`store: ${report.store_path}${report.artifacts_cleaned ? " (cleaned)" : ""}`);
+  for (const [name, ok] of Object.entries(report.checks)) {
+    console.log(`${name}: ${ok ? "ok" : "failed"}`);
+  }
+  console.log(`ok: ${report.ok ? "yes" : "no"}`);
+  console.log("next:");
+  console.log(`  ${report.commands.quickstart}`);
+  console.log(`  ${report.commands.demo}`);
+  console.log(`  ${report.commands.dashboard}`);
+  console.log(`  ${report.commands.setup}`);
   console.log(`limitation: ${report.limitation}`);
 }
 

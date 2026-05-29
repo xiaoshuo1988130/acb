@@ -42,6 +42,7 @@ The most important script-friendly commands are:
 
 ```bash
 acb quickstart --check --json
+acb verify first-run --json
 acb demo --json
 acb save --json
 acb latest --json

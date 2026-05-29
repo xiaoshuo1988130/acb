@@ -22,6 +22,7 @@ Or try it without a global install:
 
 ```bash
 npx @xiaoshuo1988/acb quickstart --check
+npx @xiaoshuo1988/acb verify first-run
 ```
 
 `quickstart --check` prints:
@@ -116,6 +117,14 @@ acb setup cline --json
 
 ## 6. Verify Before Sharing
 
+To test the first-run path without touching your real ACB store:
+
+```bash
+acb verify first-run
+```
+
+This checks quickstart readiness, creates a temporary demo packet, renders brief and resume prompts, renders dashboard state, and runs a setup workflow check for the recommended target.
+
 Before a release, demo, or bigger workflow change:
 
 ```bash
@@ -129,6 +138,7 @@ This checks the ACB-side recipe, handoff packet, brief, full resume prompt, MCP 
 ```bash
 npx @xiaoshuo1988/acb quickstart --check
 npm install -g @xiaoshuo1988/acb
+acb verify first-run
 acb demo
 acb dashboard --workspace .
 acb handoff --from codex --summary "Ready for the next agent" --git

@@ -21,6 +21,7 @@ acb quickstart --check --lang zh-CN
 
 ```bash
 npx @xiaoshuo1988/acb quickstart --check
+npx @xiaoshuo1988/acb verify first-run --lang zh-CN
 ```
 
 `quickstart --check` 会检查本地 store、Git、剪贴板、`acb` 是否在 PATH 里，并给出推荐目标客户端、“推荐下一步”操作卡片，以及 `acb demo`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 等命令。
@@ -103,6 +104,14 @@ Dashboard 适合做这些事：
 Dashboard 默认只监听 `127.0.0.1`。它不会自动启动，不会改第三方客户端配置，也不会隐藏注入 prompt。
 
 ## 7. 发布前或大改后跑矩阵验证
+
+如果只是想验证第一次使用路径：
+
+```bash
+acb verify first-run --lang zh-CN
+```
+
+它会使用临时 store 检查 quickstart、demo packet、brief/resume、dashboard state 和 setup workflow，不会写入真实 store。
 
 ```bash
 acb verify workflow --all

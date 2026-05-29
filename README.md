@@ -26,6 +26,7 @@ Fastest path:
 
 ```bash
 npx @xiaoshuo1988/acb quickstart --check
+npx @xiaoshuo1988/acb verify first-run
 ```
 
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
@@ -50,6 +51,12 @@ To explore ACB before you have real handoff history, create a local demo packet:
 ```bash
 acb demo
 acb dashboard --workspace .
+```
+
+To self-test the full first-run path without touching your real store:
+
+```bash
+acb verify first-run
 ```
 
 ## 60 Second Flow
@@ -238,6 +245,7 @@ acb view --open
 acb dashboard --workspace .
 acb recipe opencode
 acb verify workflow opencode
+acb verify first-run
 acb export --format markdown --out ./handoffs.md
 acb import --file ./handoffs.json
 acb delete <packet-id>
@@ -261,6 +269,8 @@ acb store backup --out ./acb-store.backup.json
 - Recommended target client and setup command.
 - Next handoff, resume, dashboard, workflow verify, doctor, and MCP commands.
 - Next brief command for compact takeover prompts.
+
+`acb verify first-run` runs a temporary first-run smoke test covering quickstart readiness, demo packet creation, brief/resume rendering, dashboard state, and setup workflow checks. It does not write to your real ACB store unless you pass `ACB_STORE` yourself.
 
 `acb doctor` prints a deeper diagnostic report, including MCP install hints when `acb` is not visible on `PATH`.
 

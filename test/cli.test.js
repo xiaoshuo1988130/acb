@@ -114,6 +114,7 @@ test("prints version and help", () => {
   assert.match(help.stdout, /acb setup/);
   assert.match(help.stdout, /acb quickstart/);
   assert.match(help.stdout, /acb demo/);
+  assert.match(help.stdout, /acb verify first-run/);
 
   const quickstart = run(["quickstart"]);
   assert.equal(quickstart.status, 0);
@@ -1591,6 +1592,52 @@ test("verify workflow smoke tests client handoff surfaces", () => {
   const missing = run(["verify", "workflow", "missing-client"]);
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /Unknown workflow target/);
+});
+
+test("verify first-run checks install-to-handoff path", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+
+  const verified = run(["verify", "first-run", "--workspace", workspace, "--target", "codex"]);
+  assert.equal(verified.status, 0);
+  assert.match(verified.stdout, /ACB First-Run Verify/);
+  assert.match(verified.stdout, /target: codex/);
+  assert.match(verified.stdout, /quickstart: ok/);
+  assert.match(verified.stdout, /demo_packet: ok/);
+  assert.match(verified.stdout, /dashboard_state: ok/);
+  assert.match(verified.stdout, /setup_workflow: ok/);
+
+  const json = run(["verify", "first-run", "--workspace", workspace, "--target", "opencode", "--json"]);
+  assert.equal(json.status, 0);
+  const report = JSON.parse(json.stdout);
+  assert.equal(report.ok, true);
+  assert.equal(report.target, "opencode");
+  assert.equal(report.workspace, realWorkspace(workspace));
+  assert.equal(report.artifacts_retained, false);
+  assert.equal(report.artifacts_cleaned, true);
+  assert.equal(fs.existsSync(report.store_path), false);
+  assert.equal(report.checks.quickstart, true);
+  assert.equal(report.checks.demo_packet, true);
+  assert.equal(report.checks.brief, true);
+  assert.equal(report.checks.dashboard_html, true);
+  assert.equal(report.checks.setup_workflow, true);
+  assert.equal(report.workflow.ok, true);
+  assert.equal(report.workflow.target, "opencode");
+  assert.match(report.commands.quickstart, /acb quickstart --check --workspace/);
+  assert.match(report.commands.setup, /acb setup opencode --workspace/);
+
+  const zh = run(["verify", "first-run", "--workspace", workspace, "--target", "codex", "--lang", "zh-CN"]);
+  assert.equal(zh.status, 0);
+  assert.match(zh.stdout, /ACB 首次运行验证/);
+  assert.match(zh.stdout, /--lang zh-CN/);
+
+  const retained = run(["verify", "first-run", "--workspace", workspace, "--target", "codex", "--keep-artifacts", "--json"]);
+  assert.equal(retained.status, 0);
+  const retainedReport = JSON.parse(retained.stdout);
+  assert.equal(retainedReport.artifacts_retained, true);
+  assert.equal(fs.existsSync(retainedReport.store_path), true);
+  fs.rmSync(path.dirname(retainedReport.store_path), { recursive: true, force: true });
 });
 
 test("verify mcp reports launch failures", () => {

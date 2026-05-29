@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0
+
+First-run verification.
+
+### Added
+
+- Added `acb verify first-run` to smoke test the install-to-handoff path with a temporary local store.
+- Added JSON and human output for first-run verification, including quickstart, demo packet, brief, dashboard state, and setup workflow checks.
+- Documented the 5-minute verification path from `quickstart --check` to `verify first-run`.
+
 ## 0.10.0
 
 1.0 stability groundwork.

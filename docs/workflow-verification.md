@@ -1,5 +1,14 @@
 # Workflow Verification
 
+`acb verify first-run` checks the first-run path for a new user before they touch their real store:
+
+```bash
+acb verify first-run
+acb verify first-run --workspace . --target codex --json
+```
+
+It uses a temporary store and checks quickstart readiness, demo packet creation, brief/resume rendering, dashboard state, and setup workflow verification. It does not launch or mutate third-party clients.
+
 `acb verify workflow <target>` checks the ACB side of a client handoff before you wire the client manually.
 
 ```bash
