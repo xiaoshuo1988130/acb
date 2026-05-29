@@ -1137,6 +1137,10 @@ function dashboardCommand(args) {
       await handleDashboardCopyPrompt(request, response, { workspace });
       return;
     }
+    if (request.method === "POST" && url.pathname === "/api/create-demo") {
+      await handleDashboardCreateDemo(request, response, { workspace });
+      return;
+    }
     if (request.method === "POST" && url.pathname === "/api/verify-workflow") {
       await handleDashboardVerifyWorkflow(request, response, { workspace });
       return;
@@ -1249,6 +1253,42 @@ async function handleDashboardCopyPrompt(request, response, { workspace = null }
     copied: true,
     prompt_chars: prompt.length,
     message: `${label} copied to clipboard.`,
+  });
+}
+
+async function handleDashboardCreateDemo(request, response, { workspace = null } = {}) {
+  let payload;
+  try {
+    payload = await readJsonRequestBody(request, 4096);
+  } catch (error) {
+    sendDashboardJson(response, 400, { ok: false, error: error.message });
+    return;
+  }
+
+  const lang = normalizeLanguage(payload.lang || "en");
+  const from = typeof payload.from === "string" && payload.from.trim() ? payload.from.trim() : "acb-demo";
+  const requestedWorkspace = typeof payload.workspace === "string" && payload.workspace.trim()
+    ? normalizeWorkspace(payload.workspace)
+    : null;
+  if (workspace && requestedWorkspace && requestedWorkspace !== workspace) {
+    sendDashboardJson(response, 403, { ok: false, error: "workspace is outside this dashboard scope" });
+    return;
+  }
+
+  const targetWorkspace = workspace || requestedWorkspace || normalizeWorkspace(process.cwd());
+  const packet = createDemoPacket({ workspace: targetWorkspace, from, lang });
+  const dryRun = payload.dry_run === true;
+  if (!dryRun) {
+    const store = loadStore();
+    store.packets.unshift(packet);
+    writeStore(store);
+  }
+
+  sendDashboardJson(response, 200, {
+    ok: true,
+    created: !dryRun,
+    packet: dashboardPacketSummary(packet),
+    message: isChinese(lang) ? "示例上下文包已创建。" : "Demo packet created.",
   });
 }
 
@@ -1533,7 +1573,11 @@ function dashboardLabels(lang) {
       noPacketSelected: "未选择 handoff packet。",
       emptyTitle: "还没有上下文包",
       emptyBody: "先创建一条示例 packet，或保存真实工作上下文，然后刷新 dashboard。",
-      createDemo: "创建示例上下文",
+      createDemo: "复制 demo 命令",
+      createDemoPacket: "创建 demo packet",
+      creatingDemo: "正在创建...",
+      demoCreated: "示例上下文包已创建",
+      demoCreateFailed: "创建 demo 失败",
       saveRealHandoff: "保存真实 handoff",
       runSetup: "检查客户端接入",
       noTargets: "没有配置目标客户端。",
@@ -1615,7 +1659,11 @@ function dashboardLabels(lang) {
     noPacketSelected: "No handoff packet selected.",
     emptyTitle: "No handoff packets yet",
     emptyBody: "Create a demo packet or save real workspace context, then refresh the dashboard.",
-    createDemo: "Create demo context",
+    createDemo: "Copy demo command",
+    createDemoPacket: "Create demo packet",
+    creatingDemo: "Creating...",
+    demoCreated: "Demo packet created",
+    demoCreateFailed: "Demo creation failed",
     saveRealHandoff: "Save real handoff",
     runSetup: "Check client setup",
     noTargets: "No targets configured.",
@@ -1906,7 +1954,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
     .command-grid { display: grid; gap: 8px; margin-top: 10px; }
     .command {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       gap: 8px;
       align-items: center;
       border: 1px solid var(--line);
@@ -1969,6 +2017,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       .topbar { grid-template-columns: 1fr; }
       .toolbar { justify-content: flex-start; }
       .grid { grid-template-columns: 1fr; }
+      .command { grid-template-columns: 1fr; }
       .packet-list { max-height: none; }
       .kv { grid-template-columns: 1fr; }
       .takeover-actions { grid-template-columns: 1fr; }
@@ -2140,6 +2189,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       if (!packet) {
         el("next-handoff").innerHTML = emptyOnboardingHtml();
         wireCopyButtons();
+        wireCreateDemoButtons();
         return;
       }
       const target = selectedTarget();
@@ -2177,6 +2227,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       if (!packet) {
         el("detail").innerHTML = emptyOnboardingHtml();
         wireCopyButtons();
+        wireCreateDemoButtons();
         return;
       }
       const tabs = ["overview", "commands", "body", "git"];
@@ -2325,7 +2376,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         '<h2>' + escape(labels.emptyTitle) + '</h2>' +
         '<p>' + escape(labels.emptyBody) + '</p>' +
         '<div class="command-grid">' +
-          '<div class="command"><code>' + escape(demoCommand) + '</code><button class="btn" data-copy="' + escape(demoCommand) + '">' + escape(labels.createDemo) + '</button></div>' +
+          '<div class="command"><code>' + escape(demoCommand) + '</code><button class="btn primary" data-create-demo="true">' + escape(labels.createDemoPacket) + '</button><button class="btn" data-copy="' + escape(demoCommand) + '">' + escape(labels.createDemo) + '</button></div>' +
           '<div class="command"><code>' + escape(handoffCommand) + '</code><button class="btn" data-copy="' + escape(handoffCommand) + '">' + escape(labels.saveRealHandoff) + '</button></div>' +
           '<div class="command"><code>' + escape(setupCommand) + '</code><button class="btn" data-copy="' + escape(setupCommand) + '">' + escape(labels.runSetup) + '</button></div>' +
         '</div>' +
@@ -2342,6 +2393,33 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
             showToast(labels.copied);
           } catch {
             showToast(labels.copyFailed);
+          }
+        });
+      }
+    }
+
+    function wireCreateDemoButtons() {
+      for (const button of document.querySelectorAll("[data-create-demo]")) {
+        if (button.dataset.createDemoBound === "true") continue;
+        button.dataset.createDemoBound = "true";
+        button.addEventListener("click", async () => {
+          const previous = button.textContent;
+          button.disabled = true;
+          button.textContent = labels.creatingDemo;
+          try {
+            const response = await fetch("/api/create-demo", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ workspace: state.workspace, lang: labels.lang }),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) throw new Error(payload.error || labels.demoCreateFailed);
+            showToast(payload.message || labels.demoCreated);
+            window.location.reload();
+          } catch (error) {
+            showToast(error.message || labels.demoCreateFailed);
+            button.disabled = false;
+            button.textContent = previous;
           }
         });
       }

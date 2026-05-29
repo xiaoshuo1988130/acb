@@ -21,6 +21,7 @@ The dashboard serves:
 - `/` as a lightweight HTML view.
 - `/api/state` as machine-readable JSON.
 - `/api/copy-prompt` as a local-only POST endpoint used by the page's takeover buttons.
+- `/api/create-demo` as a local-only POST endpoint used by the empty state `Create demo packet` action.
 - `/api/verify-workflow` as a local-only POST endpoint that runs the same ACB-side smoke test as `acb verify workflow <target>`.
 - `/health` as a small readiness check.
 
@@ -29,6 +30,7 @@ It reads the current ACB store on each request, so refreshing the browser shows 
 The HTML view is a three-pane local audit workspace:
 
 - Packet list with search.
+- An empty-state onboarding panel that can create a safe local demo packet, copy a real handoff command, or copy setup verification.
 - A top-level `Next handoff` strip that auto-selects the best detected target client and keeps the recommended copy action in the first viewport.
 - Packet detail tabs for overview, copyable commands, body preview, and Git snapshot.
 - A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard.
@@ -46,7 +48,7 @@ The dashboard is intentionally local and explicit:
 - No hidden prompt injection.
 - No mutation of Cline, Roo, OpenCode, VS Code, Claude Desktop, or other client storage.
 
-The only state-changing controls are clipboard copy and temporary local workflow verification. Clicking `Copy Brief Prompt`, `Copy Full Prompt`, or `Copy MCP Pull Instruction` asks the local ACB process to render the selected packet and write that text to your system clipboard. Clicking `Run ACB-side Check` creates a temporary smoke-test store, verifies ACB recipe/handoff/brief/MCP/dashboard surfaces, and cleans the temporary artifacts. You still decide where to paste or configure the result.
+The only state-changing controls are explicit local actions: clipboard copy, demo packet creation, and temporary local workflow verification. Clicking `Create demo packet` writes one sample packet to the local ACB store for the selected workspace. Clicking `Copy Brief Prompt`, `Copy Full Prompt`, or `Copy MCP Pull Instruction` asks the local ACB process to render the selected packet and write that text to your system clipboard. Clicking `Run ACB-side Check` creates a temporary smoke-test store, verifies ACB recipe/handoff/brief/MCP/dashboard surfaces, and cleans the temporary artifacts. You still decide where to paste or configure the result.
 
 Target detection is read-only. ACB checks the current workspace, PATH, and a small set of common local client locations. The dashboard uses those signals to choose the initial `Next handoff` target, but you can still switch targets manually. It does not patch client settings, edit extension storage, or open private client databases.
 

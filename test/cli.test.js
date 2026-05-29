@@ -1114,13 +1114,37 @@ test("dashboard empty state points to demo onboarding", async () => {
     const html = await httpGet(url);
     assert.match(html, /No handoff packets yet/);
     assert.match(html, /acb demo --workspace/);
-    assert.match(html, /Create demo context/);
+    assert.match(html, /Create demo packet/);
+    assert.match(html, /\/api\/create-demo/);
+
+    const dryRun = await httpPostJson(`${url}api/create-demo`, {
+      workspace,
+      lang: "en",
+      dry_run: true,
+    });
+    assert.equal(dryRun.statusCode, 200);
+    const dryRunPayload = JSON.parse(dryRun.body);
+    assert.equal(dryRunPayload.created, false);
+    assert.match(dryRunPayload.packet.summary, /ACB demo handoff/);
+    assert.equal(fs.existsSync(env.ACB_STORE), false);
 
     const zhHtml = await httpGet(`${url}?lang=zh-CN`);
     assert.match(zhHtml, /还没有上下文包/);
     assert.match(zhHtml, /acb demo --workspace/);
     assert.match(zhHtml, /--lang zh-CN/);
-    assert.match(zhHtml, /创建示例上下文/);
+    assert.match(zhHtml, /创建 demo packet/);
+
+    const created = await httpPostJson(`${url}api/create-demo`, {
+      workspace,
+      lang: "zh-CN",
+    });
+    assert.equal(created.statusCode, 200);
+    const createdPayload = JSON.parse(created.body);
+    assert.equal(createdPayload.created, true);
+    assert.match(createdPayload.packet.summary, /ACB 示例 handoff/);
+    assert.ok(createdPayload.packet.tags.includes("zh-CN"));
+    const state = JSON.parse(await httpGet(`${url}api/state`));
+    assert.equal(state.latest_packet.id, createdPayload.packet.id);
   } finally {
     child.kill();
   }

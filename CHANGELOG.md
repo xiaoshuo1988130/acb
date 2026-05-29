@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0
+
+First-run dashboard actions.
+
+### Added
+
+- Added a local-only dashboard `Create demo packet` action so empty workspaces can become inspectable without leaving the page.
+- Added `/api/create-demo` for explicit local demo packet creation with English and Chinese packet content.
+- Documented the dashboard demo creation path.
+
 ## 0.8.0
 
 First-run onboarding.

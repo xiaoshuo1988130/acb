@@ -93,6 +93,7 @@ acb dashboard --workspace . --lang zh-CN
 
 Dashboard 适合做这些事：
 
+- 当前 workspace 为空时，一键创建本地 demo packet。
 - 看当前 workspace 最近的 handoff。
 - 搜索 packet。
 - 点击复制 brief、full prompt 或 MCP pull instruction。

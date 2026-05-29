@@ -209,6 +209,7 @@ acb dashboard --workspace . --lang zh-CN
 Dashboard 是一个显式启动的本地控制面板：
 
 - 查看当前 workspace 的 handoff 历史。
+- 如果当前 workspace 还是空的，可以一键创建本地 demo packet。
 - 搜索和检查 packet 细节。
 - 一键复制 brief、full prompt 或 MCP pull instruction。
 - 自动只读检测 OpenCode、Cline、Roo Code、Claude Desktop、Codex 和 generic MCP 等目标。
