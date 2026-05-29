@@ -152,7 +152,14 @@ acb recipe codex
 acb recipe generic-mcp
 ```
 
-Recipes are intentionally explicit. They give copy/paste, MCP pull, and verification steps without editing private client state. The dashboard surfaces the same recipe commands as a client setup guide next to the detected target list.
+Recipes are intentionally explicit. They give copy/paste, MCP pull, and verification steps without editing private client state. For a fuller copyable setup guide, use:
+
+```bash
+acb setup codex
+acb setup opencode --workspace . --json
+```
+
+The dashboard surfaces the same setup guide next to the detected target list.
 
 ## Workflow Verification
 

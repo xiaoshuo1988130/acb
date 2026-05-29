@@ -20,7 +20,14 @@ acb recipe cline
 acb recipe claude-desktop --json
 ```
 
-Use the recipe output as the current source of truth for the recommended command sequence. This document explains the same boundary in prose.
+Use the recipe output as the current source of truth for the recommended command sequence. For the fuller setup guide that mirrors the dashboard, use:
+
+```bash
+acb setup opencode
+acb setup codex --workspace . --json
+```
+
+This document explains the same boundary in prose.
 
 The dashboard shows the same client setup information next to the detected target list:
 

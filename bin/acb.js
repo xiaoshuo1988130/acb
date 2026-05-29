@@ -57,6 +57,7 @@ Usage:
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
   acb recipe [target] [--json]
+  acb setup <target> [--workspace <path>] [--json]
   acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
   acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
   acb verify workflow <target> [--workspace <path>] [--keep-artifacts] [--json]
@@ -339,6 +340,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "clear") return clearCommand(args);
   if (command === "doctor") return doctorCommand(args);
   if (command === "recipe" || command === "recipes") return recipeCommand(args);
+  if (command === "setup") return setupCommand(args);
   if (command === "config") return configCommand(args);
   if (command === "verify") return verifyCommand(args);
   if (command === "serve") return serveCommand(args);
@@ -1251,23 +1253,29 @@ function recommendDashboardTarget(targets) {
 }
 
 function buildDashboardTargetGuides(workspace = null) {
-  return Object.fromEntries(RECIPE_TARGETS.map((recipe) => {
-    const verifyArgs = workspace
-      ? ["verify", "workflow", recipe.id, "--workspace", workspace]
-      : ["verify", "workflow", recipe.id];
-    return [recipe.id, {
-      id: recipe.id,
-      title: recipe.title,
-      mode: recipe.mode,
-      setup: recipe.setup,
-      prompt: recipe.prompt,
-      notes: recipe.notes,
-      recipe_command: `acb recipe ${recipe.id}`,
-      mcp_config_command: "acb config mcp --out ./mcp.json",
-      mcp_verify_command: "acb verify mcp --config ./mcp.json --name acb",
-      workflow_verify_command: formatCommand("acb", verifyArgs),
-    }];
-  }));
+  return Object.fromEntries(RECIPE_TARGETS.map((recipe) => [recipe.id, buildSetupGuide(recipe, workspace)]));
+}
+
+function buildSetupGuide(recipe, workspace = null) {
+  const verifyArgs = workspace
+    ? ["verify", "workflow", recipe.id, "--workspace", workspace]
+    : ["verify", "workflow", recipe.id];
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    aliases: recipe.aliases,
+    mode: recipe.mode,
+    setup: recipe.setup,
+    prompt: recipe.prompt,
+    notes: recipe.notes,
+    recipe_command: `acb recipe ${recipe.id}`,
+    mcp_config_command: "acb config mcp --out ./mcp.json",
+    mcp_verify_command: "acb verify mcp --config ./mcp.json --name acb",
+    workflow_verify_command: formatCommand("acb", verifyArgs),
+    dashboard_command: workspace
+      ? formatCommand("acb", ["dashboard", "--workspace", workspace])
+      : "acb dashboard --workspace .",
+  };
 }
 
 function dashboardDetectorSignals(detector, workspace) {
@@ -2651,6 +2659,32 @@ function recipeCommand(args) {
   return 0;
 }
 
+function setupCommand(args) {
+  const wantsJson = args.includes("--json");
+  const target = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
+  if (!target) {
+    console.error("Usage: acb setup <target> [--workspace <path>] [--json]");
+    console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
+    return 2;
+  }
+
+  const recipe = findRecipe(target);
+  if (!recipe) {
+    console.error(`Unknown setup target: ${target}`);
+    console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
+    return 2;
+  }
+
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const guide = buildSetupGuide(recipe, workspace);
+  if (wantsJson) {
+    process.stdout.write(`${JSON.stringify(guide, null, 2)}\n`);
+    return 0;
+  }
+  printSetupGuide(guide, workspace);
+  return 0;
+}
+
 function findRecipe(target) {
   const normalized = target.toLowerCase();
   return RECIPE_TARGETS.find((recipe) => {
@@ -2696,6 +2730,26 @@ function printRecipe(recipe) {
   console.log("");
   console.log("Boundaries:");
   for (const note of recipe.notes) console.log(`- ${note}`);
+}
+
+function printSetupGuide(guide, workspace) {
+  console.log(`ACB Setup: ${guide.title}`);
+  console.log(`target: ${guide.id}`);
+  console.log(`workspace: ${workspace}`);
+  console.log(`mode: ${guide.mode}`);
+  console.log("");
+  console.log("Copy commands:");
+  console.log(`  ${guide.recipe_command}`);
+  console.log(`  ${guide.mcp_config_command}`);
+  console.log(`  ${guide.mcp_verify_command}`);
+  console.log(`  ${guide.workflow_verify_command}`);
+  console.log(`  ${guide.dashboard_command}`);
+  console.log("");
+  console.log("Client prompt:");
+  console.log(guide.prompt);
+  console.log("");
+  console.log("Boundaries:");
+  for (const note of guide.notes) console.log(`- ${note}`);
 }
 
 function configCommand(args) {
@@ -4225,6 +4279,19 @@ function argValues(args, name) {
       values.push(args[i + 1]);
       i += 1;
     }
+  }
+  return values;
+}
+
+function positionalArgs(args, valueFlags = new Set()) {
+  const values = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg.startsWith("--")) {
+      if (!arg.includes("=") && valueFlags.has(arg)) i += 1;
+      continue;
+    }
+    values.push(arg);
   }
   return values;
 }

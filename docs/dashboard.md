@@ -58,3 +58,10 @@ Use the dashboard when you want to inspect:
 - Whether the ACB side of a target workflow passes before touching the client.
 - Whether recent packets carry Git state or long body context.
 - The JSON shape a script or client could consume from `/api/state`.
+
+The same setup guide is available without the dashboard:
+
+```bash
+acb setup codex
+acb setup opencode --workspace . --json
+```

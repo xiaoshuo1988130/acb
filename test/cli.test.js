@@ -111,6 +111,7 @@ test("prints version and help", () => {
   assert.match(help.stdout, /acb dashboard/);
   assert.match(help.stdout, /acb brief/);
   assert.match(help.stdout, /acb recipe/);
+  assert.match(help.stdout, /acb setup/);
   assert.match(help.stdout, /acb quickstart/);
 
   const quickstart = run(["quickstart"]);
@@ -177,6 +178,34 @@ test("recipe lists and renders client handoff paths", () => {
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /Unknown recipe target/);
   assert.match(missing.stderr, /Available targets/);
+});
+
+test("setup renders a client setup guide", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+
+  const setup = run(["setup", "codex", "--workspace", workspace]);
+  assert.equal(setup.status, 0);
+  assert.match(setup.stdout, /ACB Setup: Codex/);
+  assert.match(setup.stdout, new RegExp(realWorkspace(workspace).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(setup.stdout, /acb recipe codex/);
+  assert.match(setup.stdout, /acb verify workflow codex --workspace/);
+  assert.match(setup.stdout, /acb dashboard --workspace/);
+  assert.match(setup.stdout, /Do not ask ACB to commit/);
+
+  const setupJson = run(["setup", "--workspace", workspace, "opencode", "--json"]);
+  assert.equal(setupJson.status, 0);
+  const guide = JSON.parse(setupJson.stdout);
+  assert.equal(guide.id, "opencode");
+  assert.equal(guide.title, "OpenCode");
+  assert.match(guide.workflow_verify_command, /acb verify workflow opencode --workspace/);
+  assert.match(guide.dashboard_command, /acb dashboard --workspace/);
+  assert.ok(guide.notes.some((note) => note.includes("OpenCode")));
+
+  const missing = run(["setup", "missing-client"]);
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /Unknown setup target/);
 });
 
 test("brief renders a compact receiving-side handoff", () => {
