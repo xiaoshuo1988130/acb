@@ -13,6 +13,7 @@ The dashboard serves:
 - `/` as a lightweight HTML view.
 - `/api/state` as machine-readable JSON.
 - `/api/copy-prompt` as a local-only POST endpoint used by the page's takeover buttons.
+- `/api/verify-workflow` as a local-only POST endpoint that runs the same ACB-side smoke test as `acb verify workflow <target>`.
 - `/health` as a small readiness check.
 
 It reads the current ACB store on each request, so refreshing the browser shows newer packets.
@@ -24,6 +25,7 @@ The HTML view is a three-pane local audit workspace:
 - Packet detail tabs for overview, copyable commands, body preview, and Git snapshot.
 - A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard.
 - Detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP clients.
+- A client setup guide with copyable recipe, MCP config, MCP verify, workflow verify, and first-prompt text for the selected target.
 - Workspace metadata and raw `/api/state` inspection.
 
 ## Boundaries
@@ -36,7 +38,7 @@ The dashboard is intentionally local and explicit:
 - No hidden prompt injection.
 - No mutation of Cline, Roo, OpenCode, VS Code, Claude Desktop, or other client storage.
 
-The only state-changing control is clipboard copy. Clicking `Copy Brief Prompt`, `Copy Full Prompt`, or `Copy MCP Pull Instruction` asks the local ACB process to render the selected packet and write that text to your system clipboard. You still decide where to paste it.
+The only state-changing controls are clipboard copy and temporary local workflow verification. Clicking `Copy Brief Prompt`, `Copy Full Prompt`, or `Copy MCP Pull Instruction` asks the local ACB process to render the selected packet and write that text to your system clipboard. Clicking `Run ACB-side Check` creates a temporary smoke-test store, verifies ACB recipe/handoff/brief/MCP/dashboard surfaces, and cleans the temporary artifacts. You still decide where to paste or configure the result.
 
 Target detection is read-only. ACB checks the current workspace, PATH, and a small set of common local client locations. The dashboard uses those signals to choose the initial `Next handoff` target, but you can still switch targets manually. It does not patch client settings, edit extension storage, or open private client databases.
 
@@ -52,5 +54,7 @@ Use the dashboard when you want to inspect:
 - Whether a packet has a compact `acb brief` path.
 - Which packet you want to copy into the next agent as a brief or full takeover prompt.
 - Which target client path looks most appropriate for the selected handoff.
+- Which setup commands and first prompt apply to a target client.
+- Whether the ACB side of a target workflow passes before touching the client.
 - Whether recent packets carry Git state or long body context.
 - The JSON shape a script or client could consume from `/api/state`.

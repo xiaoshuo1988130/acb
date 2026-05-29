@@ -152,7 +152,7 @@ acb recipe codex
 acb recipe generic-mcp
 ```
 
-Recipes are intentionally explicit. They give copy/paste, MCP pull, and verification steps without editing private client state.
+Recipes are intentionally explicit. They give copy/paste, MCP pull, and verification steps without editing private client state. The dashboard surfaces the same recipe commands as a client setup guide next to the detected target list.
 
 ## Workflow Verification
 
@@ -163,7 +163,7 @@ acb verify workflow opencode
 acb verify workflow cline --json
 ```
 
-This verifies the local recipe, handoff packet, brief, full resume prompt, MCP server, and dashboard state. It does not launch or mutate the third-party client.
+This verifies the local recipe, handoff packet, brief, full resume prompt, MCP server, and dashboard state. The dashboard can run the same ACB-side check from the selected client's setup guide. It does not launch or mutate the third-party client.
 
 ## Examples
 
@@ -247,7 +247,7 @@ acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP. It does not write to the packet store, silently inject prompt text, or edit any client configuration.
+It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a client setup guide with copyable recipe/config/verify commands and an ACB-side workflow check button. It does not write to the packet store, silently inject prompt text, or edit any client configuration.
 
 The default host is `127.0.0.1`. Keep it loopback-only unless you trust the network, because the dashboard includes local store metadata, workspace paths, and clipboard-copy controls. A `--workspace` dashboard only shows packets and workspace summaries for that workspace; use `--all` when you intentionally want a global view.
 
@@ -279,7 +279,7 @@ It does:
 - Save explicit handoff packets.
 - Render paste-ready prompts.
 - Provide explicit MCP read/write tools.
-- Provide read-only local dashboard and workflow verification surfaces.
+- Provide explicit local dashboard, client setup guide, and workflow verification surfaces.
 - Keep state local and inspectable.
 
 ## Relationship To DeepSeek CompatKit

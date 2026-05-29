@@ -986,6 +986,10 @@ function dashboardCommand(args) {
       await handleDashboardCopyPrompt(request, response, { workspace });
       return;
     }
+    if (request.method === "POST" && url.pathname === "/api/verify-workflow") {
+      await handleDashboardVerifyWorkflow(request, response, { workspace });
+      return;
+    }
     if (request.method !== "GET") {
       sendDashboardResponse(response, 405, "text/plain; charset=utf-8", "Method not allowed\n");
       return;
@@ -1094,6 +1098,42 @@ async function handleDashboardCopyPrompt(request, response, { workspace = null }
   });
 }
 
+async function handleDashboardVerifyWorkflow(request, response, { workspace = null } = {}) {
+  let payload;
+  try {
+    payload = await readJsonRequestBody(request, 4096);
+  } catch (error) {
+    sendDashboardJson(response, 400, { ok: false, error: error.message });
+    return;
+  }
+
+  const detectedTargets = detectDashboardTargets(workspace);
+  const fallbackTarget = recommendDashboardTarget(detectedTargets);
+  const requestedTarget = typeof payload.target_id === "string" ? payload.target_id.trim() : "";
+  const targetId = requestedTarget && requestedTarget !== "auto" ? requestedTarget : fallbackTarget.id;
+  const recipe = findRecipe(targetId);
+  if (!recipe) {
+    sendDashboardJson(response, 400, { ok: false, error: `Unknown workflow target: ${targetId || requestedTarget}` });
+    return;
+  }
+
+  const requestedWorkspace = typeof payload.workspace === "string" && payload.workspace.trim()
+    ? payload.workspace.trim()
+    : workspace || process.cwd();
+  const verifyWorkspace = normalizeWorkspace(requestedWorkspace);
+  const report = buildWorkflowVerifyReport(recipe, verifyWorkspace, { keepArtifacts: false });
+  sendDashboardJson(response, report.ok ? 200 : 500, {
+    ok: report.ok,
+    target: recipe.id,
+    title: recipe.title,
+    workspace: verifyWorkspace,
+    report,
+    message: report.ok
+      ? `ACB-side workflow check passed for ${recipe.title}.`
+      : `ACB-side workflow check failed for ${recipe.title}.`,
+  });
+}
+
 function findDashboardTarget(targetId) {
   if (!targetId) return null;
   return DASHBOARD_TARGETS.find((target) => target.id === targetId || target.aliases.includes(targetId)) || null;
@@ -1150,6 +1190,7 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     : listWorkspaceSummaries(20);
   const targets = detectDashboardTargets(workspace);
   const recommendedTarget = recommendDashboardTarget(targets);
+  const targetGuides = buildDashboardTargetGuides(workspace);
   return {
     version: VERSION,
     generated_at: new Date().toISOString(),
@@ -1166,6 +1207,7 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     packets: packets.map(dashboardPacketSummary),
     workspaces,
     targets,
+    target_guides: targetGuides,
     recommended_target_id: recommendedTarget.id,
   };
 }
@@ -1206,6 +1248,26 @@ function recommendDashboardTarget(targets) {
     confidence: "recommended",
     signals: [],
   };
+}
+
+function buildDashboardTargetGuides(workspace = null) {
+  return Object.fromEntries(RECIPE_TARGETS.map((recipe) => {
+    const verifyArgs = workspace
+      ? ["verify", "workflow", recipe.id, "--workspace", workspace]
+      : ["verify", "workflow", recipe.id];
+    return [recipe.id, {
+      id: recipe.id,
+      title: recipe.title,
+      mode: recipe.mode,
+      setup: recipe.setup,
+      prompt: recipe.prompt,
+      notes: recipe.notes,
+      recipe_command: `acb recipe ${recipe.id}`,
+      mcp_config_command: "acb config mcp --out ./mcp.json",
+      mcp_verify_command: "acb verify mcp --config ./mcp.json --name acb",
+      workflow_verify_command: formatCommand("acb", verifyArgs),
+    }];
+  }));
 }
 
 function dashboardDetectorSignals(detector, workspace) {
@@ -1427,6 +1489,32 @@ function renderDashboardHtml(state) {
     .target-description { color: var(--muted); font-size: 12px; margin-top: 4px; }
     .target-card:not(.active) .target-description,
     .target-card:not(.active) .badge-row { display: none; }
+    .setup-guide {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+    }
+    .setup-guide h3 { margin-bottom: 6px; }
+    .setup-guide p { font-size: 13px; }
+    .setup-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .setup-note-list { margin-top: 8px; }
+    .setup-note-list li { display: block; font-size: 12px; color: var(--muted); padding: 6px 0; }
+    .verify-result {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--code);
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .verify-result.ok { border-color: rgba(26, 127, 55, 0.25); background: rgba(26, 127, 55, 0.08); }
+    .verify-result.fail { border-color: rgba(207, 34, 46, 0.25); background: rgba(207, 34, 46, 0.08); }
     .detail-title { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
     .detail-title h2 { font-size: 22px; overflow-wrap: anywhere; }
     .takeover {
@@ -1576,6 +1664,7 @@ function renderDashboardHtml(state) {
           <h2>Target Client</h2>
           <span class="small" id="target-count"></span>
         </div>
+        <div id="setup-guide"></div>
         <div class="target-list" id="target-list"></div>
         <div class="panel-header">
           <h2>Workspace</h2>
@@ -1618,6 +1707,7 @@ function renderDashboardHtml(state) {
       renderNextHandoff();
       renderDetail();
       renderTargets();
+      renderSetupGuide();
       renderWorkspaces();
       el("raw-json").textContent = JSON.stringify(state, null, 2);
     }
@@ -1783,6 +1873,45 @@ function renderDashboardHtml(state) {
       }
     }
 
+    function setupGuideTarget() {
+      const target = selectedTarget();
+      if (target.id !== "auto") return target;
+      return (state.targets || []).find((item) => item.id === state.recommended_target_id) || target;
+    }
+
+    function renderSetupGuide() {
+      const target = setupGuideTarget();
+      const guide = state.target_guides ? state.target_guides[target.id] : null;
+      if (!guide) {
+        el("setup-guide").innerHTML = '<div class="setup-guide"><h3>Client Setup</h3><p>Select a concrete target client to see setup commands and verification.</p></div>';
+        return;
+      }
+      const packet = selectedPacket();
+      const verifyWorkspace = packet?.workspace || state.workspace || "";
+      const commands = [
+        ["Recipe", guide.recipe_command],
+        ["MCP config", guide.mcp_config_command],
+        ["MCP verify", guide.mcp_verify_command],
+        ["Workflow check", guide.workflow_verify_command],
+      ];
+      const notes = (guide.notes || []).slice(0, 3).map((note) => '<li>' + escape(note) + '</li>').join("");
+      el("setup-guide").innerHTML =
+        '<section class="setup-guide" aria-label="client setup guide">' +
+          '<div class="kicker">Client setup</div>' +
+          '<h3>' + escape(guide.title) + '</h3>' +
+          '<p>' + escape(guide.mode) + '</p>' +
+          '<div class="setup-actions">' +
+            '<button class="btn primary" data-verify-workflow="' + escape(target.id) + '" data-workspace="' + escape(verifyWorkspace) + '">Run ACB-side Check</button>' +
+            '<div class="verify-result hidden" id="verify-result"></div>' +
+            commands.map(([label, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">Copy ' + escape(label) + '</button></div>').join("") +
+            '<div class="command"><code>' + escape(guide.prompt) + '</code><button class="btn" data-copy="' + escape(guide.prompt) + '">Copy Prompt</button></div>' +
+          '</div>' +
+          '<ul class="setup-note-list">' + notes + '</ul>' +
+        '</section>';
+      wireCopyButtons();
+      wireVerifyButtons();
+    }
+
     function renderTab(packet) {
       if (activeTab === "commands") {
         return '<div class="command-grid">' + [
@@ -1831,12 +1960,51 @@ function renderDashboardHtml(state) {
 
     function wireCopyButtons() {
       for (const button of document.querySelectorAll("[data-copy]")) {
+        if (button.dataset.copyBound === "true") continue;
+        button.dataset.copyBound = "true";
         button.addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(button.dataset.copy);
             showToast("Copied");
           } catch {
             showToast("Copy failed");
+          }
+        });
+      }
+    }
+
+    function wireVerifyButtons() {
+      for (const button of document.querySelectorAll("[data-verify-workflow]")) {
+        if (button.dataset.verifyBound === "true") continue;
+        button.dataset.verifyBound = "true";
+        button.addEventListener("click", async () => {
+          const previous = button.textContent;
+          const result = el("verify-result");
+          button.disabled = true;
+          button.textContent = "Checking...";
+          result.className = "verify-result";
+          result.textContent = "Running ACB-side workflow check...";
+          try {
+            const response = await fetch("/api/verify-workflow", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ target_id: button.dataset.verifyWorkflow, workspace: button.dataset.workspace }),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) throw new Error(payload.error || payload.message || "Workflow check failed");
+            const checks = Object.entries(payload.report.checks)
+              .map(([name, ok]) => name + ": " + (ok ? "ok" : "failed"))
+              .join("\\n");
+            result.className = "verify-result ok";
+            result.textContent = payload.message + "\\n" + checks;
+            showToast("Workflow check passed");
+          } catch (error) {
+            result.className = "verify-result fail";
+            result.textContent = error.message || "Workflow check failed";
+            showToast("Workflow check failed");
+          } finally {
+            button.disabled = false;
+            button.textContent = previous;
           }
         });
       }

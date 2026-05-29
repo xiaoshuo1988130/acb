@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+Client setup guide.
+
+### Added
+
+- Added a dashboard client setup guide that shows target-specific setup commands, handoff prompts, and safety notes next to target detection.
+- Added a local-only dashboard workflow verification endpoint so users can run ACB-side client readiness checks from the UI without launching or editing third-party clients.
+- Added copy controls for recipe, MCP config, MCP verify, workflow verify, and client prompt commands in the dashboard.
+
 ## 0.5.2
 
 Dashboard takeover controls.

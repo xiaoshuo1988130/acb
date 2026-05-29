@@ -1031,9 +1031,12 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Start here/);
     assert.match(html, /Next handoff/);
     assert.match(html, /Target Client/);
+    assert.match(html, /Client setup/);
+    assert.match(html, /Run ACB-side Check/);
     assert.match(html, /OpenCode/);
     assert.match(html, /Codex/);
     assert.match(html, /\/api\/copy-prompt/);
+    assert.match(html, /\/api\/verify-workflow/);
 
     const state = JSON.parse(await httpGet(`${url}api/state`));
     assert.equal(state.version, pkg.version);
@@ -1046,6 +1049,9 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.ok(state.targets.some((target) => target.id === "codex"));
     assert.ok(state.recommended_target_id);
     assert.ok(state.targets.some((target) => target.id === state.recommended_target_id));
+    assert.ok(state.target_guides.codex);
+    assert.match(state.target_guides.codex.recipe_command, /acb recipe codex/);
+    assert.match(state.target_guides.codex.workflow_verify_command, /acb verify workflow codex/);
     assert.deepEqual(state.workspaces.map((item) => item.workspace), [realWorkspace(workspace)]);
     assert.equal(state.latest_packet.summary, "Dashboard smoke");
     assert.match(state.latest_packet.next_brief, /^acb brief --id pkt_/);
@@ -1075,6 +1081,17 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.equal(mcpPayload.ok, true);
     assert.equal(mcpPayload.mode, "mcp");
     assert.match(mcpPayload.message, /MCP pull instruction is ready/);
+
+    const workflowDryRun = await httpPostJson(`${url}api/verify-workflow`, {
+      target_id: "codex",
+      workspace,
+    });
+    assert.equal(workflowDryRun.statusCode, 200);
+    const workflowPayload = JSON.parse(workflowDryRun.body);
+    assert.equal(workflowPayload.ok, true);
+    assert.equal(workflowPayload.target, "codex");
+    assert.equal(workflowPayload.report.checks.dashboard_html, true);
+    assert.equal(workflowPayload.report.artifacts_cleaned, true);
 
     const blocked = await httpPostJson(`${url}api/copy-prompt`, {
       id: JSON.parse(run(["latest", "--workspace", otherWorkspace, "--json"], { env }).stdout).id,

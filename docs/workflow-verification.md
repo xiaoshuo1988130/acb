@@ -32,6 +32,8 @@ The command uses a temporary local store and checks:
 
 The temporary store is deleted by default after the report is built. Use `--keep-artifacts` only when you need to inspect the generated smoke-test store. The command prints next commands for the real workflow after the smoke test passes.
 
+The dashboard exposes the same ACB-side check as `Run ACB-side Check` in the selected client's setup guide. That button calls local `/api/verify-workflow`, runs the temporary smoke test, and reports the same pass/fail checks without launching the client.
+
 ## What It Does Not Do
 
 It does not launch OpenCode, Cline, Roo, Claude Desktop, Codex, or any other third-party client.

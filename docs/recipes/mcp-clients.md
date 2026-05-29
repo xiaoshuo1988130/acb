@@ -22,6 +22,14 @@ acb recipe claude-desktop --json
 
 Use the recipe output as the current source of truth for the recommended command sequence. This document explains the same boundary in prose.
 
+The dashboard shows the same client setup information next to the detected target list:
+
+```bash
+acb dashboard --workspace .
+```
+
+Use the dashboard when you want copy buttons for recipe/config/verify commands or a click-driven ACB-side workflow check.
+
 Before wiring a client manually, smoke-test the ACB side:
 
 ```bash
