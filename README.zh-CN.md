@@ -237,3 +237,4 @@ acb store backup --out ./acb-store.backup.json
 ## 中文快速上手
 
 更短的中文上手说明见 [docs/zh-CN/quickstart.md](docs/zh-CN/quickstart.md)。
+英文首次运行完整路径见 [docs/first-run.md](docs/first-run.md)。

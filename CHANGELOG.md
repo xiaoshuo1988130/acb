@@ -9,6 +9,7 @@ First-run dashboard actions.
 - Added a local-only dashboard `Create demo packet` action so empty workspaces can become inspectable without leaving the page.
 - Added `/api/create-demo` for explicit local demo packet creation with English and Chinese packet content.
 - Added human-readable `Next actions` cards and JSON `actions` to `acb quickstart --check`.
+- Added `docs/first-run.md` as the English install-to-first-handoff guide.
 - Documented the dashboard demo creation path.
 
 ## 0.8.0
