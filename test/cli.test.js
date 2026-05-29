@@ -128,7 +128,8 @@ test("prints version and help", () => {
   assert.equal(quickstartCheck.status, 0);
   assert.match(quickstartCheck.stdout, /ACB Quickstart Check/);
   assert.match(quickstartCheck.stdout, /recommended_target:/);
-  assert.match(quickstartCheck.stdout, /next_setup: acb setup/);
+  assert.match(quickstartCheck.stdout, /next_setup: acb setup --workspace/);
+  assert.match(quickstartCheck.stdout, /--check/);
   assert.match(quickstartCheck.stdout, /next_workflow_verify: acb verify workflow/);
   assert.match(quickstartCheck.stdout, /next_dashboard: acb dashboard --workspace/);
   assert.match(quickstartCheck.stdout, /next_handoff: acb handoff/);
@@ -144,7 +145,8 @@ test("prints version and help", () => {
   assert.equal(quickstartReport.store_path, storePath);
   assert.ok(quickstartReport.setup.id);
   assert.equal(quickstartReport.setup.auto_selected, true);
-  assert.equal(quickstartReport.next.setup, "acb setup");
+  assert.match(quickstartReport.next.setup, /acb setup --workspace/);
+  assert.match(quickstartReport.next.setup, /--check/);
   assert.match(quickstartReport.next.dashboard, /acb dashboard --workspace/);
   assert.match(quickstartReport.next.workflow_verify, /acb verify workflow/);
   assert.equal(quickstartReport.next.resume, "acb resume");
@@ -223,6 +225,25 @@ test("setup renders a client setup guide", () => {
   const autoText = run(["setup", "--workspace", workspace]);
   assert.equal(autoText.status, 0);
   assert.match(autoText.stdout, /selection: auto/);
+
+  const checked = run(["setup", "codex", "--workspace", workspace, "--check"]);
+  assert.equal(checked.status, 0);
+  assert.match(checked.stdout, /ACB-side check:/);
+  assert.match(checked.stdout, /target: codex/);
+  assert.match(checked.stdout, /mcp_latest_handoff: ok/);
+  assert.match(checked.stdout, /dashboard_html: ok/);
+  assert.match(checked.stdout, /store: .*cleaned/);
+
+  const checkedJson = run(["setup", "--workspace", workspace, "opencode", "--check", "--json"]);
+  assert.equal(checkedJson.status, 0);
+  const checkedGuide = JSON.parse(checkedJson.stdout);
+  assert.equal(checkedGuide.id, "opencode");
+  assert.equal(checkedGuide.workflow_check_ok, true);
+  assert.equal(checkedGuide.workflow_check.target, "opencode");
+  assert.equal(checkedGuide.workflow_check.workspace, realWorkspace(workspace));
+  assert.equal(checkedGuide.workflow_check.artifacts_cleaned, true);
+  assert.equal(fs.existsSync(checkedGuide.workflow_check.store_path), false);
+  assert.equal(checkedGuide.workflow_check.checks.mcp_latest_handoff, true);
 
   const missing = run(["setup", "missing-client"]);
   assert.equal(missing.status, 2);

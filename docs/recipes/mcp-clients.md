@@ -24,6 +24,7 @@ Use the recipe output as the current source of truth for the recommended command
 
 ```bash
 acb setup
+acb setup --check
 acb setup opencode
 acb setup codex --workspace . --json
 ```

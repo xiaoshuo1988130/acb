@@ -32,7 +32,7 @@ Or run without installing:
 npx @xiaoshuo1988/acb quickstart --check
 ```
 
-The check also prints a recommended client target, `acb setup`, `acb verify workflow`, and `acb dashboard` next steps.
+The check also prints a recommended client target, `acb setup --check`, `acb verify workflow`, and `acb dashboard` next steps.
 
 ## 60 Second Flow
 
@@ -158,11 +158,13 @@ Recipes are intentionally explicit. They give copy/paste, MCP pull, and verifica
 
 ```bash
 acb setup
+acb setup --check
 acb setup codex
 acb setup opencode --workspace . --json
 ```
 
 Without a target, `acb setup` uses the same read-only detection as the dashboard and picks the best local target. The dashboard surfaces the same setup guide next to the detected target list.
+Add `--check` to run the same ACB-side workflow smoke test inline before you copy setup commands into a client.
 
 ## Workflow Verification
 
@@ -171,6 +173,7 @@ Before trying a client by hand, run an ACB-side workflow smoke test:
 ```bash
 acb verify workflow opencode
 acb verify workflow cline --json
+acb setup codex --check
 ```
 
 This verifies the local recipe, handoff packet, brief, full resume prompt, MCP server, and dashboard state. The dashboard can run the same ACB-side check from the selected client's setup guide. It does not launch or mutate the third-party client.

@@ -57,7 +57,7 @@ Usage:
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
   acb recipe [target] [--json]
-  acb setup [target] [--workspace <path>] [--json]
+  acb setup [target] [--workspace <path>] [--check] [--keep-artifacts] [--json]
   acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
   acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
   acb verify workflow <target> [--workspace <path>] [--keep-artifacts] [--json]
@@ -384,7 +384,7 @@ function quickstartCommand(args) {
         resume: "acb resume",
         brief: "acb brief",
         doctor: "acb doctor",
-        setup: "acb setup",
+        setup: formatCommand("acb", ["setup", "--workspace", workspace, "--check"]),
         dashboard: formatCommand("acb", ["dashboard", "--workspace", workspace]),
         workflow_verify: setupResult.ok ? setupResult.guide.workflow_verify_command : "acb verify workflow codex",
         mcp_config: report.mcp.config_command,
@@ -2672,6 +2672,7 @@ function recipeCommand(args) {
 
 function setupCommand(args) {
   const wantsJson = args.includes("--json");
+  const wantsCheck = args.includes("--check");
   const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
   const target = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
   const result = buildSetupGuideForTarget({ target, workspace });
@@ -2681,13 +2682,25 @@ function setupCommand(args) {
     return 2;
   }
 
-  const guide = result.guide;
+  const guide = wantsCheck
+    ? {
+        ...result.guide,
+        workflow_check: buildWorkflowVerifyReport(result.recipe, workspace, {
+          keepArtifacts: args.includes("--keep-artifacts"),
+        }),
+      }
+    : result.guide;
+  if (guide.workflow_check) guide.workflow_check_ok = guide.workflow_check.ok;
   if (wantsJson) {
     process.stdout.write(`${JSON.stringify(guide, null, 2)}\n`);
-    return 0;
+    return guide.workflow_check ? (guide.workflow_check.ok ? 0 : 1) : 0;
   }
   printSetupGuide(guide, workspace);
-  return 0;
+  if (guide.workflow_check) {
+    console.log("");
+    printSetupWorkflowCheck(guide.workflow_check);
+  }
+  return guide.workflow_check ? (guide.workflow_check.ok ? 0 : 1) : 0;
 }
 
 function buildSetupGuideForTarget({ target = null, workspace }) {
@@ -2782,6 +2795,17 @@ function printSetupGuide(guide, workspace) {
   console.log("");
   console.log("Boundaries:");
   for (const note of guide.notes) console.log(`- ${note}`);
+}
+
+function printSetupWorkflowCheck(report) {
+  console.log("ACB-side check:");
+  console.log(`  target: ${report.target}`);
+  console.log(`  ok: ${report.ok ? "yes" : "no"}`);
+  for (const [name, ok] of Object.entries(report.checks)) {
+    console.log(`  ${name}: ${ok ? "ok" : "failed"}`);
+  }
+  console.log(`  store: ${report.store_path}${report.artifacts_cleaned ? " (cleaned)" : ""}`);
+  console.log(`  limitation: ${report.limitation}`);
 }
 
 function configCommand(args) {

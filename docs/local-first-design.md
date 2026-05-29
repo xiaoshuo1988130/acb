@@ -164,7 +164,7 @@ It reports:
 
 It does not copy anything to the clipboard and does not modify the packet store.
 
-`acb quickstart --check` is the new-user version of the same readiness check. It keeps the output short and reports the installed version, store readability, clipboard fallback status, current workspace, recommended target client, and the next `setup`, `handoff`, `resume`, `dashboard`, `verify workflow`, `doctor`, and MCP commands.
+`acb quickstart --check` is the new-user version of the same readiness check. It keeps the output short and reports the installed version, store readability, clipboard fallback status, current workspace, recommended target client, and the next `setup`, `handoff`, `resume`, `dashboard`, `verify workflow`, `doctor`, and MCP commands. `acb setup --check` then turns that recommendation into a guided setup page plus the same ACB-side workflow smoke test, without launching or mutating the selected client.
 
 If the local store is malformed, ACB fails closed: write commands do not overwrite the file. `acb doctor` reports `store_readable: no` and prints the parse or shape error so the user can inspect or restore the file manually.
 
@@ -315,6 +315,7 @@ acb verify mcp --config ./mcp.json --name acb --json
 acb verify workflow opencode
 acb verify workflow cline --json
 acb verify workflow codex --keep-artifacts --json
+acb setup codex --check
 ```
 
 It uses a temporary store and verifies recipe lookup, handoff save, full resume prompt, compact brief, MCP server readiness against the target workspace, dashboard state, and dashboard HTML. The temporary store is cleaned by default; use `--keep-artifacts` for debugging. This is the project-level smoke test for real client workflows while keeping third-party app setup explicit.

@@ -7,6 +7,7 @@ acb verify workflow opencode
 acb verify workflow cline --workspace .
 acb verify workflow claude-desktop --json
 acb verify workflow codex --keep-artifacts --json
+acb setup codex --check
 ```
 
 Supported targets are the same targets as `acb recipe`:
@@ -33,6 +34,8 @@ The command uses a temporary local store and checks:
 The temporary store is deleted by default after the report is built. Use `--keep-artifacts` only when you need to inspect the generated smoke-test store. The command prints next commands for the real workflow after the smoke test passes.
 
 The dashboard exposes the same ACB-side check as `Run ACB-side Check` in the selected client's setup guide. That button calls local `/api/verify-workflow`, runs the temporary smoke test, and reports the same pass/fail checks without launching the client.
+
+`acb setup [target] --check` is the guided version of the same smoke test. It prints the setup commands and client prompt first, then appends a compact ACB-side check report so a new user can verify the handoff path before touching client configuration.
 
 ## What It Does Not Do
 
