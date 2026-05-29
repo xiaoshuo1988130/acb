@@ -8,6 +8,14 @@ acb dashboard --all --limit 50
 acb dashboard --workspace . --host 127.0.0.1 --port 8765 --open
 ```
 
+If the current workspace has no handoff packets yet, the dashboard shows first-run commands for a safe local demo, a real handoff, and setup verification:
+
+```bash
+acb demo --workspace .
+acb handoff --from codex --summary "Ready for next agent" --git
+acb setup --workspace . --check
+```
+
 The dashboard serves:
 
 - `/` as a lightweight HTML view.

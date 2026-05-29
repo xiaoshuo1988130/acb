@@ -36,6 +36,13 @@ npx @xiaoshuo1988/acb quickstart --check
 
 The check also prints a recommended client target, `acb setup --check`, `acb verify workflow`, and `acb dashboard` next steps.
 
+To explore ACB before you have real handoff history, create a local demo packet:
+
+```bash
+acb demo
+acb dashboard --workspace .
+```
+
 ## 60 Second Flow
 
 From the agent that has the context:
@@ -198,6 +205,7 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 ```bash
 acb quickstart
 acb quickstart --check
+acb demo
 acb handoff --from <agent> --summary <text> --status <text> --note <text>
 acb resume
 acb brief

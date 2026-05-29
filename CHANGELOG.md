@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0
+
+First-run onboarding.
+
+### Added
+
+- Added `acb demo` to create an explicit local sample handoff packet for first-run dashboard exploration.
+- Added bilingual dashboard empty states that point users to `acb demo`, a real `acb handoff`, and `acb setup --check`.
+- Added `next_demo` guidance to `acb quickstart --check` in both English and Chinese.
+
 ## 0.7.0
 
 Chinese onboarding.

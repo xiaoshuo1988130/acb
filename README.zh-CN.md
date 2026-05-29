@@ -46,7 +46,14 @@ ACB_LANG=zh-CN acb quickstart --check
 npx @xiaoshuo1988/acb quickstart --check
 ```
 
-检查结果会给出推荐目标客户端，以及下一步的 `acb setup --check`、`acb verify workflow` 和 `acb dashboard` 命令。
+检查结果会给出推荐目标客户端，以及下一步的 `acb demo`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 命令。
+
+如果还没有真实 handoff 历史，可以先创建一条本地示例上下文包：
+
+```bash
+acb demo --lang zh-CN
+acb dashboard --workspace . --lang zh-CN
+```
 
 ## 60 秒流程
 
@@ -213,6 +220,7 @@ Dashboard 是一个显式启动的本地控制面板：
 
 ```bash
 acb quickstart --check
+acb demo --lang zh-CN
 acb handoff --from <agent> --summary <text> --git
 acb resume
 acb brief

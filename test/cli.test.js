@@ -113,6 +113,7 @@ test("prints version and help", () => {
   assert.match(help.stdout, /acb recipe/);
   assert.match(help.stdout, /acb setup/);
   assert.match(help.stdout, /acb quickstart/);
+  assert.match(help.stdout, /acb demo/);
 
   const quickstart = run(["quickstart"]);
   assert.equal(quickstart.status, 0);
@@ -128,6 +129,7 @@ test("prints version and help", () => {
   assert.equal(quickstartCheck.status, 0);
   assert.match(quickstartCheck.stdout, /ACB Quickstart Check/);
   assert.match(quickstartCheck.stdout, /recommended_target:/);
+  assert.match(quickstartCheck.stdout, /next_demo: acb demo --workspace/);
   assert.match(quickstartCheck.stdout, /next_setup: acb setup --workspace/);
   assert.match(quickstartCheck.stdout, /--check/);
   assert.match(quickstartCheck.stdout, /next_workflow_verify: acb verify workflow/);
@@ -140,6 +142,7 @@ test("prints version and help", () => {
   assert.equal(quickstartChinese.status, 0);
   assert.match(quickstartChinese.stdout, /ACB 快速检查/);
   assert.match(quickstartChinese.stdout, /推荐目标：/);
+  assert.match(quickstartChinese.stdout, /下一步 demo：acb demo --workspace/);
   assert.match(quickstartChinese.stdout, /下一步 setup：acb setup --workspace/);
   assert.match(quickstartChinese.stdout, /--lang zh-CN/);
   assert.match(quickstartChinese.stdout, /下一步 dashboard：acb dashboard --workspace/);
@@ -153,12 +156,39 @@ test("prints version and help", () => {
   assert.equal(quickstartReport.store_path, storePath);
   assert.ok(quickstartReport.setup.id);
   assert.equal(quickstartReport.setup.auto_selected, true);
+  assert.match(quickstartReport.next.demo, /acb demo --workspace/);
   assert.match(quickstartReport.next.setup, /acb setup --workspace/);
   assert.match(quickstartReport.next.setup, /--check/);
   assert.match(quickstartReport.next.dashboard, /acb dashboard --workspace/);
   assert.match(quickstartReport.next.workflow_verify, /acb verify workflow/);
   assert.equal(quickstartReport.next.resume, "acb resume");
   assert.equal(quickstartReport.next.brief, "acb brief");
+});
+
+test("demo creates first-run onboarding packets", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const demo = run(["demo", "--workspace", workspace], { env });
+  assert.equal(demo.status, 0);
+  assert.match(demo.stdout, /ACB demo handoff packet created/);
+  assert.match(demo.stdout, /acb dashboard --workspace/);
+  assert.match(demo.stdout, /acb setup --workspace/);
+
+  const latest = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.equal(latest.from, "acb-demo");
+  assert.match(latest.summary, /ACB demo handoff/);
+  assert.ok(latest.tags.includes("demo"));
+  assert.match(latest.body, /Suggested first-run path/);
+
+  const zh = run(["demo", "--workspace", workspace, "--lang", "zh-CN", "--json"], { env });
+  assert.equal(zh.status, 0);
+  const zhReport = JSON.parse(zh.stdout);
+  assert.match(zhReport.packet.summary, /ACB 示例 handoff/);
+  assert.ok(zhReport.packet.tags.includes("zh-CN"));
+  assert.match(zhReport.next.dashboard, /--lang zh-CN/);
 });
 
 test("recipe lists and renders client handoff paths", () => {
@@ -1065,6 +1095,35 @@ test("view writes a standalone local HTML viewer", () => {
   const badLimit = run(["view", "--limit", "0"], { env });
   assert.equal(badLimit.status, 2);
   assert.match(badLimit.stderr, /--limit must be/);
+});
+
+test("dashboard empty state points to demo onboarding", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ...process.env, ACB_STORE: path.join(dir, "packets.json") };
+  const child = spawn(process.execPath, [bin, "dashboard", "--workspace", workspace, "--port", "0"], {
+    cwd: process.cwd(),
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  try {
+    const match = await waitForStdout(child, /dashboard: (http:\/\/127\.0\.0\.1:\d+\/)/);
+    const url = match[1];
+    const html = await httpGet(url);
+    assert.match(html, /No handoff packets yet/);
+    assert.match(html, /acb demo --workspace/);
+    assert.match(html, /Create demo context/);
+
+    const zhHtml = await httpGet(`${url}?lang=zh-CN`);
+    assert.match(zhHtml, /还没有上下文包/);
+    assert.match(zhHtml, /acb demo --workspace/);
+    assert.match(zhHtml, /--lang zh-CN/);
+    assert.match(zhHtml, /创建示例上下文/);
+  } finally {
+    child.kill();
+  }
 });
 
 test("dashboard serves local state and explicit takeover prompt controls", async () => {

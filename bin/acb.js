@@ -36,6 +36,7 @@ const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
   acb handoff [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--no-copy | --print-prompt | --json]
+  acb demo [--workspace <path>] [--from <agent>] [--lang en|zh-CN] [--json]
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--copy | --print-prompt | --json]
   acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]
   acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
@@ -81,6 +82,10 @@ Install:
 
 Check your local setup:
   acb quickstart --check
+
+Try a safe demo packet:
+  acb demo
+  acb dashboard --workspace .
 
 1. From the agent that has context:
   acb handoff --from codex --summary "Ready for the next agent" --git
@@ -319,6 +324,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
   if (command === "quickstart") return quickstartCommand(args);
   if (command === "handoff") return handoffCommand(args);
+  if (command === "demo") return demoCommand(args);
   if (command === "save") return saveCommand(args);
   if (command === "update") return updateCommand(args);
   if (command === "diff-preview") return diffPreviewCommand(args);
@@ -405,6 +411,7 @@ function quickstartCommand(args) {
         resume: "acb resume",
         brief: "acb brief",
         doctor: "acb doctor",
+        demo: formatCommand("acb", ["demo", "--workspace", workspace, ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
         setup: formatCommand("acb", ["setup", "--workspace", workspace, "--check", ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
         dashboard: formatCommand("acb", ["dashboard", "--workspace", workspace, ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
         workflow_verify: setupResult.ok ? setupResult.guide.workflow_verify_command : "acb verify workflow codex",
@@ -426,6 +433,120 @@ function quickstartCommand(args) {
   }
 
   return print(quickstart);
+}
+
+function demoCommand(args) {
+  const lang = resolveLanguage(args);
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const from = argValue(args, "--from") || "acb-demo";
+  const packet = createDemoPacket({ workspace, from, lang });
+  const store = loadStore();
+  store.packets.unshift(packet);
+  writeStore(store);
+
+  const report = {
+    ok: true,
+    packet: packetSummary(packet),
+    next: demoNextSteps(packet, lang),
+  };
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+  printDemoReport(report, { lang });
+  return 0;
+}
+
+function createDemoPacket({ workspace, from, lang }) {
+  if (isChinese(lang)) {
+    return createHandoffPacket({
+      from,
+      workspace,
+      summary: "ACB 示例 handoff：打开 dashboard 体验上下文交接",
+      status: "示例数据，用于第一次熟悉 ACB 的 handoff、brief、setup 和 dashboard",
+      notes: [
+        "打开 dashboard 后，可以在首屏看到这条示例上下文包。",
+        "点击“复制简短提示词”可以体验把上下文交给下一个 Agent 的过程。",
+        "右侧目标客户端区域可以运行 ACB 侧检查，但不会启动或修改第三方客户端。",
+      ],
+      tags: ["demo", "onboarding", "zh-CN"],
+      body: [
+        "# ACB 示例上下文包",
+        "",
+        "这条 packet 由 `acb demo` 显式创建，只写入本地 ACB store。",
+        "",
+        "推荐体验顺序：",
+        "",
+        "1. 运行 `acb dashboard --workspace . --lang zh-CN`。",
+        "2. 在 dashboard 中查看这条 packet。",
+        "3. 点击复制简短提示词，粘贴给另一个 Agent。",
+        "4. 运行 `acb setup --check --lang zh-CN` 查看推荐客户端路径。",
+        "",
+        "ACB 不会隐藏注入 prompt，也不会修改 OpenCode、Cline、Roo、Claude Desktop 或 Codex 的私有配置。",
+      ].join("\n"),
+      git: null,
+    });
+  }
+  return createHandoffPacket({
+    from,
+    workspace,
+    summary: "ACB demo handoff: open the dashboard and try context takeover",
+    status: "Demo data for first-run handoff, brief, setup, and dashboard exploration",
+    notes: [
+      "Open the dashboard to inspect this sample packet.",
+      "Click Copy Brief Prompt to try moving context into another agent.",
+      "Run the ACB-side check from the target client panel before configuring a real client.",
+    ],
+    tags: ["demo", "onboarding"],
+    body: [
+      "# ACB Demo Packet",
+      "",
+      "This packet was explicitly created by `acb demo` and stored only in your local ACB store.",
+      "",
+      "Suggested first-run path:",
+      "",
+      "1. Run `acb dashboard --workspace .`.",
+      "2. Inspect this packet in the dashboard.",
+      "3. Copy the brief prompt and paste it into another agent.",
+      "4. Run `acb setup --check` to see the recommended client path.",
+      "",
+      "ACB does not inject hidden prompts or mutate OpenCode, Cline, Roo, Claude Desktop, or Codex private configuration.",
+    ].join("\n"),
+    git: null,
+  });
+}
+
+function demoNextSteps(packet, lang) {
+  const langArgs = isChinese(lang) ? ["--lang", "zh-CN"] : [];
+  return {
+    dashboard: formatCommand("acb", ["dashboard", "--workspace", packet.workspace, ...langArgs]),
+    brief: `acb brief --id ${packet.id}`,
+    resume: `acb resume --id ${packet.id}`,
+    setup: formatCommand("acb", ["setup", "--workspace", packet.workspace, "--check", ...langArgs]),
+    show: `acb show ${packet.id}`,
+  };
+}
+
+function printDemoReport(report, { lang = "en" } = {}) {
+  if (isChinese(lang)) {
+    console.log("ACB 示例上下文包已创建");
+    console.log(`id：${report.packet.id}`);
+    console.log(`工作区：${report.packet.workspace}`);
+    console.log(`summary：${report.packet.summary}`);
+    console.log("下一步：");
+    console.log(`  ${report.next.dashboard}`);
+    console.log(`  ${report.next.brief}`);
+    console.log(`  ${report.next.setup}`);
+    return;
+  }
+  console.log("ACB demo handoff packet created");
+  console.log(`id: ${report.packet.id}`);
+  console.log(`workspace: ${report.packet.workspace}`);
+  console.log(`summary: ${report.packet.summary}`);
+  console.log("next:");
+  console.log(`  ${report.next.dashboard}`);
+  console.log(`  ${report.next.brief}`);
+  console.log(`  ${report.next.setup}`);
 }
 
 function saveCommand(args) {
@@ -1314,6 +1435,17 @@ function buildSetupGuide(recipe, workspace = null) {
   };
 }
 
+function buildDashboardOnboarding(workspace = null, lang = "en") {
+  const langArgs = isChinese(lang) ? ["--lang", "zh-CN"] : [];
+  const workspaceArgs = workspace ? ["--workspace", workspace] : ["--workspace", "."];
+  return {
+    demo_command: formatCommand("acb", ["demo", ...workspaceArgs, ...langArgs]),
+    handoff_command: formatCommand("acb", ["handoff", "--from", "codex", "--summary", "Ready for next agent", "--git"]),
+    setup_command: formatCommand("acb", ["setup", ...workspaceArgs, "--check", ...langArgs]),
+    dashboard_command: formatCommand("acb", ["dashboard", ...workspaceArgs, ...langArgs]),
+  };
+}
+
 function dashboardDetectorSignals(detector, workspace) {
   if (detector.type === "command") {
     return commandExists(detector.value) ? [`command:${detector.value}`] : [];
@@ -1399,6 +1531,11 @@ function dashboardLabels(lang) {
       noPacketMatch: "没有匹配的上下文包。",
       noPacketAvailable: "还没有可用的 handoff packet。",
       noPacketSelected: "未选择 handoff packet。",
+      emptyTitle: "还没有上下文包",
+      emptyBody: "先创建一条示例 packet，或保存真实工作上下文，然后刷新 dashboard。",
+      createDemo: "创建示例上下文",
+      saveRealHandoff: "保存真实 handoff",
+      runSetup: "检查客户端接入",
       noTargets: "没有配置目标客户端。",
       noSetupGuide: "选择一个具体目标客户端后，会显示接入命令和验证。",
       clientSetup: "客户端接入",
@@ -1447,6 +1584,7 @@ function dashboardLabels(lang) {
       checkFailed: "Workflow 检查失败",
       checkPassedFor: "ACB 侧 workflow 检查通过：",
       checkFailedText: "Workflow 检查失败",
+      lang: "zh-CN",
     };
   }
   return {
@@ -1475,6 +1613,11 @@ function dashboardLabels(lang) {
     noPacketMatch: "No packets match this filter.",
     noPacketAvailable: "No handoff packet available yet.",
     noPacketSelected: "No handoff packet selected.",
+    emptyTitle: "No handoff packets yet",
+    emptyBody: "Create a demo packet or save real workspace context, then refresh the dashboard.",
+    createDemo: "Create demo context",
+    saveRealHandoff: "Save real handoff",
+    runSetup: "Check client setup",
     noTargets: "No targets configured.",
     noSetupGuide: "Select a concrete target client to see setup commands and verification.",
     clientSetup: "Client setup",
@@ -1523,12 +1666,17 @@ function dashboardLabels(lang) {
     checkFailed: "Workflow check failed",
     checkPassedFor: "ACB-side workflow check passed for",
     checkFailedText: "Workflow check failed",
+    lang: "en",
   };
 }
 
 function renderDashboardHtml(state, { lang = "en" } = {}) {
-  const stateJson = escapeScriptJson(JSON.stringify(state));
   const labels = dashboardLabels(lang);
+  const renderState = {
+    ...state,
+    onboarding: buildDashboardOnboarding(state.workspace, labels.lang),
+  };
+  const stateJson = escapeScriptJson(JSON.stringify(renderState));
   const labelsJson = escapeScriptJson(JSON.stringify(labels));
 
   return `<!doctype html>
@@ -1897,6 +2045,12 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
 
     const el = (id) => document.getElementById(id);
     const fmt = (value) => value == null || value === "" ? "—" : String(value);
+    const shellArg = (value) => {
+      const text = String(value || ".");
+      return /^[A-Za-z0-9_@%+=:,./-]+$/.test(text) ? text : JSON.stringify(text);
+    };
+    const langFlag = () => labels.lang === "zh-CN" ? " --lang zh-CN" : "";
+    const workspaceArg = () => shellArg(state.workspace || ".");
     const escape = (value) => String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -1984,7 +2138,8 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
     function renderNextHandoff() {
       const packet = selectedPacket();
       if (!packet) {
-        el("next-handoff").innerHTML = '<div class="empty">' + escape(labels.noPacketAvailable) + '</div>';
+        el("next-handoff").innerHTML = emptyOnboardingHtml();
+        wireCopyButtons();
         return;
       }
       const target = selectedTarget();
@@ -2020,7 +2175,8 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
     function renderDetail() {
       const packet = selectedPacket();
       if (!packet) {
-        el("detail").innerHTML = '<div class="empty">' + escape(labels.noPacketSelected) + '</div>';
+        el("detail").innerHTML = emptyOnboardingHtml();
+        wireCopyButtons();
         return;
       }
       const tabs = ["overview", "commands", "body", "git"];
@@ -2159,6 +2315,21 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       el("workspace-list").innerHTML = state.workspaces.map((item) =>
         '<li><span class="workspace-path">' + escape(item.workspace) + '</span><strong>' + escape(item.packets) + '</strong></li>'
       ).join("");
+    }
+
+    function emptyOnboardingHtml() {
+      const demoCommand = state.onboarding?.demo_command || ("acb demo --workspace " + workspaceArg() + langFlag());
+      const handoffCommand = state.onboarding?.handoff_command || ("acb handoff --from codex --summary " + JSON.stringify("Ready for next agent") + " --git");
+      const setupCommand = state.onboarding?.setup_command || ("acb setup --workspace " + workspaceArg() + " --check" + langFlag());
+      return '<section class="empty">' +
+        '<h2>' + escape(labels.emptyTitle) + '</h2>' +
+        '<p>' + escape(labels.emptyBody) + '</p>' +
+        '<div class="command-grid">' +
+          '<div class="command"><code>' + escape(demoCommand) + '</code><button class="btn" data-copy="' + escape(demoCommand) + '">' + escape(labels.createDemo) + '</button></div>' +
+          '<div class="command"><code>' + escape(handoffCommand) + '</code><button class="btn" data-copy="' + escape(handoffCommand) + '">' + escape(labels.saveRealHandoff) + '</button></div>' +
+          '<div class="command"><code>' + escape(setupCommand) + '</code><button class="btn" data-copy="' + escape(setupCommand) + '">' + escape(labels.runSetup) + '</button></div>' +
+        '</div>' +
+      '</section>';
     }
 
     function wireCopyButtons() {
@@ -3589,6 +3760,7 @@ function printQuickstartCheck(check, report, { lang = "en" } = {}) {
     if (check.setup) {
       console.log(`推荐目标：${check.setup.id}`);
       console.log(`推荐目标名称：${check.setup.title}`);
+      console.log(`下一步 demo：${check.next.demo}`);
       console.log(`下一步 setup：${check.next.setup}`);
       console.log(`下一步 workflow 验证：${check.next.workflow_verify}`);
       console.log(`下一步 dashboard：${check.next.dashboard}`);
@@ -3621,6 +3793,7 @@ function printQuickstartCheck(check, report, { lang = "en" } = {}) {
   if (check.setup) {
     console.log(`recommended_target: ${check.setup.id}`);
     console.log(`recommended_target_title: ${check.setup.title}`);
+    console.log(`next_demo: ${check.next.demo}`);
     console.log(`next_setup: ${check.next.setup}`);
     console.log(`next_workflow_verify: ${check.next.workflow_verify}`);
     console.log(`next_dashboard: ${check.next.dashboard}`);

@@ -23,9 +23,20 @@ acb quickstart --check --lang zh-CN
 npx @xiaoshuo1988/acb quickstart --check
 ```
 
-`quickstart --check` 会检查本地 store、Git、剪贴板、`acb` 是否在 PATH 里，并给出推荐目标客户端和下一步命令。
+`quickstart --check` 会检查本地 store、Git、剪贴板、`acb` 是否在 PATH 里，并给出推荐目标客户端和下一步命令，包括 `acb demo`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard`。
 
-## 2. 保存当前上下文
+## 2. 先看一条安全示例
+
+如果你还没有真实上下文可保存，可以先创建一条只写入本地 store 的示例 packet：
+
+```bash
+acb demo --lang zh-CN
+acb dashboard --workspace . --lang zh-CN
+```
+
+这条示例不会修改第三方客户端配置，只是让你先看到 dashboard、brief、resume 和 setup 的实际样子。
+
+## 3. 保存当前上下文
 
 在掌握当前上下文的 Agent 或终端里运行：
 
@@ -40,7 +51,7 @@ acb handoff --from codex --summary "Ready for next agent" --git
 - 附带轻量 Git 状态。
 - 把接管提示词复制到剪贴板。
 
-## 3. 让下一个 Agent 接管
+## 4. 让下一个 Agent 接管
 
 在下一个 Agent 或终端里运行：
 
@@ -56,7 +67,7 @@ acb resume
 acb brief
 ```
 
-## 4. 用 setup 找到推荐接入路径
+## 5. 用 setup 找到推荐接入路径
 
 ```bash
 acb setup --check
@@ -73,7 +84,7 @@ acb setup opencode --workspace .
 acb setup cline --json
 ```
 
-## 5. 打开可视化面板
+## 6. 打开可视化面板
 
 ```bash
 acb dashboard --workspace .
@@ -90,7 +101,7 @@ Dashboard 适合做这些事：
 
 Dashboard 默认只监听 `127.0.0.1`。它不会自动启动，不会改第三方客户端配置，也不会隐藏注入 prompt。
 
-## 6. 发布前或大改后跑矩阵验证
+## 7. 发布前或大改后跑矩阵验证
 
 ```bash
 acb verify workflow --all
@@ -111,6 +122,7 @@ acb verify workflow --all
 
 ```bash
 npx @xiaoshuo1988/acb quickstart --check
+acb demo --lang zh-CN
 acb handoff --from codex --summary "Ready for next agent" --git
 acb resume
 acb setup --check --lang zh-CN
