@@ -203,6 +203,18 @@ test("setup renders a client setup guide", () => {
   assert.match(guide.dashboard_command, /acb dashboard --workspace/);
   assert.ok(guide.notes.some((note) => note.includes("OpenCode")));
 
+  const autoSetup = run(["setup", "--workspace", workspace, "--json"]);
+  assert.equal(autoSetup.status, 0);
+  const autoGuide = JSON.parse(autoSetup.stdout);
+  assert.equal(autoGuide.auto_selected, true);
+  assert.ok(autoGuide.id);
+  assert.match(autoGuide.recipe_command, new RegExp(`acb recipe ${autoGuide.id}`));
+  assert.ok(Array.isArray(autoGuide.detected_targets));
+
+  const autoText = run(["setup", "--workspace", workspace]);
+  assert.equal(autoText.status, 0);
+  assert.match(autoText.stdout, /selection: auto/);
+
   const missing = run(["setup", "missing-client"]);
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /Unknown setup target/);

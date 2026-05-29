@@ -155,11 +155,12 @@ acb recipe generic-mcp
 Recipes are intentionally explicit. They give copy/paste, MCP pull, and verification steps without editing private client state. For a fuller copyable setup guide, use:
 
 ```bash
+acb setup
 acb setup codex
 acb setup opencode --workspace . --json
 ```
 
-The dashboard surfaces the same setup guide next to the detected target list.
+Without a target, `acb setup` uses the same read-only detection as the dashboard and picks the best local target. The dashboard surfaces the same setup guide next to the detected target list.
 
 ## Workflow Verification
 

@@ -23,11 +23,12 @@ acb recipe claude-desktop --json
 Use the recipe output as the current source of truth for the recommended command sequence. For the fuller setup guide that mirrors the dashboard, use:
 
 ```bash
+acb setup
 acb setup opencode
 acb setup codex --workspace . --json
 ```
 
-This document explains the same boundary in prose.
+Without a target, `acb setup` uses read-only local detection and selects the best available target. This document explains the same boundary in prose.
 
 The dashboard shows the same client setup information next to the detected target list:
 

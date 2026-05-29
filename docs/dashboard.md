@@ -62,6 +62,7 @@ Use the dashboard when you want to inspect:
 The same setup guide is available without the dashboard:
 
 ```bash
+acb setup
 acb setup codex
 acb setup opencode --workspace . --json
 ```

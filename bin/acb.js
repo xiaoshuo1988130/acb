@@ -57,7 +57,7 @@ Usage:
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
   acb recipe [target] [--json]
-  acb setup <target> [--workspace <path>] [--json]
+  acb setup [target] [--workspace <path>] [--json]
   acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
   acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
   acb verify workflow <target> [--workspace <path>] [--keep-artifacts] [--json]
@@ -1237,7 +1237,12 @@ function detectDashboardTargets(workspace = null) {
 
 function recommendDashboardTarget(targets) {
   const score = { high: 4, detected: 3, recommended: 2, available: 1 };
-  return targets
+  const detectedTargets = targets.filter((target) => target.id !== "auto" && target.signals?.length);
+  const fallback = targets.find((target) => target.id === "codex")
+    || targets.find((target) => target.id === "generic-mcp")
+    || targets.find((target) => target.id !== "auto")
+    || targets.find((target) => target.id === "auto");
+  return (detectedTargets.length ? detectedTargets : [fallback].filter(Boolean))
     .filter((target) => target.id !== "auto")
     .sort((left, right) => {
       const scoreDiff = (score[right.confidence] || 0) - (score[left.confidence] || 0);
@@ -2661,22 +2666,26 @@ function recipeCommand(args) {
 
 function setupCommand(args) {
   const wantsJson = args.includes("--json");
-  const target = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
-  if (!target) {
-    console.error("Usage: acb setup <target> [--workspace <path>] [--json]");
-    console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
-    return 2;
-  }
-
-  const recipe = findRecipe(target);
-  if (!recipe) {
-    console.error(`Unknown setup target: ${target}`);
-    console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
-    return 2;
-  }
-
   const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
-  const guide = buildSetupGuide(recipe, workspace);
+  const target = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
+  const targets = detectDashboardTargets(workspace);
+  const detectedTarget = target
+    ? null
+    : recommendDashboardTarget(targets);
+  const targetId = target || detectedTarget.id;
+  const recipe = findRecipe(targetId);
+  if (!recipe) {
+    console.error(`Unknown setup target: ${targetId}`);
+    console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
+    return 2;
+  }
+
+  const guide = {
+    ...buildSetupGuide(recipe, workspace),
+    auto_selected: !target,
+    detected_target: targets.find((item) => item.id === recipe.id) || null,
+    detected_targets: targets.filter((item) => item.id !== "auto" && item.signals.length > 0),
+  };
   if (wantsJson) {
     process.stdout.write(`${JSON.stringify(guide, null, 2)}\n`);
     return 0;
@@ -2736,6 +2745,13 @@ function printSetupGuide(guide, workspace) {
   console.log(`ACB Setup: ${guide.title}`);
   console.log(`target: ${guide.id}`);
   console.log(`workspace: ${workspace}`);
+  if (guide.auto_selected) {
+    const confidence = guide.detected_target?.confidence || "fallback";
+    const signals = guide.detected_target?.signals?.length
+      ? ` (${guide.detected_target.signals.join(", ")})`
+      : "";
+    console.log(`selection: auto (${confidence})${signals}`);
+  }
   console.log(`mode: ${guide.mode}`);
   console.log("");
   console.log("Copy commands:");
