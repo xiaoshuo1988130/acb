@@ -10,6 +10,7 @@ Client setup guide.
 - Added a local-only dashboard workflow verification endpoint so users can run ACB-side client readiness checks from the UI without launching or editing third-party clients.
 - Added copy controls for recipe, MCP config, MCP verify, workflow verify, and client prompt commands in the dashboard.
 - Added `acb setup [target]` to render the same client setup guide from the CLI as text or JSON, with automatic target selection when no target is provided.
+- Added recommended setup, dashboard, and workflow verification next steps to `acb quickstart --check`.
 
 ## 0.5.2
 

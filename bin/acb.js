@@ -367,6 +367,7 @@ function quickstartCommand(args) {
   if (args.includes("--check")) {
     const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
     const report = buildDoctorReport(workspace);
+    const setupResult = buildSetupGuideForTarget({ workspace });
     const check = {
       ok: report.ok,
       version: VERSION,
@@ -376,11 +377,16 @@ function quickstartCommand(args) {
       workspace,
       store_path: report.store_path,
       checks: report.checks,
+      setup: setupResult.ok ? setupResult.guide : null,
+      detected_targets: setupResult.ok ? setupResult.guide.detected_targets : [],
       next: {
         handoff: "acb handoff --from codex --summary \"Ready for the next agent\" --git",
         resume: "acb resume",
         brief: "acb brief",
         doctor: "acb doctor",
+        setup: "acb setup",
+        dashboard: formatCommand("acb", ["dashboard", "--workspace", workspace]),
+        workflow_verify: setupResult.ok ? setupResult.guide.workflow_verify_command : "acb verify workflow codex",
         mcp_config: report.mcp.config_command,
         mcp_verify: report.mcp.verify_command,
       },
@@ -2668,30 +2674,40 @@ function setupCommand(args) {
   const wantsJson = args.includes("--json");
   const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
   const target = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
-  const targets = detectDashboardTargets(workspace);
-  const detectedTarget = target
-    ? null
-    : recommendDashboardTarget(targets);
-  const targetId = target || detectedTarget.id;
-  const recipe = findRecipe(targetId);
-  if (!recipe) {
-    console.error(`Unknown setup target: ${targetId}`);
+  const result = buildSetupGuideForTarget({ target, workspace });
+  if (!result.ok) {
+    console.error(result.error);
     console.error(`Available targets: ${RECIPE_TARGETS.map((item) => item.id).join(", ")}`);
     return 2;
   }
 
-  const guide = {
-    ...buildSetupGuide(recipe, workspace),
-    auto_selected: !target,
-    detected_target: targets.find((item) => item.id === recipe.id) || null,
-    detected_targets: targets.filter((item) => item.id !== "auto" && item.signals.length > 0),
-  };
+  const guide = result.guide;
   if (wantsJson) {
     process.stdout.write(`${JSON.stringify(guide, null, 2)}\n`);
     return 0;
   }
   printSetupGuide(guide, workspace);
   return 0;
+}
+
+function buildSetupGuideForTarget({ target = null, workspace }) {
+  const targets = detectDashboardTargets(workspace);
+  const detectedTarget = target
+    ? null
+    : recommendDashboardTarget(targets);
+  const targetId = target || detectedTarget.id;
+  const recipe = findRecipe(targetId);
+  if (!recipe) return { ok: false, error: `Unknown setup target: ${targetId}` };
+  return {
+    ok: true,
+    recipe,
+    guide: {
+      ...buildSetupGuide(recipe, workspace),
+      auto_selected: !target,
+      detected_target: targets.find((item) => item.id === recipe.id) || null,
+      detected_targets: targets.filter((item) => item.id !== "auto" && item.signals.length > 0),
+    },
+  };
 }
 
 function findRecipe(target) {
@@ -3273,6 +3289,13 @@ function printQuickstartCheck(check, report) {
   }
   console.log(`acb_on_path: ${acbReady ? "yes" : "no"}`);
   if (!acbReady) console.log(`install_hint: ${check.install_command}`);
+  if (check.setup) {
+    console.log(`recommended_target: ${check.setup.id}`);
+    console.log(`recommended_target_title: ${check.setup.title}`);
+    console.log(`next_setup: ${check.next.setup}`);
+    console.log(`next_workflow_verify: ${check.next.workflow_verify}`);
+    console.log(`next_dashboard: ${check.next.dashboard}`);
+  }
   console.log(`next_handoff: ${check.next.handoff}`);
   console.log(`next_resume: ${check.next.resume}`);
   console.log(`next_brief: ${check.next.brief}`);

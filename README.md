@@ -32,6 +32,8 @@ Or run without installing:
 npx @xiaoshuo1988/acb quickstart --check
 ```
 
+The check also prints a recommended client target, `acb setup`, `acb verify workflow`, and `acb dashboard` next steps.
+
 ## 60 Second Flow
 
 From the agent that has the context:
@@ -230,7 +232,8 @@ acb store backup --out ./acb-store.backup.json
 - Local store readability.
 - Clipboard availability or fallback behavior.
 - Current workspace and Git detection.
-- Next handoff, resume, doctor, and MCP commands.
+- Recommended target client and setup command.
+- Next handoff, resume, dashboard, workflow verify, doctor, and MCP commands.
 - Next brief command for compact takeover prompts.
 
 `acb doctor` prints a deeper diagnostic report, including MCP install hints when `acb` is not visible on `PATH`.

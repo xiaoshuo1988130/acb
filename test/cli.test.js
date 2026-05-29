@@ -127,6 +127,10 @@ test("prints version and help", () => {
   const quickstartCheck = run(["quickstart", "--check", "--workspace", workspace], { env: { ACB_STORE: storePath } });
   assert.equal(quickstartCheck.status, 0);
   assert.match(quickstartCheck.stdout, /ACB Quickstart Check/);
+  assert.match(quickstartCheck.stdout, /recommended_target:/);
+  assert.match(quickstartCheck.stdout, /next_setup: acb setup/);
+  assert.match(quickstartCheck.stdout, /next_workflow_verify: acb verify workflow/);
+  assert.match(quickstartCheck.stdout, /next_dashboard: acb dashboard --workspace/);
   assert.match(quickstartCheck.stdout, /next_handoff: acb handoff/);
   assert.match(quickstartCheck.stdout, /next_resume: acb resume/);
   assert.match(quickstartCheck.stdout, /next_brief: acb brief/);
@@ -138,6 +142,11 @@ test("prints version and help", () => {
   assert.equal(quickstartReport.package, pkg.name);
   assert.equal(quickstartReport.workspace, realWorkspace(workspace));
   assert.equal(quickstartReport.store_path, storePath);
+  assert.ok(quickstartReport.setup.id);
+  assert.equal(quickstartReport.setup.auto_selected, true);
+  assert.equal(quickstartReport.next.setup, "acb setup");
+  assert.match(quickstartReport.next.dashboard, /acb dashboard --workspace/);
+  assert.match(quickstartReport.next.workflow_verify, /acb verify workflow/);
   assert.equal(quickstartReport.next.resume, "acb resume");
   assert.equal(quickstartReport.next.brief, "acb brief");
 });
