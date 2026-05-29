@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.10.0
+
+1.0 stability groundwork.
+
+### Added
+
+- Added `docs/cli-contract.md` to distinguish stable JSON surfaces from human-readable output.
+- Added `docs/store-schema.md` with the current `acb.store.v1` envelope, packet shape, backup behavior, and migration policy.
+- Added store version metadata to `acb store info --json` and dashboard `/api/state`.
+- Added an explicit dashboard safety note about local click-driven controls.
+
+### Changed
+
+- Refined the README opening positioning around local-first agent handoff and fastest first run.
+- Store reads now reject future store versions instead of risking overwrite by an older ACB binary.
+
 ## 0.9.0
 
 First-run dashboard actions.

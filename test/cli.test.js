@@ -1214,6 +1214,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Run ACB-side Check/);
     assert.match(html, /OpenCode/);
     assert.match(html, /Codex/);
+    assert.match(html, /Explicit local controls/);
     assert.match(html, /\/api\/copy-prompt/);
     assert.match(html, /\/api\/verify-workflow/);
 
@@ -1227,6 +1228,8 @@ test("dashboard serves local state and explicit takeover prompt controls", async
 
     const state = JSON.parse(await httpGet(`${url}api/state`));
     assert.equal(state.version, pkg.version);
+    assert.equal(state.store_schema, "acb.store.v1");
+    assert.equal(state.store_supported_version, 1);
     assert.equal(state.workspace, realWorkspace(workspace));
     assert.equal(state.shown_packets, 1);
     assert.equal(state.total_packets, 1);
@@ -1356,6 +1359,9 @@ test("store info reports local store metadata", () => {
   assert.equal(missingReport.path, storePath);
   assert.equal(missingReport.exists, false);
   assert.equal(missingReport.readable, true);
+  assert.equal(missingReport.version, 1);
+  assert.equal(missingReport.supported_version, 1);
+  assert.equal(missingReport.schema, "acb.store.v1");
   assert.equal(missingReport.packets, 0);
 
   run(["save", "--summary", "store info"], { env });
@@ -1363,6 +1369,7 @@ test("store info reports local store metadata", () => {
   assert.equal(human.status, 0);
   assert.match(human.stdout, /ACB Store/);
   assert.match(human.stdout, /exists: yes/);
+  assert.match(human.stdout, /schema: acb\.store\.v1/);
   assert.match(human.stdout, /packets: 1/);
 
   fs.writeFileSync(storePath, "{not valid json", "utf8");
@@ -1376,6 +1383,29 @@ test("store info reports local store metadata", () => {
   const brokenHuman = run(["store", "info"], { env });
   assert.equal(brokenHuman.status, 1);
   assert.match(brokenHuman.stdout, /readable: no/);
+});
+
+test("store rejects future schema versions without overwriting", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const env = { ACB_STORE: storePath };
+  const futureStore = {
+    version: 999,
+    packets: [],
+  };
+  fs.writeFileSync(storePath, `${JSON.stringify(futureStore, null, 2)}\n`, "utf8");
+
+  const info = run(["store", "info", "--json"], { env });
+  assert.equal(info.status, 0);
+  const report = JSON.parse(info.stdout);
+  assert.equal(report.readable, false);
+  assert.match(report.error, /newer than supported version 1/);
+  assert.equal(report.supported_version, 1);
+
+  const save = run(["save", "--summary", "must not overwrite future store"], { env });
+  assert.equal(save.status, 2);
+  assert.match(save.stderr, /newer than supported version 1/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(storePath, "utf8")), futureStore);
 });
 
 test("store backup copies the raw local store", () => {

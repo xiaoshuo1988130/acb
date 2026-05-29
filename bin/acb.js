@@ -1392,6 +1392,8 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     scope: workspace ? "workspace" : "all",
     workspace,
     store_path: storePath(),
+    store_schema: "acb.store.v1",
+    store_supported_version: STORE_VERSION,
     limit,
     total_packets: scopedPackets.length,
     shown_packets: packets.length,
@@ -1581,6 +1583,8 @@ function dashboardLabels(lang) {
       demoCreateFailed: "创建 demo 失败",
       saveRealHandoff: "保存真实 handoff",
       runSetup: "检查客户端接入",
+      safetyTitle: "本地显式控制",
+      safetyBody: "Dashboard 只会在你点击时复制文本、创建本地 demo packet，或运行 ACB 侧检查；不会修改第三方客户端配置。",
       noTargets: "没有配置目标客户端。",
       noSetupGuide: "选择一个具体目标客户端后，会显示接入命令和验证。",
       clientSetup: "客户端接入",
@@ -1667,6 +1671,8 @@ function dashboardLabels(lang) {
     demoCreateFailed: "Demo creation failed",
     saveRealHandoff: "Save real handoff",
     runSetup: "Check client setup",
+    safetyTitle: "Explicit local controls",
+    safetyBody: "The dashboard only copies text, creates a local demo packet, or runs ACB-side checks when you click. It does not modify third-party client configuration.",
     noTargets: "No targets configured.",
     noSetupGuide: "Select a concrete target client to see setup commands and verification.",
     clientSetup: "Client setup",
@@ -1894,6 +1900,15 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
     }
     .setup-guide h3 { margin-bottom: 6px; }
     .setup-guide p { font-size: 13px; }
+    .safety-note {
+      border: 1px solid rgba(10, 126, 164, 0.24);
+      background: var(--focus);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 14px;
+    }
+    .safety-note h3 { margin-bottom: 4px; }
+    .safety-note p { font-size: 13px; }
     .setup-actions {
       display: grid;
       grid-template-columns: 1fr;
@@ -2060,6 +2075,10 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       </aside>
       <section class="panel" id="detail"></section>
       <aside class="panel side">
+        <section class="safety-note" aria-label="dashboard safety boundary">
+          <h3>${escapeHtml(labels.safetyTitle)}</h3>
+          <p>${escapeHtml(labels.safetyBody)}</p>
+        </section>
         <div class="panel-header">
           <h2>${escapeHtml(labels.targetClient)}</h2>
           <span class="small" id="target-count"></span>
@@ -3529,6 +3548,8 @@ function storeInfoCommand(args) {
     readable: storeResult.ok,
     error: storeResult.ok ? null : storeResult.error,
     version: storeResult.ok ? storeResult.store.version : null,
+    supported_version: STORE_VERSION,
+    schema: "acb.store.v1",
     packets: storeResult.ok ? storeResult.store.packets.length : null,
     bytes: stat?.size || 0,
     modified_at: stat ? stat.mtime.toISOString() : null,
@@ -3545,6 +3566,8 @@ function storeInfoCommand(args) {
   console.log(`readable: ${report.readable ? "yes" : "no"}`);
   if (report.error) console.log(`error: ${report.error}`);
   if (report.version !== null) console.log(`version: ${report.version}`);
+  console.log(`supported_version: ${report.supported_version}`);
+  console.log(`schema: ${report.schema}`);
   if (report.packets !== null) console.log(`packets: ${report.packets}`);
   console.log(`bytes: ${report.bytes}`);
   if (report.modified_at) console.log(`modified_at: ${report.modified_at}`);

@@ -2,13 +2,15 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-AgentContextBus is a local-first handoff tool for coding agents.
+AgentContextBus is a local-first context handoff CLI for coding agents.
 
 It solves one daily problem:
 
 > I switch between Codex, OpenCode, Cline, Claude Code, scripts, and terminals, and I do not want to explain the same workspace context again.
 
-ACB gives the current agent a clean way to leave a compact context packet, then gives the next agent a paste-ready prompt or explicit MCP tool to read it.
+ACB gives the current agent a clean way to leave a compact local context packet, then gives the next agent a paste-ready prompt, dashboard copy action, or explicit MCP tool to read it.
+
+Use it when you want a small, inspectable control plane between local agents without giving ACB control over those clients.
 
 It is intentionally explicit:
 
@@ -16,8 +18,15 @@ It is intentionally explicit:
 - No traffic interception by default.
 - No edits to Cline, Roo, OpenCode, VS Code, or Claude private storage.
 - No background cross-agent automation.
+- No cloud sync or hosted dashboard.
 
 The package is published as `@xiaoshuo1988/acb` and installs the short `acb` command. Use the scoped package name; the unscoped `acb` npm package name is already taken.
+
+Fastest path:
+
+```bash
+npx @xiaoshuo1988/acb quickstart --check
+```
 
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
 
@@ -196,6 +205,8 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 - [MCP client recipes](docs/recipes/mcp-clients.md)
 - [Brief mode](docs/brief.md)
 - [Dashboard](docs/dashboard.md)
+- [CLI output contract](docs/cli-contract.md)
+- [Store schema](docs/store-schema.md)
 - [Workflow verification](docs/workflow-verification.md)
 - [Local HTML viewer](docs/viewer.md)
 - [Local-first design notes](docs/local-first-design.md)

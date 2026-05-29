@@ -2,13 +2,13 @@
 
 [English](README.md) | 简体中文
 
-AgentContextBus 是一个 local-first 的编码 Agent 上下文交接工具。
+AgentContextBus 是一个 local-first 的编码 Agent 上下文交接 CLI。
 
 它解决一个很常见的问题：
 
 > 我在 Codex、OpenCode、Cline、Claude Code、脚本和终端之间切换时，不想一遍遍解释当前项目做到哪里了。
 
-ACB 让当前 Agent 留下一个本地上下文包，然后让下一个 Agent 通过可复制的提示词或显式 MCP 工具读取它。
+ACB 让当前 Agent 留下一个本地上下文包，然后让下一个 Agent 通过可复制的提示词、dashboard 复制按钮或显式 MCP 工具读取它。
 
 ACB 的边界很明确：
 
@@ -16,6 +16,13 @@ ACB 的边界很明确：
 - 默认不拦截网络流量。
 - 不修改 Cline、Roo、OpenCode、VS Code、Claude Desktop 等客户端的私有存储。
 - 不做后台跨 Agent 自动化。
+- 不做云同步或托管 dashboard。
+
+最快试用：
+
+```bash
+npx @xiaoshuo1988/acb quickstart --check
+```
 
 npm 包名是 `@xiaoshuo1988/acb`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。
 
@@ -238,3 +245,4 @@ acb store backup --out ./acb-store.backup.json
 
 更短的中文上手说明见 [docs/zh-CN/quickstart.md](docs/zh-CN/quickstart.md)。
 英文首次运行完整路径见 [docs/first-run.md](docs/first-run.md)。
+CLI 输出稳定性说明见 [docs/cli-contract.md](docs/cli-contract.md)，store schema 见 [docs/store-schema.md](docs/store-schema.md)。

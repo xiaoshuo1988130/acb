@@ -44,7 +44,7 @@ The dashboard is intentionally local and explicit:
 
 - No cloud sync.
 - No login.
-- No writes to the packet store.
+- No hidden writes to the packet store.
 - No hidden prompt injection.
 - No mutation of Cline, Roo, OpenCode, VS Code, Claude Desktop, or other client storage.
 
@@ -68,6 +68,8 @@ Use the dashboard when you want to inspect:
 - Whether the ACB side of a target workflow passes before touching the client.
 - Whether recent packets carry Git state or long body context.
 - The JSON shape a script or client could consume from `/api/state`.
+
+For machine consumers, `/api/state` is treated as an additive JSON surface: existing fields should not be removed in a minor version, but new optional fields may appear. See [cli-contract.md](cli-contract.md).
 
 The same setup guide is available without the dashboard:
 
