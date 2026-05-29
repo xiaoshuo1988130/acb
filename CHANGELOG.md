@@ -9,6 +9,7 @@ Chinese onboarding.
 - Added `README.zh-CN.md` as a Simplified Chinese project overview and install guide.
 - Added `docs/zh-CN/quickstart.md` for a shorter Chinese first-run path from `quickstart --check` to `handoff`, `resume`, `setup --check`, and `dashboard`.
 - Added language links from the English README and included the Chinese README in the npm package.
+- Added `--lang zh-CN` and `ACB_LANG=zh-CN` support for the first-run terminal path and dashboard UI.
 
 ## 0.6.0
 

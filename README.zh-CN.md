@@ -28,6 +28,18 @@ npm install -g @xiaoshuo1988/acb
 acb quickstart --check
 ```
 
+中文终端输出：
+
+```bash
+acb quickstart --check --lang zh-CN
+```
+
+也可以设置环境变量：
+
+```bash
+ACB_LANG=zh-CN acb quickstart --check
+```
+
 也可以不安装，直接运行：
 
 ```bash
@@ -160,6 +172,7 @@ acb recipe generic-mcp
 ```bash
 acb setup
 acb setup --check
+acb setup --check --lang zh-CN
 acb setup codex
 acb setup opencode --workspace . --json
 ```
@@ -183,6 +196,7 @@ acb setup codex --check
 
 ```bash
 acb dashboard --workspace .
+acb dashboard --workspace . --lang zh-CN
 ```
 
 Dashboard 是一个显式启动的本地控制面板：

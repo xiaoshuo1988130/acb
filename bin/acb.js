@@ -30,6 +30,7 @@ const PROMPT_BODY_LIMIT = 12000;
 const BRIEF_BODY_LIMIT = 1800;
 const DIFF_BODY_LIMIT = 20000;
 const MCP_PROTOCOL_VERSION = "2025-06-18";
+const LANGUAGE_VALUE_FLAGS = new Set(["--workspace", "--lang"]);
 
 const usage = `AgentContextBus (acb) ${VERSION}
 
@@ -50,14 +51,14 @@ Usage:
   acb search <query> [--workspace <path>] [--all] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--all] [--limit <n>] [--json]
   acb view [--workspace <path>] [--all] [--limit <n>] [--out <path>] [--open]
-  acb dashboard [--workspace <path>] [--all] [--limit <n>] [--host <host>] [--port <port>] [--open]
+  acb dashboard [--workspace <path>] [--all] [--limit <n>] [--host <host>] [--port <port>] [--lang en|zh-CN] [--open]
   acb export [--workspace <path>] [--all] [--limit <n>] [--format markdown|json] [--out <path>]
   acb import --file <path> [--replace]
   acb delete <packet-id>
   acb clear [--workspace <path>] [--all]
   acb doctor [--workspace <path>] [--json]
   acb recipe [target] [--json]
-  acb setup [target] [--workspace <path>] [--check] [--keep-artifacts] [--json]
+  acb setup [target] [--workspace <path>] [--check] [--keep-artifacts] [--lang en|zh-CN] [--json]
   acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
   acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
   acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]
@@ -65,7 +66,7 @@ Usage:
   acb store path
   acb store info [--json]
   acb store backup [--out <path>] [--force] [--json]
-  acb quickstart [--check] [--workspace <path>] [--json]
+  acb quickstart [--check] [--workspace <path>] [--lang en|zh-CN] [--json]
   acb --version
   acb help
 
@@ -363,7 +364,27 @@ function handoffCommand(args) {
   return saveCommand([...cleanArgs, "--copy"]);
 }
 
+function resolveLanguage(args = []) {
+  return normalizeLanguage(argValue(args, "--lang") || process.env.ACB_LANG || "en");
+}
+
+function normalizeLanguage(value) {
+  const normalized = String(value || "en").toLowerCase().replace("_", "-");
+  if (["zh", "zh-cn", "zh-hans", "cn", "chinese"].includes(normalized)) return "zh-CN";
+  return "en";
+}
+
+function isChinese(lang) {
+  return lang === "zh-CN";
+}
+
+function yesNo(value, lang) {
+  if (isChinese(lang)) return value ? "是" : "否";
+  return value ? "yes" : "no";
+}
+
 function quickstartCommand(args) {
+  const lang = resolveLanguage(args);
   if (args.includes("--check")) {
     const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
     const report = buildDoctorReport(workspace);
@@ -384,8 +405,8 @@ function quickstartCommand(args) {
         resume: "acb resume",
         brief: "acb brief",
         doctor: "acb doctor",
-        setup: formatCommand("acb", ["setup", "--workspace", workspace, "--check"]),
-        dashboard: formatCommand("acb", ["dashboard", "--workspace", workspace]),
+        setup: formatCommand("acb", ["setup", "--workspace", workspace, "--check", ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
+        dashboard: formatCommand("acb", ["dashboard", "--workspace", workspace, ...(isChinese(lang) ? ["--lang", "zh-CN"] : [])]),
         workflow_verify: setupResult.ok ? setupResult.guide.workflow_verify_command : "acb verify workflow codex",
         mcp_config: report.mcp.config_command,
         mcp_verify: report.mcp.verify_command,
@@ -395,7 +416,7 @@ function quickstartCommand(args) {
       process.stdout.write(`${JSON.stringify(check, null, 2)}\n`);
       return check.ok ? 0 : 1;
     }
-    printQuickstartCheck(check, report);
+    printQuickstartCheck(check, report, { lang });
     return check.ok ? 0 : 1;
   }
 
@@ -970,6 +991,7 @@ function viewCommand(args) {
 }
 
 function dashboardCommand(args) {
+  const lang = resolveLanguage(args);
   const scope = resolveHistoryScope(args);
   if (!scope.ok) {
     console.error(scope.error);
@@ -1012,7 +1034,8 @@ function dashboardCommand(args) {
       return;
     }
     if (url.pathname === "/") {
-      sendDashboardResponse(response, 200, "text/html; charset=utf-8", renderDashboardHtml(state));
+      const pageLang = normalizeLanguage(url.searchParams.get("lang") || lang);
+      sendDashboardResponse(response, 200, "text/html; charset=utf-8", renderDashboardHtml(state, { lang: pageLang }));
       return;
     }
     sendDashboardResponse(response, 404, "text/plain; charset=utf-8", "Not found\n");
@@ -1028,7 +1051,9 @@ function dashboardCommand(args) {
       const actualPort = typeof address === "object" && address ? address.port : port;
       const url = `http://${host}:${actualPort}/`;
       console.log(`[acb] dashboard: ${url}`);
-      console.log("[acb] explicit local controls only; press Ctrl+C to stop.");
+      console.log(isChinese(lang)
+        ? "[acb] 仅启用显式本地控制；按 Ctrl+C 停止。"
+        : "[acb] explicit local controls only; press Ctrl+C to stop.");
       if (args.includes("--open")) {
         const opened = openFile(url);
         if (!opened.ok) console.error(`[acb] cannot open dashboard: ${opened.error}`);
@@ -1346,15 +1371,172 @@ function dashboardPacketSummary(packet) {
   };
 }
 
-function renderDashboardHtml(state) {
+function dashboardLabels(lang) {
+  if (isChinese(lang)) {
+    return {
+      htmlLang: "zh-CN",
+      title: "ACB 控制台",
+      allWorkspaces: "所有工作区",
+      tagline: "选择上下文包，复制上下文，粘贴给下一个 Agent",
+      refresh: "刷新",
+      packetsShown: "当前显示",
+      totalPackets: "全部上下文包",
+      workspaces: "工作区",
+      dirtyFilesCaptured: "已记录改动文件",
+      bodyCharsShown: "正文字符",
+      packets: "上下文包",
+      searchPlaceholder: "搜索 summary、status、tags、notes",
+      targetClient: "目标客户端",
+      workspace: "工作区",
+      workspaceHistory: "工作区历史",
+      rawState: "原始状态",
+      readOnly: "只读",
+      copied: "已复制",
+      copyFailed: "复制失败",
+      copying: "复制中...",
+      promptCopied: "提示词已复制",
+      shown: "个结果",
+      noPacketMatch: "没有匹配的上下文包。",
+      noPacketAvailable: "还没有可用的 handoff packet。",
+      noPacketSelected: "未选择 handoff packet。",
+      noTargets: "没有配置目标客户端。",
+      noSetupGuide: "选择一个具体目标客户端后，会显示接入命令和验证。",
+      clientSetup: "客户端接入",
+      runCheck: "运行 ACB 侧检查",
+      recipe: "Recipe",
+      mcpConfig: "MCP 配置",
+      mcpVerify: "MCP 验证",
+      workflowCheck: "Workflow 检查",
+      prompt: "提示词",
+      copy: "复制",
+      copyRecipe: "复制 Recipe",
+      copyMcpConfig: "复制 MCP 配置",
+      copyMcpVerify: "复制 MCP 验证",
+      copyWorkflowCheck: "复制 Workflow 检查",
+      copyPrompt: "复制提示词",
+      nextHandoff: "下一步交接",
+      inspectPacket: "查看上下文包",
+      dirtyFiles: "个改动文件",
+      cleanGitSnapshot: "Git 快照干净",
+      clean: "干净",
+      dirty: "改动",
+      unknown: "未知",
+      target: "目标",
+      recommended: "推荐",
+      high: "高匹配",
+      detected: "已检测",
+      available: "可选",
+      bestFit: "最佳匹配",
+      startHere: "从这里开始",
+      moveContextInto: "把这个上下文交给",
+      chooseTarget: "在右侧选择目标，然后复制推荐的接管文本。",
+      copyMcpInstruction: "复制 MCP 拉取指令",
+      copyFullPrompt: "复制完整提示词",
+      copyBriefPrompt: "复制简短提示词",
+      forTarget: "给",
+      tabs: { overview: "概览", commands: "命令", body: "正文", git: "Git" },
+      noBody: "这个上下文包没有正文预览。",
+      noGit: "没有记录 Git 快照。",
+      noDirtyFiles: "没有记录改动文件。",
+      noNotes: "没有 notes。",
+      noTags: "没有 tags。",
+      noWorkspaces: "还没有工作区",
+      checking: "检查中...",
+      runningCheck: "正在运行 ACB 侧 workflow 检查...",
+      checkPassed: "Workflow 检查通过",
+      checkFailed: "Workflow 检查失败",
+      checkPassedFor: "ACB 侧 workflow 检查通过：",
+      checkFailedText: "Workflow 检查失败",
+    };
+  }
+  return {
+    htmlLang: "en",
+    title: "ACB Dashboard",
+    allWorkspaces: "All workspaces",
+    tagline: "select a packet, copy context, paste into the next agent",
+    refresh: "Refresh",
+    packetsShown: "packets shown",
+    totalPackets: "total packets",
+    workspaces: "workspaces",
+    dirtyFilesCaptured: "dirty files captured",
+    bodyCharsShown: "body chars shown",
+    packets: "Packets",
+    searchPlaceholder: "Search summary, status, tags, notes",
+    targetClient: "Target Client",
+    workspace: "Workspace",
+    workspaceHistory: "Workspace History",
+    rawState: "Raw State",
+    readOnly: "read-only",
+    copied: "Copied",
+    copyFailed: "Copy failed",
+    copying: "Copying...",
+    promptCopied: "Prompt copied",
+    shown: "shown",
+    noPacketMatch: "No packets match this filter.",
+    noPacketAvailable: "No handoff packet available yet.",
+    noPacketSelected: "No handoff packet selected.",
+    noTargets: "No targets configured.",
+    noSetupGuide: "Select a concrete target client to see setup commands and verification.",
+    clientSetup: "Client setup",
+    runCheck: "Run ACB-side Check",
+    recipe: "Recipe",
+    mcpConfig: "MCP config",
+    mcpVerify: "MCP verify",
+    workflowCheck: "Workflow check",
+    prompt: "Prompt",
+    copy: "Copy",
+    copyRecipe: "Copy Recipe",
+    copyMcpConfig: "Copy MCP config",
+    copyMcpVerify: "Copy MCP verify",
+    copyWorkflowCheck: "Copy Workflow check",
+    copyPrompt: "Copy Prompt",
+    nextHandoff: "Next handoff",
+    inspectPacket: "Inspect packet",
+    dirtyFiles: "dirty files",
+    cleanGitSnapshot: "clean git snapshot",
+    clean: "clean",
+    dirty: "dirty",
+    unknown: "unknown",
+    target: "target",
+    recommended: "recommended",
+    high: "high",
+    detected: "detected",
+    available: "available",
+    bestFit: "Best Fit",
+    startHere: "Start here",
+    moveContextInto: "Move this context into",
+    chooseTarget: "Choose a target on the right, then copy the recommended takeover text.",
+    copyMcpInstruction: "Copy MCP Pull Instruction",
+    copyFullPrompt: "Copy Full Prompt",
+    copyBriefPrompt: "Copy Brief Prompt",
+    forTarget: "for",
+    tabs: { overview: "overview", commands: "commands", body: "body", git: "git" },
+    noBody: "No body preview captured for this packet.",
+    noGit: "No Git snapshot captured.",
+    noDirtyFiles: "No dirty files captured.",
+    noNotes: "No notes.",
+    noTags: "No tags.",
+    noWorkspaces: "No workspaces yet",
+    checking: "Checking...",
+    runningCheck: "Running ACB-side workflow check...",
+    checkPassed: "Workflow check passed",
+    checkFailed: "Workflow check failed",
+    checkPassedFor: "ACB-side workflow check passed for",
+    checkFailedText: "Workflow check failed",
+  };
+}
+
+function renderDashboardHtml(state, { lang = "en" } = {}) {
   const stateJson = escapeScriptJson(JSON.stringify(state));
+  const labels = dashboardLabels(lang);
+  const labelsJson = escapeScriptJson(JSON.stringify(labels));
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(labels.htmlLang)}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ACB Dashboard</title>
+  <title>${escapeHtml(labels.title)}</title>
   <style>
     :root {
       color-scheme: light;
@@ -1648,45 +1830,46 @@ function renderDashboardHtml(state) {
 </head>
 <body>
   <script id="acb-state" type="application/json">${stateJson}</script>
+  <script id="acb-labels" type="application/json">${labelsJson}</script>
   <main class="shell">
     <header class="topbar">
       <div>
-        <h1>ACB Dashboard</h1>
-        <p>${escapeHtml(state.workspace || "All workspaces")} · select a packet, copy context, paste into the next agent</p>
+        <h1>${escapeHtml(labels.title)}</h1>
+        <p>${escapeHtml(state.workspace || labels.allWorkspaces)} · ${escapeHtml(labels.tagline)}</p>
       </div>
       <div class="toolbar">
-        <button class="btn" id="refresh">Refresh</button>
+        <button class="btn" id="refresh">${escapeHtml(labels.refresh)}</button>
         <button class="btn" id="toggle-json">JSON</button>
         <a class="btn primary" href="/api/state">/api/state</a>
       </div>
     </header>
     <section id="next-handoff"></section>
     <section class="stats" aria-label="summary">
-      <div class="stat"><strong>${state.shown_packets}</strong><span>packets shown</span></div>
-      <div class="stat"><strong>${state.total_packets}</strong><span>total packets</span></div>
-      <div class="stat"><strong>${state.workspace_count}</strong><span>workspaces</span></div>
-      <div class="stat"><strong>${state.dirty_file_count}</strong><span>dirty files captured</span></div>
-      <div class="stat"><strong>${state.body_chars}</strong><span>body chars shown</span></div>
+      <div class="stat"><strong>${state.shown_packets}</strong><span>${escapeHtml(labels.packetsShown)}</span></div>
+      <div class="stat"><strong>${state.total_packets}</strong><span>${escapeHtml(labels.totalPackets)}</span></div>
+      <div class="stat"><strong>${state.workspace_count}</strong><span>${escapeHtml(labels.workspaces)}</span></div>
+      <div class="stat"><strong>${state.dirty_file_count}</strong><span>${escapeHtml(labels.dirtyFilesCaptured)}</span></div>
+      <div class="stat"><strong>${state.body_chars}</strong><span>${escapeHtml(labels.bodyCharsShown)}</span></div>
     </section>
     <section class="grid">
       <aside class="panel">
         <div class="panel-header">
-          <h2>Packets</h2>
+          <h2>${escapeHtml(labels.packets)}</h2>
           <span class="small" id="packet-count"></span>
         </div>
-        <input class="search" id="search" type="search" placeholder="Search summary, status, tags, notes">
+        <input class="search" id="search" type="search" placeholder="${escapeHtml(labels.searchPlaceholder)}">
         <div class="packet-list" id="packet-list"></div>
       </aside>
       <section class="panel" id="detail"></section>
       <aside class="panel side">
         <div class="panel-header">
-          <h2>Target Client</h2>
+          <h2>${escapeHtml(labels.targetClient)}</h2>
           <span class="small" id="target-count"></span>
         </div>
         <div id="setup-guide"></div>
         <div class="target-list" id="target-list"></div>
         <div class="panel-header">
-          <h2>Workspace</h2>
+          <h2>${escapeHtml(labels.workspace)}</h2>
           <span class="small">v${escapeHtml(state.version)}</span>
         </div>
         <div class="kv">
@@ -1695,18 +1878,19 @@ function renderDashboardHtml(state) {
           <div>store</div><div>${escapeHtml(state.store_path)}</div>
           <div>limit</div><div>${escapeHtml(String(state.limit))}</div>
         </div>
-        <h3>Workspace History</h3>
+        <h3>${escapeHtml(labels.workspaceHistory)}</h3>
         <ul id="workspace-list"></ul>
       </aside>
     </section>
     <section class="panel hidden" id="json-panel" style="margin-top: 14px;">
-      <div class="panel-header"><h2>Raw State</h2><span class="small">read-only</span></div>
+      <div class="panel-header"><h2>${escapeHtml(labels.rawState)}</h2><span class="small">${escapeHtml(labels.readOnly)}</span></div>
       <pre id="raw-json"></pre>
     </section>
   </main>
-  <div class="toast" id="toast">Copied</div>
+  <div class="toast" id="toast">${escapeHtml(labels.copied)}</div>
   <script>
     const state = JSON.parse(document.getElementById("acb-state").textContent);
+    const labels = JSON.parse(document.getElementById("acb-labels").textContent);
     let selectedId = state.latest_packet ? state.latest_packet.id : null;
     let selectedTargetId = state.recommended_target_id || (state.targets || [])[0]?.id || "auto";
     let activeTab = "overview";
@@ -1748,15 +1932,15 @@ function renderDashboardHtml(state) {
 
     function renderPackets() {
       const packets = filteredPackets();
-      el("packet-count").textContent = packets.length + " shown";
+      el("packet-count").textContent = packets.length + " " + labels.shown;
       if (!packets.length) {
-        el("packet-list").innerHTML = '<div class="empty">No packets match this filter.</div>';
+        el("packet-list").innerHTML = '<div class="empty">' + escape(labels.noPacketMatch) + '</div>';
         return;
       }
       if (!packets.some((packet) => packet.id === selectedId)) selectedId = packets[0].id;
       el("packet-list").innerHTML = packets.map((packet) => {
         const tags = (packet.tags || []).slice(0, 3).map((tag) => '<span class="badge">' + escape(tag) + '</span>').join("");
-        const dirty = packet.git_dirty_files ? '<span class="badge warn">' + packet.git_dirty_files + ' dirty</span>' : '<span class="badge good">clean</span>';
+        const dirty = packet.git_dirty_files ? '<span class="badge warn">' + packet.git_dirty_files + ' ' + escape(labels.dirty) + '</span>' : '<span class="badge good">' + escape(labels.clean) + '</span>';
         return '<button class="packet-row ' + (packet.id === selectedId ? 'active' : '') + '" data-id="' + escape(packet.id) + '">' +
           '<div class="packet-title">' + escape(packetTitle(packet)) + '</div>' +
           '<div class="packet-sub">' + escape(packet.from) + ' · ' + escape(packet.created_at) + '</div>' +
@@ -1773,7 +1957,7 @@ function renderDashboardHtml(state) {
     }
 
     function selectedTarget() {
-      return (state.targets || []).find((target) => target.id === selectedTargetId) || (state.targets || [])[0] || { id: "auto", title: "Best Fit", copy_mode: "brief" };
+      return (state.targets || []).find((target) => target.id === selectedTargetId) || (state.targets || [])[0] || { id: "auto", title: labels.bestFit, copy_mode: "brief" };
     }
 
     function copyModeForTarget(target) {
@@ -1781,10 +1965,10 @@ function renderDashboardHtml(state) {
     }
 
     function targetCopyLabel(mode, target) {
-      const name = target && target.id !== "auto" ? " for " + target.title : "";
-      if (mode === "mcp") return "Copy MCP Instruction" + name;
-      if (mode === "full") return "Copy Full Prompt" + name;
-      return "Copy Brief Prompt" + name;
+      const name = target && target.id !== "auto" ? " " + labels.forTarget + " " + target.title : "";
+      if (mode === "mcp") return labels.copyMcpInstruction + name;
+      if (mode === "full") return labels.copyFullPrompt + name;
+      return labels.copyBriefPrompt + name;
     }
 
     function selectedPacket() {
@@ -1792,34 +1976,34 @@ function renderDashboardHtml(state) {
     }
 
     function targetStatusLabel(target) {
-      if (!target) return "target";
-      if (target.id === state.recommended_target_id) return "recommended";
-      return target.confidence || "available";
+      if (!target) return labels.target;
+      if (target.id === state.recommended_target_id) return labels.recommended;
+      return labels[target.confidence] || target.confidence || labels.available;
     }
 
     function renderNextHandoff() {
       const packet = selectedPacket();
       if (!packet) {
-        el("next-handoff").innerHTML = '<div class="empty">No handoff packet available yet.</div>';
+        el("next-handoff").innerHTML = '<div class="empty">' + escape(labels.noPacketAvailable) + '</div>';
         return;
       }
       const target = selectedTarget();
       const targetMode = copyModeForTarget(target);
-      const dirty = packet.git_dirty_files ? packet.git_dirty_files + " dirty files" : "clean git snapshot";
+      const dirty = packet.git_dirty_files ? packet.git_dirty_files + " " + labels.dirtyFiles : labels.cleanGitSnapshot;
       el("next-handoff").innerHTML =
         '<section class="next-handoff" aria-label="next handoff">' +
           '<div>' +
-            '<div class="kicker">Next handoff</div>' +
+            '<div class="kicker">' + escape(labels.nextHandoff) + '</div>' +
             '<div class="next-title">' + escape(packetTitle(packet)) + '</div>' +
             '<div class="next-meta">' +
               '<span class="badge accent">' + escape(target.title) + ' · ' + escape(targetStatusLabel(target)) + '</span>' +
-              '<span class="badge">' + escape(packet.from || "unknown") + '</span>' +
+              '<span class="badge">' + escape(packet.from || labels.unknown) + '</span>' +
               '<span class="badge ' + (packet.git_dirty_files ? 'warn' : 'good') + '">' + escape(dirty) + '</span>' +
             '</div>' +
           '</div>' +
           '<div class="next-actions">' +
             '<button class="btn primary" data-copy-prompt="' + escape(targetMode) + '" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(targetCopyLabel(targetMode, target)) + '</button>' +
-            '<button class="btn" data-focus-packet="' + escape(packet.id) + '">Inspect packet</button>' +
+            '<button class="btn" data-focus-packet="' + escape(packet.id) + '">' + escape(labels.inspectPacket) + '</button>' +
           '</div>' +
         '</section>';
       wirePromptButtons();
@@ -1836,11 +2020,11 @@ function renderDashboardHtml(state) {
     function renderDetail() {
       const packet = selectedPacket();
       if (!packet) {
-        el("detail").innerHTML = '<div class="empty">No handoff packet selected.</div>';
+        el("detail").innerHTML = '<div class="empty">' + escape(labels.noPacketSelected) + '</div>';
         return;
       }
       const tabs = ["overview", "commands", "body", "git"];
-      const tabButtons = tabs.map((tab) => '<button class="tab ' + (tab === activeTab ? 'active' : '') + '" data-tab="' + tab + '">' + tab + '</button>').join("");
+      const tabButtons = tabs.map((tab) => '<button class="tab ' + (tab === activeTab ? 'active' : '') + '" data-tab="' + tab + '">' + escape(labels.tabs[tab] || tab) + '</button>').join("");
       const target = selectedTarget();
       const targetMode = copyModeForTarget(target);
       el("detail").innerHTML =
@@ -1848,11 +2032,11 @@ function renderDashboardHtml(state) {
           '<div><h2>' + escape(packetTitle(packet)) + '</h2><p>' + escape(packet.id) + '</p></div>' +
         '</div>' +
         '<section class="takeover" aria-label="takeover actions">' +
-          '<div><div class="kicker">Start here</div><h3>Move this context into ' + escape(target.title) + '</h3><p>' + escape(target.description || 'Choose a target on the right, then copy the recommended takeover text.') + '</p></div>' +
+          '<div><div class="kicker">' + escape(labels.startHere) + '</div><h3>' + escape(labels.moveContextInto) + ' ' + escape(target.title) + '</h3><p>' + escape(target.description || labels.chooseTarget) + '</p></div>' +
           '<div class="takeover-actions">' +
             '<button class="btn primary" data-copy-prompt="' + escape(targetMode) + '" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(targetCopyLabel(targetMode, target)) + '</button>' +
-            '<button class="btn" data-copy-prompt="full" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">Copy Full Prompt</button>' +
-            '<button class="btn wide" data-copy-prompt="mcp" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">Copy MCP Pull Instruction</button>' +
+            '<button class="btn" data-copy-prompt="full" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(labels.copyFullPrompt) + '</button>' +
+            '<button class="btn wide" data-copy-prompt="mcp" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(labels.copyMcpInstruction) + '</button>' +
           '</div>' +
         '</section>' +
         '<div class="tabs">' + tabButtons + '</div>' +
@@ -1869,9 +2053,9 @@ function renderDashboardHtml(state) {
 
     function renderTargets() {
       const targets = state.targets || [];
-      el("target-count").textContent = targets.filter((target) => target.signals && target.signals.length).length + " detected";
+      el("target-count").textContent = targets.filter((target) => target.signals && target.signals.length).length + " " + labels.detected;
       if (!targets.length) {
-        el("target-list").innerHTML = '<div class="empty">No targets configured.</div>';
+        el("target-list").innerHTML = '<div class="empty">' + escape(labels.noTargets) + '</div>';
         return;
       }
       el("target-list").innerHTML = targets.map((target) => {
@@ -1879,7 +2063,7 @@ function renderDashboardHtml(state) {
           ? '<div class="badge-row">' + target.signals.slice(0, 2).map((signal) => '<span class="badge good">' + escape(signal.replace(/^.*:/, "")) + '</span>').join("") + '</div>'
           : '';
         return '<button class="target-card ' + (target.id === selectedTargetId ? 'active' : '') + '" data-target="' + escape(target.id) + '">' +
-          '<div class="target-top"><span class="target-title">' + escape(target.title) + '</span><span class="badge">' + escape(target.confidence) + '</span></div>' +
+          '<div class="target-top"><span class="target-title">' + escape(target.title) + '</span><span class="badge">' + escape(labels[target.confidence] || target.confidence) + '</span></div>' +
           '<div class="target-description">' + escape(target.description) + '</div>' +
           signals +
         '</button>';
@@ -1902,28 +2086,28 @@ function renderDashboardHtml(state) {
       const target = setupGuideTarget();
       const guide = state.target_guides ? state.target_guides[target.id] : null;
       if (!guide) {
-        el("setup-guide").innerHTML = '<div class="setup-guide"><h3>Client Setup</h3><p>Select a concrete target client to see setup commands and verification.</p></div>';
+        el("setup-guide").innerHTML = '<div class="setup-guide"><h3>' + escape(labels.clientSetup) + '</h3><p>' + escape(labels.noSetupGuide) + '</p></div>';
         return;
       }
       const packet = selectedPacket();
       const verifyWorkspace = packet?.workspace || state.workspace || "";
       const commands = [
-        ["Recipe", guide.recipe_command],
-        ["MCP config", guide.mcp_config_command],
-        ["MCP verify", guide.mcp_verify_command],
-        ["Workflow check", guide.workflow_verify_command],
+        [labels.recipe, labels.copyRecipe, guide.recipe_command],
+        [labels.mcpConfig, labels.copyMcpConfig, guide.mcp_config_command],
+        [labels.mcpVerify, labels.copyMcpVerify, guide.mcp_verify_command],
+        [labels.workflowCheck, labels.copyWorkflowCheck, guide.workflow_verify_command],
       ];
       const notes = (guide.notes || []).slice(0, 3).map((note) => '<li>' + escape(note) + '</li>').join("");
       el("setup-guide").innerHTML =
         '<section class="setup-guide" aria-label="client setup guide">' +
-          '<div class="kicker">Client setup</div>' +
+          '<div class="kicker">' + escape(labels.clientSetup) + '</div>' +
           '<h3>' + escape(guide.title) + '</h3>' +
           '<p>' + escape(guide.mode) + '</p>' +
           '<div class="setup-actions">' +
-            '<button class="btn primary" data-verify-workflow="' + escape(target.id) + '" data-workspace="' + escape(verifyWorkspace) + '">Run ACB-side Check</button>' +
+            '<button class="btn primary" data-verify-workflow="' + escape(target.id) + '" data-workspace="' + escape(verifyWorkspace) + '">' + escape(labels.runCheck) + '</button>' +
             '<div class="verify-result hidden" id="verify-result"></div>' +
-            commands.map(([label, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">Copy ' + escape(label) + '</button></div>').join("") +
-            '<div class="command"><code>' + escape(guide.prompt) + '</code><button class="btn" data-copy="' + escape(guide.prompt) + '">Copy Prompt</button></div>' +
+            commands.map(([label, copyLabel, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">' + escape(copyLabel || (labels.copy + ' ' + label)) + '</button></div>').join("") +
+            '<div class="command"><code>' + escape(guide.prompt) + '</code><button class="btn" data-copy="' + escape(guide.prompt) + '">' + escape(labels.copyPrompt) + '</button></div>' +
           '</div>' +
           '<ul class="setup-note-list">' + notes + '</ul>' +
         '</section>';
@@ -1939,24 +2123,24 @@ function renderDashboardHtml(state) {
           ["Show prompt", packet.next_show_prompt],
           ["MCP full", packet.next_mcp_read],
           ["MCP brief", packet.next_mcp_brief],
-        ].map(([label, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">Copy</button></div>').join("") + '</div>';
+        ].map(([label, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">' + escape(labels.copy) + '</button></div>').join("") + '</div>';
       }
       if (activeTab === "body") {
         return packet.body_preview
           ? '<pre>' + escape(packet.body_preview) + '</pre>'
-          : '<div class="empty">No body preview captured for this packet.</div>';
+          : '<div class="empty">' + escape(labels.noBody) + '</div>';
       }
       if (activeTab === "git") {
-        if (!packet.git) return '<div class="empty">No Git snapshot captured.</div>';
-        const status = packet.git.status && packet.git.status.length ? packet.git.status.join("\\n") : "No dirty files captured.";
+        if (!packet.git) return '<div class="empty">' + escape(labels.noGit) + '</div>';
+        const status = packet.git.status && packet.git.status.length ? packet.git.status.join("\\n") : labels.noDirtyFiles;
         return '<div class="kv"><div>branch</div><div>' + escape(fmt(packet.git.branch)) + '</div><div>head</div><div>' + escape(fmt(packet.git.head)) + '</div></div><pre>' + escape(status) + '</pre>';
       }
       const notes = packet.notes && packet.notes.length
         ? '<ul>' + packet.notes.map((note) => '<li><span>' + escape(note) + '</span></li>').join("") + '</ul>'
-        : '<div class="empty">No notes.</div>';
+        : '<div class="empty">' + escape(labels.noNotes) + '</div>';
       const tags = packet.tags && packet.tags.length
         ? '<div class="badge-row">' + packet.tags.map((tag) => '<span class="badge">' + escape(tag) + '</span>').join("") + '</div>'
-        : '<div class="empty">No tags.</div>';
+        : '<div class="empty">' + escape(labels.noTags) + '</div>';
       return '<div class="kv">' +
         '<div>from</div><div>' + escape(fmt(packet.from)) + '</div>' +
         '<div>workspace</div><div>' + escape(fmt(packet.workspace)) + '</div>' +
@@ -1969,7 +2153,7 @@ function renderDashboardHtml(state) {
 
     function renderWorkspaces() {
       if (!state.workspaces.length) {
-        el("workspace-list").innerHTML = '<li><span>No workspaces yet</span><strong>0</strong></li>';
+        el("workspace-list").innerHTML = '<li><span>' + escape(labels.noWorkspaces) + '</span><strong>0</strong></li>';
         return;
       }
       el("workspace-list").innerHTML = state.workspaces.map((item) =>
@@ -1984,9 +2168,9 @@ function renderDashboardHtml(state) {
         button.addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(button.dataset.copy);
-            showToast("Copied");
+            showToast(labels.copied);
           } catch {
-            showToast("Copy failed");
+            showToast(labels.copyFailed);
           }
         });
       }
@@ -2000,9 +2184,9 @@ function renderDashboardHtml(state) {
           const previous = button.textContent;
           const result = el("verify-result");
           button.disabled = true;
-          button.textContent = "Checking...";
+          button.textContent = labels.checking;
           result.className = "verify-result";
-          result.textContent = "Running ACB-side workflow check...";
+          result.textContent = labels.runningCheck;
           try {
             const response = await fetch("/api/verify-workflow", {
               method: "POST",
@@ -2010,17 +2194,17 @@ function renderDashboardHtml(state) {
               body: JSON.stringify({ target_id: button.dataset.verifyWorkflow, workspace: button.dataset.workspace }),
             });
             const payload = await response.json();
-            if (!response.ok || !payload.ok) throw new Error(payload.error || payload.message || "Workflow check failed");
+            if (!response.ok || !payload.ok) throw new Error(payload.error || payload.message || labels.checkFailedText);
             const checks = Object.entries(payload.report.checks)
               .map(([name, ok]) => name + ": " + (ok ? "ok" : "failed"))
               .join("\\n");
             result.className = "verify-result ok";
-            result.textContent = payload.message + "\\n" + checks;
-            showToast("Workflow check passed");
+            result.textContent = labels.checkPassedFor + " " + payload.title + ".\\n" + checks;
+            showToast(labels.checkPassed);
           } catch (error) {
             result.className = "verify-result fail";
-            result.textContent = error.message || "Workflow check failed";
-            showToast("Workflow check failed");
+            result.textContent = error.message || labels.checkFailedText;
+            showToast(labels.checkFailed);
           } finally {
             button.disabled = false;
             button.textContent = previous;
@@ -2036,7 +2220,7 @@ function renderDashboardHtml(state) {
         button.addEventListener("click", async () => {
           const previous = button.textContent;
           button.disabled = true;
-          button.textContent = "Copying...";
+          button.textContent = labels.copying;
           try {
             const response = await fetch("/api/copy-prompt", {
               method: "POST",
@@ -2044,10 +2228,10 @@ function renderDashboardHtml(state) {
               body: JSON.stringify({ id: button.dataset.id, mode: button.dataset.copyPrompt, target_id: button.dataset.targetId }),
             });
             const payload = await response.json();
-            if (!response.ok || !payload.ok) throw new Error(payload.error || "Copy failed");
-            showToast(payload.message || "Prompt copied");
+            if (!response.ok || !payload.ok) throw new Error(payload.error || labels.copyFailed);
+            showToast(labels.promptCopied);
           } catch (error) {
-            showToast(error.message || "Copy failed");
+            showToast(error.message || labels.copyFailed);
           } finally {
             button.disabled = false;
             button.textContent = previous;
@@ -2673,8 +2857,9 @@ function recipeCommand(args) {
 function setupCommand(args) {
   const wantsJson = args.includes("--json");
   const wantsCheck = args.includes("--check");
+  const lang = resolveLanguage(args);
   const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
-  const target = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
+  const target = positionalArgs(args, LANGUAGE_VALUE_FLAGS).find(Boolean);
   const result = buildSetupGuideForTarget({ target, workspace });
   if (!result.ok) {
     console.error(result.error);
@@ -2695,10 +2880,10 @@ function setupCommand(args) {
     process.stdout.write(`${JSON.stringify(guide, null, 2)}\n`);
     return guide.workflow_check ? (guide.workflow_check.ok ? 0 : 1) : 0;
   }
-  printSetupGuide(guide, workspace);
+  printSetupGuide(guide, workspace, { lang });
   if (guide.workflow_check) {
     console.log("");
-    printSetupWorkflowCheck(guide.workflow_check);
+    printSetupWorkflowCheck(guide.workflow_check, { lang });
   }
   return guide.workflow_check ? (guide.workflow_check.ok ? 0 : 1) : 0;
 }
@@ -2770,7 +2955,34 @@ function printRecipe(recipe) {
   for (const note of recipe.notes) console.log(`- ${note}`);
 }
 
-function printSetupGuide(guide, workspace) {
+function printSetupGuide(guide, workspace, { lang = "en" } = {}) {
+  if (isChinese(lang)) {
+    console.log(`ACB 接入指南：${guide.title}`);
+    console.log(`目标：${guide.id}`);
+    console.log(`工作区：${workspace}`);
+    if (guide.auto_selected) {
+      const confidence = guide.detected_target?.confidence || "fallback";
+      const signals = guide.detected_target?.signals?.length
+        ? ` (${guide.detected_target.signals.join(", ")})`
+        : "";
+      console.log(`选择：自动 (${confidence})${signals}`);
+    }
+    console.log(`模式：${guide.mode}`);
+    console.log("");
+    console.log("可复制命令：");
+    console.log(`  ${guide.recipe_command}`);
+    console.log(`  ${guide.mcp_config_command}`);
+    console.log(`  ${guide.mcp_verify_command}`);
+    console.log(`  ${guide.workflow_verify_command}`);
+    console.log(`  ${formatCommand("acb", ["dashboard", "--workspace", workspace, "--lang", "zh-CN"])}`);
+    console.log("");
+    console.log("给客户端的提示词：");
+    console.log(guide.prompt);
+    console.log("");
+    console.log("边界：");
+    for (const note of guide.notes) console.log(`- ${note}`);
+    return;
+  }
   console.log(`ACB Setup: ${guide.title}`);
   console.log(`target: ${guide.id}`);
   console.log(`workspace: ${workspace}`);
@@ -2797,7 +3009,18 @@ function printSetupGuide(guide, workspace) {
   for (const note of guide.notes) console.log(`- ${note}`);
 }
 
-function printSetupWorkflowCheck(report) {
+function printSetupWorkflowCheck(report, { lang = "en" } = {}) {
+  if (isChinese(lang)) {
+    console.log("ACB 侧检查：");
+    console.log(`  目标：${report.target}`);
+    console.log(`  通过：${yesNo(report.ok, lang)}`);
+    for (const [name, ok] of Object.entries(report.checks)) {
+      console.log(`  ${name}: ${ok ? "ok" : "failed"}`);
+    }
+    console.log(`  store: ${report.store_path}${report.artifacts_cleaned ? " (已清理)" : ""}`);
+    console.log(`  边界：${report.limitation}`);
+    return;
+  }
   console.log("ACB-side check:");
   console.log(`  target: ${report.target}`);
   console.log(`  ok: ${report.ok ? "yes" : "no"}`);
@@ -3342,9 +3565,42 @@ function printDoctorReport(report) {
   console.log(`mcp_verify_command: ${report.mcp.verify_command}`);
 }
 
-function printQuickstartCheck(check, report) {
+function printQuickstartCheck(check, report, { lang = "en" } = {}) {
   const clipboardReady = check.checks.clipboard_command_available;
   const acbReady = check.checks.acb_command_available;
+  if (isChinese(lang)) {
+    console.log("ACB 快速检查");
+    console.log(`版本：acb ${check.version}`);
+    console.log(`包名：${check.package}`);
+    console.log(`命令路径：${check.command_path}`);
+    console.log(`store：${check.store_path}`);
+    console.log(`store 可读：${yesNo(check.checks.store_readable, lang)}`);
+    if (report.store_error) console.log(`store 错误：${report.store_error}`);
+    console.log(`工作区：${check.workspace}`);
+    console.log(`Git 可用：${yesNo(check.checks.git_available, lang)}`);
+    console.log(`Git 工作区：${yesNo(check.checks.git_workspace, lang)}`);
+    console.log(`剪贴板可用：${yesNo(clipboardReady, lang)}`);
+    if (!clipboardReady) {
+      console.log("剪贴板兜底：提示词会打印到终端，方便手动复制");
+      if (process.platform === "linux") console.log("剪贴板提示：安装 wl-clipboard、xclip 或 xsel");
+    }
+    console.log(`acb 在 PATH 中：${yesNo(acbReady, lang)}`);
+    if (!acbReady) console.log(`安装提示：${check.install_command}`);
+    if (check.setup) {
+      console.log(`推荐目标：${check.setup.id}`);
+      console.log(`推荐目标名称：${check.setup.title}`);
+      console.log(`下一步 setup：${check.next.setup}`);
+      console.log(`下一步 workflow 验证：${check.next.workflow_verify}`);
+      console.log(`下一步 dashboard：${check.next.dashboard}`);
+    }
+    console.log(`下一步 handoff：${check.next.handoff}`);
+    console.log(`下一步 resume：${check.next.resume}`);
+    console.log(`下一步 brief：${check.next.brief}`);
+    console.log(`下一步 doctor：${check.next.doctor}`);
+    console.log(`下一步 MCP 配置：${check.next.mcp_config}`);
+    console.log(`下一步 MCP 验证：${check.next.mcp_verify}`);
+    return;
+  }
   console.log("ACB Quickstart Check");
   console.log(`version: acb ${check.version}`);
   console.log(`package: ${check.package}`);

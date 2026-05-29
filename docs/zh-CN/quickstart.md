@@ -11,6 +11,12 @@ npm install -g @xiaoshuo1988/acb
 acb quickstart --check
 ```
 
+中文输出：
+
+```bash
+acb quickstart --check --lang zh-CN
+```
+
 不安装，直接试用：
 
 ```bash
@@ -54,6 +60,7 @@ acb brief
 
 ```bash
 acb setup --check
+acb setup --check --lang zh-CN
 ```
 
 不指定目标时，ACB 会只读检测本地环境，并推荐一个目标客户端。`--check` 会顺手跑 ACB 侧 smoke test，确认 recipe、handoff、brief、MCP 和 dashboard state 都能工作。
@@ -70,6 +77,7 @@ acb setup cline --json
 
 ```bash
 acb dashboard --workspace .
+acb dashboard --workspace . --lang zh-CN
 ```
 
 Dashboard 适合做这些事：
@@ -105,8 +113,8 @@ acb verify workflow --all
 npx @xiaoshuo1988/acb quickstart --check
 acb handoff --from codex --summary "Ready for next agent" --git
 acb resume
-acb setup --check
-acb dashboard --workspace .
+acb setup --check --lang zh-CN
+acb dashboard --workspace . --lang zh-CN
 ```
 
 如果你还没有全局安装，第一行之后可以先运行：

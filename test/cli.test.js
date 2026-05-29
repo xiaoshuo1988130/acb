@@ -136,6 +136,14 @@ test("prints version and help", () => {
   assert.match(quickstartCheck.stdout, /next_resume: acb resume/);
   assert.match(quickstartCheck.stdout, /next_brief: acb brief/);
 
+  const quickstartChinese = run(["quickstart", "--check", "--workspace", workspace, "--lang", "zh-CN"], { env: { ACB_STORE: storePath } });
+  assert.equal(quickstartChinese.status, 0);
+  assert.match(quickstartChinese.stdout, /ACB 快速检查/);
+  assert.match(quickstartChinese.stdout, /推荐目标：/);
+  assert.match(quickstartChinese.stdout, /下一步 setup：acb setup --workspace/);
+  assert.match(quickstartChinese.stdout, /--lang zh-CN/);
+  assert.match(quickstartChinese.stdout, /下一步 dashboard：acb dashboard --workspace/);
+
   const quickstartJson = run(["quickstart", "--check", "--workspace", workspace, "--json"], { env: { ACB_STORE: storePath } });
   assert.equal(quickstartJson.status, 0);
   const quickstartReport = JSON.parse(quickstartJson.stdout);
@@ -233,6 +241,14 @@ test("setup renders a client setup guide", () => {
   assert.match(checked.stdout, /mcp_latest_handoff: ok/);
   assert.match(checked.stdout, /dashboard_html: ok/);
   assert.match(checked.stdout, /store: .*cleaned/);
+
+  const checkedChinese = run(["setup", "--lang", "zh-CN", "codex", "--workspace", workspace, "--check"]);
+  assert.equal(checkedChinese.status, 0);
+  assert.match(checkedChinese.stdout, /ACB 接入指南：Codex/);
+  assert.match(checkedChinese.stdout, /可复制命令：/);
+  assert.match(checkedChinese.stdout, /acb dashboard --workspace .* --lang zh-CN/);
+  assert.match(checkedChinese.stdout, /ACB 侧检查：/);
+  assert.match(checkedChinese.stdout, /通过：是/);
 
   const checkedJson = run(["setup", "--workspace", workspace, "opencode", "--check", "--json"]);
   assert.equal(checkedJson.status, 0);
@@ -1108,6 +1124,14 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Codex/);
     assert.match(html, /\/api\/copy-prompt/);
     assert.match(html, /\/api\/verify-workflow/);
+
+    const zhHtml = await httpGet(`${url}?lang=zh-CN`);
+    assert.match(zhHtml, /ACB 控制台/);
+    assert.match(zhHtml, /选择上下文包/);
+    assert.match(zhHtml, /目标客户端/);
+    assert.match(zhHtml, /客户端接入/);
+    assert.match(zhHtml, /运行 ACB 侧检查/);
+    assert.match(zhHtml, /复制简短提示词/);
 
     const state = JSON.parse(await httpGet(`${url}api/state`));
     assert.equal(state.version, pkg.version);
