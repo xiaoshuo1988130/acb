@@ -419,6 +419,7 @@ function quickstartCommand(args) {
         mcp_verify: report.mcp.verify_command,
       },
     };
+    check.actions = buildQuickstartActions(check, { lang });
     if (args.includes("--json")) {
       process.stdout.write(`${JSON.stringify(check, null, 2)}\n`);
       return check.ok ? 0 : 1;
@@ -3838,6 +3839,7 @@ function printQuickstartCheck(check, report, { lang = "en" } = {}) {
     if (check.setup) {
       console.log(`推荐目标：${check.setup.id}`);
       console.log(`推荐目标名称：${check.setup.title}`);
+      printQuickstartActionCards(check.actions, { lang });
       console.log(`下一步 demo：${check.next.demo}`);
       console.log(`下一步 setup：${check.next.setup}`);
       console.log(`下一步 workflow 验证：${check.next.workflow_verify}`);
@@ -3871,6 +3873,7 @@ function printQuickstartCheck(check, report, { lang = "en" } = {}) {
   if (check.setup) {
     console.log(`recommended_target: ${check.setup.id}`);
     console.log(`recommended_target_title: ${check.setup.title}`);
+    printQuickstartActionCards(check.actions, { lang });
     console.log(`next_demo: ${check.next.demo}`);
     console.log(`next_setup: ${check.next.setup}`);
     console.log(`next_workflow_verify: ${check.next.workflow_verify}`);
@@ -3882,6 +3885,80 @@ function printQuickstartCheck(check, report, { lang = "en" } = {}) {
   console.log(`next_doctor: ${check.next.doctor}`);
   console.log(`next_mcp_config: ${check.next.mcp_config}`);
   console.log(`next_mcp_verify: ${check.next.mcp_verify}`);
+}
+
+function printQuickstartActionCards(actions, { lang = "en" } = {}) {
+  if (!actions?.length) return;
+  console.log(isChinese(lang) ? "推荐下一步：" : "Next actions:");
+  for (const action of actions) {
+    if (isChinese(lang)) {
+      console.log(`- ${action.title}`);
+      console.log(`  适合：${action.when}`);
+      console.log(`  运行：${action.command}`);
+    } else {
+      console.log(`- ${action.title}`);
+      console.log(`  when: ${action.when}`);
+      console.log(`  run: ${action.command}`);
+    }
+  }
+}
+
+function buildQuickstartActions(check, { lang = "en" } = {}) {
+  const targetTitle = check.setup?.title || check.setup?.id || "target client";
+  if (isChinese(lang)) {
+    return [
+      {
+        id: "demo",
+        title: "1. 先体验安全 demo",
+        when: "还没有真实 handoff 历史时使用；只在本地 store 创建一条示例 packet。",
+        command: check.next.demo,
+      },
+      {
+        id: "dashboard",
+        title: "2. 打开可视化面板",
+        when: "检查 packet、复制接管提示词、查看目标客户端接入建议。",
+        command: check.next.dashboard,
+      },
+      {
+        id: "handoff",
+        title: "3. 保存真实上下文",
+        when: "当前 Agent 已经掌握项目上下文，准备交给下一个 Agent 时使用。",
+        command: check.next.handoff,
+      },
+      {
+        id: "setup",
+        title: `4. 验证 ${targetTitle} 接入路径`,
+        when: "只跑 ACB 侧检查；不会启动或修改第三方客户端。",
+        command: check.next.setup,
+      },
+    ];
+  }
+  return [
+    {
+      id: "demo",
+      title: "1. Try the safe demo",
+      when: "Use this before you have real handoff history; it creates one local sample packet.",
+      command: check.next.demo,
+    },
+    {
+      id: "dashboard",
+      title: "2. Open the dashboard",
+      when: "Inspect packets, copy takeover prompts, and review target-client setup guidance.",
+      command: check.next.dashboard,
+    },
+    {
+      id: "handoff",
+      title: "3. Save real context",
+      when: "Run this from the agent that currently has the project context.",
+      command: check.next.handoff,
+    },
+    {
+      id: "setup",
+      title: `4. Verify the ${targetTitle} path`,
+      when: "Runs ACB-side checks only; it does not launch or modify third-party clients.",
+      command: check.next.setup,
+    },
+  ];
 }
 
 function serveCommand(args) {

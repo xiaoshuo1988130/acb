@@ -23,7 +23,7 @@ acb quickstart --check --lang zh-CN
 npx @xiaoshuo1988/acb quickstart --check
 ```
 
-`quickstart --check` 会检查本地 store、Git、剪贴板、`acb` 是否在 PATH 里，并给出推荐目标客户端和下一步命令，包括 `acb demo`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard`。
+`quickstart --check` 会检查本地 store、Git、剪贴板、`acb` 是否在 PATH 里，并给出推荐目标客户端、“推荐下一步”操作卡片，以及 `acb demo`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 等命令。
 
 ## 2. 先看一条安全示例
 

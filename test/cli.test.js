@@ -129,6 +129,9 @@ test("prints version and help", () => {
   assert.equal(quickstartCheck.status, 0);
   assert.match(quickstartCheck.stdout, /ACB Quickstart Check/);
   assert.match(quickstartCheck.stdout, /recommended_target:/);
+  assert.match(quickstartCheck.stdout, /Next actions:/);
+  assert.match(quickstartCheck.stdout, /Try the safe demo/);
+  assert.match(quickstartCheck.stdout, /Open the dashboard/);
   assert.match(quickstartCheck.stdout, /next_demo: acb demo --workspace/);
   assert.match(quickstartCheck.stdout, /next_setup: acb setup --workspace/);
   assert.match(quickstartCheck.stdout, /--check/);
@@ -142,6 +145,9 @@ test("prints version and help", () => {
   assert.equal(quickstartChinese.status, 0);
   assert.match(quickstartChinese.stdout, /ACB 快速检查/);
   assert.match(quickstartChinese.stdout, /推荐目标：/);
+  assert.match(quickstartChinese.stdout, /推荐下一步：/);
+  assert.match(quickstartChinese.stdout, /先体验安全 demo/);
+  assert.match(quickstartChinese.stdout, /打开可视化面板/);
   assert.match(quickstartChinese.stdout, /下一步 demo：acb demo --workspace/);
   assert.match(quickstartChinese.stdout, /下一步 setup：acb setup --workspace/);
   assert.match(quickstartChinese.stdout, /--lang zh-CN/);
@@ -156,6 +162,9 @@ test("prints version and help", () => {
   assert.equal(quickstartReport.store_path, storePath);
   assert.ok(quickstartReport.setup.id);
   assert.equal(quickstartReport.setup.auto_selected, true);
+  assert.equal(quickstartReport.actions.length, 4);
+  assert.equal(quickstartReport.actions[0].id, "demo");
+  assert.match(quickstartReport.actions[0].command, /acb demo --workspace/);
   assert.match(quickstartReport.next.demo, /acb demo --workspace/);
   assert.match(quickstartReport.next.setup, /acb setup --workspace/);
   assert.match(quickstartReport.next.setup, /--check/);

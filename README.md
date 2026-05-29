@@ -34,7 +34,7 @@ Or run without installing:
 npx @xiaoshuo1988/acb quickstart --check
 ```
 
-The check also prints a recommended client target, `acb setup --check`, `acb verify workflow`, and `acb dashboard` next steps.
+The check also prints a recommended client target, human-readable `Next actions`, and script-friendly `acb demo`, `acb setup --check`, `acb verify workflow`, and `acb dashboard` next steps.
 
 To explore ACB before you have real handoff history, create a local demo packet:
 
