@@ -74,6 +74,30 @@ function httpGet(url) {
   });
 }
 
+function httpPostJson(url, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const request = http.request(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body),
+      },
+    }, (response) => {
+      let responseBody = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        responseBody += chunk;
+      });
+      response.on("end", () => {
+        resolve({ statusCode: response.statusCode, body: responseBody });
+      });
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
+}
+
 test("prints version and help", () => {
   const version = run(["--version"]);
   assert.equal(version.status, 0);
@@ -956,7 +980,7 @@ test("view writes a standalone local HTML viewer", () => {
   assert.match(badLimit.stderr, /--limit must be/);
 });
 
-test("dashboard serves a read-only local state view", async () => {
+test("dashboard serves local state and explicit takeover prompt controls", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const storePath = path.join(dir, "packets.json");
   const workspace = path.join(dir, "workspace");
@@ -1001,6 +1025,15 @@ test("dashboard serves a read-only local state view", async () => {
     assert.match(html, /ACB Dashboard/);
     assert.match(html, /Dashboard smoke/);
     assert.match(html, /acb brief --id pkt_/);
+    assert.match(html, /Copy Brief Prompt/);
+    assert.match(html, /Copy Full Prompt/);
+    assert.match(html, /Copy MCP Pull Instruction/);
+    assert.match(html, /Start here/);
+    assert.match(html, /Next handoff/);
+    assert.match(html, /Target Client/);
+    assert.match(html, /OpenCode/);
+    assert.match(html, /Codex/);
+    assert.match(html, /\/api\/copy-prompt/);
 
     const state = JSON.parse(await httpGet(`${url}api/state`));
     assert.equal(state.version, pkg.version);
@@ -1008,11 +1041,47 @@ test("dashboard serves a read-only local state view", async () => {
     assert.equal(state.shown_packets, 1);
     assert.equal(state.total_packets, 1);
     assert.equal(state.workspace_count, 1);
+    assert.ok(state.targets.some((target) => target.id === "auto"));
+    assert.ok(state.targets.some((target) => target.id === "opencode"));
+    assert.ok(state.targets.some((target) => target.id === "codex"));
+    assert.ok(state.recommended_target_id);
+    assert.ok(state.targets.some((target) => target.id === state.recommended_target_id));
     assert.deepEqual(state.workspaces.map((item) => item.workspace), [realWorkspace(workspace)]);
     assert.equal(state.latest_packet.summary, "Dashboard smoke");
     assert.match(state.latest_packet.next_brief, /^acb brief --id pkt_/);
     assert.doesNotMatch(JSON.stringify(state), /Other workspace packet/);
     assert.doesNotMatch(JSON.stringify(state), new RegExp(otherWorkspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+    const dryRun = await httpPostJson(`${url}api/copy-prompt`, {
+      id: state.latest_packet.id,
+      mode: "brief",
+      dry_run: true,
+    });
+    assert.equal(dryRun.statusCode, 200);
+    const dryRunPayload = JSON.parse(dryRun.body);
+    assert.equal(dryRunPayload.ok, true);
+    assert.equal(dryRunPayload.copied, false);
+    assert.equal(dryRunPayload.mode, "brief");
+    assert.equal(dryRunPayload.id, state.latest_packet.id);
+    assert.match(dryRunPayload.message, /Brief takeover prompt is ready/);
+
+    const mcpDryRun = await httpPostJson(`${url}api/copy-prompt`, {
+      id: state.latest_packet.id,
+      mode: "mcp",
+      dry_run: true,
+    });
+    assert.equal(mcpDryRun.statusCode, 200);
+    const mcpPayload = JSON.parse(mcpDryRun.body);
+    assert.equal(mcpPayload.ok, true);
+    assert.equal(mcpPayload.mode, "mcp");
+    assert.match(mcpPayload.message, /MCP pull instruction is ready/);
+
+    const blocked = await httpPostJson(`${url}api/copy-prompt`, {
+      id: JSON.parse(run(["latest", "--workspace", otherWorkspace, "--json"], { env }).stdout).id,
+      mode: "full",
+      dry_run: true,
+    });
+    assert.equal(blocked.statusCode, 404);
 
     const health = await httpGet(`${url}health`);
     assert.equal(health, "ok\n");

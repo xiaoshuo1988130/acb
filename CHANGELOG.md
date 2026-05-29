@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2
+
+Dashboard takeover controls.
+
+### Added
+
+- Added explicit dashboard takeover buttons that render a brief or full handoff prompt and copy it to the system clipboard without editing the packet store or third-party client configuration.
+- Added an MCP pull instruction button to reduce friction when the receiving client already has ACB MCP tools configured.
+- Added read-only dashboard target detection for common local agent clients and target-specific primary copy actions.
+- Added a top-level Next handoff action strip that auto-selects the best detected target and keeps the primary copy action visible in the first viewport.
+
 ## 0.5.1
 
 Dashboard usability pass.

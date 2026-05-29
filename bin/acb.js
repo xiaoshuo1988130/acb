@@ -214,6 +214,88 @@ const RECIPE_TARGETS = [
   },
 ];
 
+const DASHBOARD_TARGETS = [
+  {
+    id: "auto",
+    title: "Best Fit",
+    description: "Recommended copy path for the selected packet.",
+    copy_mode: "brief",
+    aliases: [],
+    detectors: [],
+  },
+  {
+    id: "opencode",
+    title: "OpenCode",
+    description: "Terminal-first coding agent. Use MCP instruction when configured, otherwise paste a brief prompt.",
+    copy_mode: "mcp",
+    aliases: ["open-code"],
+    detectors: [
+      { type: "command", value: "opencode" },
+      { type: "workspace-file", value: "opencode.json" },
+      { type: "workspace-dir", value: ".opencode" },
+    ],
+  },
+  {
+    id: "cline",
+    title: "Cline",
+    description: "VS Code extension. Paste into chat or use Cline's supported MCP settings.",
+    copy_mode: "brief",
+    aliases: ["claude-dev"],
+    detectors: [
+      { type: "workspace-file", value: ".cline" },
+      { type: "workspace-dir", value: ".cline" },
+      { type: "home-dir", value: "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev" },
+      { type: "home-dir", value: ".vscode/extensions", includes: "saoudrizwan.claude-dev" },
+    ],
+  },
+  {
+    id: "roo",
+    title: "Roo Code",
+    description: "VS Code extension. Paste into chat or use Roo's supported MCP settings.",
+    copy_mode: "brief",
+    aliases: ["roo-code", "roocode"],
+    detectors: [
+      { type: "workspace-file", value: ".roo" },
+      { type: "workspace-dir", value: ".roo" },
+      { type: "home-dir", value: "Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline" },
+      { type: "home-dir", value: ".vscode/extensions", includes: "roo" },
+    ],
+  },
+  {
+    id: "claude-desktop",
+    title: "Claude Desktop",
+    description: "Desktop MCP client. Use MCP instruction once ACB is configured.",
+    copy_mode: "mcp",
+    aliases: ["claude", "claude-code", "claude-desktop-app"],
+    detectors: [
+      { type: "home-file", value: "Library/Application Support/Claude/claude_desktop_config.json" },
+      { type: "home-dir", value: "Library/Application Support/Claude" },
+    ],
+  },
+  {
+    id: "codex",
+    title: "Codex",
+    description: "Paste a brief prompt into the next Codex thread.",
+    copy_mode: "brief",
+    aliases: ["openai-codex"],
+    detectors: [
+      { type: "command", value: "codex" },
+      { type: "home-dir", value: ".codex" },
+    ],
+  },
+  {
+    id: "generic-mcp",
+    title: "Generic MCP",
+    description: "Any MCP-capable client with the ACB server configured.",
+    copy_mode: "mcp",
+    aliases: ["mcp", "generic", "mcp-client"],
+    detectors: [
+      { type: "workspace-file", value: "mcp.json" },
+      { type: "workspace-file", value: ".mcp.json" },
+    ],
+  },
+];
+
 function readPackageMeta() {
   try {
     const packageUrl = new URL("../package.json", import.meta.url);
@@ -898,8 +980,12 @@ function dashboardCommand(args) {
     return 2;
   }
 
-  const server = http.createServer((request, response) => {
+  const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || "/", `http://${host}`);
+    if (request.method === "POST" && url.pathname === "/api/copy-prompt") {
+      await handleDashboardCopyPrompt(request, response, { workspace });
+      return;
+    }
     if (request.method !== "GET") {
       sendDashboardResponse(response, 405, "text/plain; charset=utf-8", "Method not allowed\n");
       return;
@@ -930,13 +1016,120 @@ function dashboardCommand(args) {
       const actualPort = typeof address === "object" && address ? address.port : port;
       const url = `http://${host}:${actualPort}/`;
       console.log(`[acb] dashboard: ${url}`);
-      console.log("[acb] read-only; press Ctrl+C to stop.");
+      console.log("[acb] explicit local controls only; press Ctrl+C to stop.");
       if (args.includes("--open")) {
         const opened = openFile(url);
         if (!opened.ok) console.error(`[acb] cannot open dashboard: ${opened.error}`);
       }
     });
   });
+}
+
+async function handleDashboardCopyPrompt(request, response, { workspace = null } = {}) {
+  let payload;
+  try {
+    payload = await readJsonRequestBody(request, 4096);
+  } catch (error) {
+    sendDashboardJson(response, 400, { ok: false, error: error.message });
+    return;
+  }
+
+  const id = typeof payload.id === "string" ? payload.id.trim() : "";
+  const mode = ["brief", "full", "mcp"].includes(payload.mode) ? payload.mode : "brief";
+  const dryRun = payload.dry_run === true;
+  if (!id) {
+    sendDashboardJson(response, 400, { ok: false, error: "id is required" });
+    return;
+  }
+
+  const packet = findPacket({ id });
+  if (!packet || (workspace && packet.workspace !== workspace)) {
+    sendDashboardJson(response, 404, { ok: false, error: `No handoff packet found for id: ${id}` });
+    return;
+  }
+
+  const targetId = typeof payload.target_id === "string" ? payload.target_id.trim() : "";
+  const target = findDashboardTarget(targetId) || null;
+  const prompt = mode === "full"
+    ? renderHandoffPrompt(packet)
+    : mode === "mcp"
+      ? renderMcpTakeoverInstruction(packet, target)
+      : renderBriefPrompt(packet);
+  const label = dashboardCopyPromptLabel(mode, target);
+  if (dryRun) {
+    sendDashboardJson(response, 200, {
+      ok: true,
+      id: packet.id,
+      mode,
+      target: target?.id || null,
+      copied: false,
+      prompt_chars: prompt.length,
+      message: `${label} is ready.`,
+    });
+    return;
+  }
+
+  const copied = copyToClipboard(prompt);
+  if (!copied.ok) {
+    sendDashboardJson(response, 500, {
+      ok: false,
+      id: packet.id,
+      mode,
+      target: target?.id || null,
+      copied: false,
+      error: copied.error,
+      fallback_prompt: prompt,
+    });
+    return;
+  }
+
+  sendDashboardJson(response, 200, {
+    ok: true,
+    id: packet.id,
+    mode,
+    target: target?.id || null,
+    copied: true,
+    prompt_chars: prompt.length,
+    message: `${label} copied to clipboard.`,
+  });
+}
+
+function findDashboardTarget(targetId) {
+  if (!targetId) return null;
+  return DASHBOARD_TARGETS.find((target) => target.id === targetId || target.aliases.includes(targetId)) || null;
+}
+
+function dashboardCopyPromptLabel(mode, target = null) {
+  const suffix = target && target.id !== "auto" ? ` for ${target.title}` : "";
+  if (mode === "full") return `Full takeover prompt${suffix}`;
+  if (mode === "mcp") return `MCP pull instruction${suffix}`;
+  return `Brief takeover prompt${suffix}`;
+}
+
+function readJsonRequestBody(request, maxBytes) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > maxBytes) {
+        reject(new Error("Request body is too large"));
+        request.destroy();
+      }
+    });
+    request.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        reject(new Error("Invalid JSON body"));
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function sendDashboardJson(response, status, payload) {
+  sendDashboardResponse(response, status, "application/json; charset=utf-8", `${JSON.stringify(payload, null, 2)}\n`);
 }
 
 function sendDashboardResponse(response, status, contentType, body) {
@@ -955,6 +1148,8 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
   const workspaces = workspace
     ? listWorkspaceSummaries(20).filter((item) => item.workspace === workspace)
     : listWorkspaceSummaries(20);
+  const targets = detectDashboardTargets(workspace);
+  const recommendedTarget = recommendDashboardTarget(targets);
   return {
     version: VERSION,
     generated_at: new Date().toISOString(),
@@ -970,7 +1165,91 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     latest_packet: packets[0] ? dashboardPacketSummary(packets[0]) : null,
     packets: packets.map(dashboardPacketSummary),
     workspaces,
+    targets,
+    recommended_target_id: recommendedTarget.id,
   };
+}
+
+function detectDashboardTargets(workspace = null) {
+  return DASHBOARD_TARGETS.map((target) => {
+    const signals = target.detectors.flatMap((detector) => dashboardDetectorSignals(detector, workspace));
+    const confidence = target.id === "auto"
+      ? "recommended"
+      : signals.length >= 2
+        ? "high"
+        : signals.length === 1
+          ? "detected"
+          : "available";
+    return {
+      id: target.id,
+      title: target.title,
+      description: target.description,
+      copy_mode: target.copy_mode,
+      confidence,
+      signals,
+    };
+  });
+}
+
+function recommendDashboardTarget(targets) {
+  const score = { high: 4, detected: 3, recommended: 2, available: 1 };
+  return targets
+    .filter((target) => target.id !== "auto")
+    .sort((left, right) => {
+      const scoreDiff = (score[right.confidence] || 0) - (score[left.confidence] || 0);
+      if (scoreDiff) return scoreDiff;
+      return (right.signals?.length || 0) - (left.signals?.length || 0);
+    })[0] || targets.find((target) => target.id === "auto") || {
+    id: "auto",
+    title: "Best Fit",
+    copy_mode: "brief",
+    confidence: "recommended",
+    signals: [],
+  };
+}
+
+function dashboardDetectorSignals(detector, workspace) {
+  if (detector.type === "command") {
+    return commandExists(detector.value) ? [`command:${detector.value}`] : [];
+  }
+
+  const base = detector.type.startsWith("home-") ? os.homedir() : workspace;
+  if (!base) return [];
+  const targetPath = path.join(base, detector.value);
+  if (detector.type.endsWith("file")) {
+    return fileExists(targetPath) ? [`file:${targetPath}`] : [];
+  }
+  if (detector.type.endsWith("dir")) {
+    if (detector.includes) {
+      return dirIncludes(targetPath, detector.includes) ? [`dir:${targetPath}`] : [];
+    }
+    return dirExists(targetPath) ? [`dir:${targetPath}`] : [];
+  }
+  return [];
+}
+
+function fileExists(filePath) {
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function dirExists(dirPath) {
+  try {
+    return fs.statSync(dirPath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function dirIncludes(dirPath, needle) {
+  try {
+    return fs.readdirSync(dirPath).some((entry) => entry.toLowerCase().includes(needle.toLowerCase()));
+  } catch {
+    return false;
+  }
 }
 
 function dashboardPacketSummary(packet) {
@@ -1011,6 +1290,8 @@ function renderDashboardHtml(state) {
       --danger: #cf222e;
       --code: #f6f8fa;
       --shadow: 0 10px 30px rgba(31, 35, 40, 0.08);
+      --focus: #ddf4ff;
+      --selected: #fff8c5;
     }
     * { box-sizing: border-box; }
     body {
@@ -1022,7 +1303,7 @@ function renderDashboardHtml(state) {
     }
     button, input { font: inherit; }
     button { cursor: pointer; }
-    .shell { max-width: 1440px; margin: 0 auto; padding: 20px; }
+    .shell { max-width: 1440px; margin: 0 auto; padding: 18px; }
     .topbar {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1046,15 +1327,43 @@ function renderDashboardHtml(state) {
     }
     .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
     .btn:hover, .tab:hover { border-color: var(--accent); }
-    .stats { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .next-handoff {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      border: 1px solid rgba(10, 126, 164, 0.28);
+      background: var(--focus);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+    }
+    .next-title { font-size: 18px; font-weight: 750; line-height: 1.25; overflow-wrap: anywhere; }
+    .next-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .next-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      min-width: 260px;
+    }
+    .next-actions .primary { min-height: 42px; font-weight: 700; }
+    .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .stat, .panel, .empty {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 14px;
       box-shadow: var(--shadow);
     }
-    .stat strong { display: block; font-size: 23px; line-height: 1.2; }
+    .stat {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 7px 10px;
+      box-shadow: none;
+    }
+    .panel, .empty { padding: 14px; }
+    .stat strong { display: inline; font-size: 15px; line-height: 1.2; }
     .stat span { color: var(--muted); font-size: 12px; }
     .grid {
       display: grid;
@@ -1101,8 +1410,51 @@ function renderDashboardHtml(state) {
     }
     .badge.good { color: var(--good); border-color: rgba(26, 127, 55, 0.25); background: rgba(26, 127, 55, 0.08); }
     .badge.warn { color: var(--warn); border-color: rgba(154, 103, 0, 0.25); background: rgba(154, 103, 0, 0.08); }
+    .badge.accent { color: var(--accent-strong); border-color: rgba(10, 126, 164, 0.25); background: rgba(10, 126, 164, 0.08); }
+    .target-list { display: grid; gap: 6px; margin-bottom: 14px; }
+    .target-card {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: var(--text);
+    }
+    .target-card.active { border-color: var(--accent); background: var(--selected); box-shadow: inset 3px 0 0 var(--accent); }
+    .target-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .target-title { font-weight: 700; }
+    .target-description { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .target-card:not(.active) .target-description,
+    .target-card:not(.active) .badge-row { display: none; }
     .detail-title { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
     .detail-title h2 { font-size: 22px; overflow-wrap: anywhere; }
+    .takeover {
+      display: grid;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid rgba(10, 126, 164, 0.28);
+      background: var(--focus);
+      border-radius: 8px;
+      padding: 12px;
+      margin: 12px 0;
+    }
+    .takeover h3 { margin: 2px 0 4px; font-size: 17px; }
+    .takeover-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .takeover-actions .btn { min-height: 40px; }
+    .takeover-actions .wide { grid-column: 1 / -1; }
+    .kicker {
+      color: var(--accent-strong);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
     .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
     .tab.active { background: var(--accent); border-color: var(--accent); color: white; }
     .kv {
@@ -1145,6 +1497,13 @@ function renderDashboardHtml(state) {
     li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
     li:last-child { border-bottom: 0; }
     li span { overflow-wrap: anywhere; color: var(--muted); font-size: 13px; }
+    .workspace-path {
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     a { color: var(--accent); }
     .hidden { display: none !important; }
     .empty { color: var(--muted); }
@@ -1165,16 +1524,18 @@ function renderDashboardHtml(state) {
     @media (max-width: 1100px) {
       .grid { grid-template-columns: 300px minmax(0, 1fr); }
       .side { grid-column: 1 / -1; }
-      .stats { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+      .next-handoff { grid-template-columns: 1fr; }
+      .next-actions { min-width: 0; }
     }
     @media (max-width: 760px) {
       .shell { padding: 14px; }
       .topbar { grid-template-columns: 1fr; }
       .toolbar { justify-content: flex-start; }
       .grid { grid-template-columns: 1fr; }
-      .stats { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
       .packet-list { max-height: none; }
       .kv { grid-template-columns: 1fr; }
+      .takeover-actions { grid-template-columns: 1fr; }
+      .takeover-actions .wide { grid-column: auto; }
     }
   </style>
 </head>
@@ -1184,7 +1545,7 @@ function renderDashboardHtml(state) {
     <header class="topbar">
       <div>
         <h1>ACB Dashboard</h1>
-        <p>${escapeHtml(state.workspace || "All workspaces")} · read-only local control surface</p>
+        <p>${escapeHtml(state.workspace || "All workspaces")} · select a packet, copy context, paste into the next agent</p>
       </div>
       <div class="toolbar">
         <button class="btn" id="refresh">Refresh</button>
@@ -1192,6 +1553,7 @@ function renderDashboardHtml(state) {
         <a class="btn primary" href="/api/state">/api/state</a>
       </div>
     </header>
+    <section id="next-handoff"></section>
     <section class="stats" aria-label="summary">
       <div class="stat"><strong>${state.shown_packets}</strong><span>packets shown</span></div>
       <div class="stat"><strong>${state.total_packets}</strong><span>total packets</span></div>
@@ -1210,6 +1572,11 @@ function renderDashboardHtml(state) {
       </aside>
       <section class="panel" id="detail"></section>
       <aside class="panel side">
+        <div class="panel-header">
+          <h2>Target Client</h2>
+          <span class="small" id="target-count"></span>
+        </div>
+        <div class="target-list" id="target-list"></div>
         <div class="panel-header">
           <h2>Workspace</h2>
           <span class="small">v${escapeHtml(state.version)}</span>
@@ -1233,6 +1600,7 @@ function renderDashboardHtml(state) {
   <script>
     const state = JSON.parse(document.getElementById("acb-state").textContent);
     let selectedId = state.latest_packet ? state.latest_packet.id : null;
+    let selectedTargetId = state.recommended_target_id || (state.targets || [])[0]?.id || "auto";
     let activeTab = "overview";
 
     const el = (id) => document.getElementById(id);
@@ -1247,7 +1615,9 @@ function renderDashboardHtml(state) {
 
     function render() {
       renderPackets();
+      renderNextHandoff();
       renderDetail();
+      renderTargets();
       renderWorkspaces();
       el("raw-json").textContent = JSON.stringify(state, null, 2);
     }
@@ -1293,19 +1663,89 @@ function renderDashboardHtml(state) {
       }
     }
 
+    function selectedTarget() {
+      return (state.targets || []).find((target) => target.id === selectedTargetId) || (state.targets || [])[0] || { id: "auto", title: "Best Fit", copy_mode: "brief" };
+    }
+
+    function copyModeForTarget(target) {
+      return target && target.copy_mode ? target.copy_mode : "brief";
+    }
+
+    function targetCopyLabel(mode, target) {
+      const name = target && target.id !== "auto" ? " for " + target.title : "";
+      if (mode === "mcp") return "Copy MCP Instruction" + name;
+      if (mode === "full") return "Copy Full Prompt" + name;
+      return "Copy Brief Prompt" + name;
+    }
+
+    function selectedPacket() {
+      return state.packets.find((item) => item.id === selectedId) || state.packets[0] || null;
+    }
+
+    function targetStatusLabel(target) {
+      if (!target) return "target";
+      if (target.id === state.recommended_target_id) return "recommended";
+      return target.confidence || "available";
+    }
+
+    function renderNextHandoff() {
+      const packet = selectedPacket();
+      if (!packet) {
+        el("next-handoff").innerHTML = '<div class="empty">No handoff packet available yet.</div>';
+        return;
+      }
+      const target = selectedTarget();
+      const targetMode = copyModeForTarget(target);
+      const dirty = packet.git_dirty_files ? packet.git_dirty_files + " dirty files" : "clean git snapshot";
+      el("next-handoff").innerHTML =
+        '<section class="next-handoff" aria-label="next handoff">' +
+          '<div>' +
+            '<div class="kicker">Next handoff</div>' +
+            '<div class="next-title">' + escape(packetTitle(packet)) + '</div>' +
+            '<div class="next-meta">' +
+              '<span class="badge accent">' + escape(target.title) + ' · ' + escape(targetStatusLabel(target)) + '</span>' +
+              '<span class="badge">' + escape(packet.from || "unknown") + '</span>' +
+              '<span class="badge ' + (packet.git_dirty_files ? 'warn' : 'good') + '">' + escape(dirty) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="next-actions">' +
+            '<button class="btn primary" data-copy-prompt="' + escape(targetMode) + '" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(targetCopyLabel(targetMode, target)) + '</button>' +
+            '<button class="btn" data-focus-packet="' + escape(packet.id) + '">Inspect packet</button>' +
+          '</div>' +
+        '</section>';
+      wirePromptButtons();
+      for (const button of document.querySelectorAll("[data-focus-packet]")) {
+        button.addEventListener("click", () => {
+          selectedId = button.dataset.focusPacket;
+          activeTab = "overview";
+          document.getElementById("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+          render();
+        });
+      }
+    }
+
     function renderDetail() {
-      const packet = state.packets.find((item) => item.id === selectedId);
+      const packet = selectedPacket();
       if (!packet) {
         el("detail").innerHTML = '<div class="empty">No handoff packet selected.</div>';
         return;
       }
       const tabs = ["overview", "commands", "body", "git"];
       const tabButtons = tabs.map((tab) => '<button class="tab ' + (tab === activeTab ? 'active' : '') + '" data-tab="' + tab + '">' + tab + '</button>').join("");
+      const target = selectedTarget();
+      const targetMode = copyModeForTarget(target);
       el("detail").innerHTML =
         '<div class="detail-title">' +
           '<div><h2>' + escape(packetTitle(packet)) + '</h2><p>' + escape(packet.id) + '</p></div>' +
-          '<button class="btn primary" data-copy="' + escape(packet.next_brief) + '">Copy brief command</button>' +
         '</div>' +
+        '<section class="takeover" aria-label="takeover actions">' +
+          '<div><div class="kicker">Start here</div><h3>Move this context into ' + escape(target.title) + '</h3><p>' + escape(target.description || 'Choose a target on the right, then copy the recommended takeover text.') + '</p></div>' +
+          '<div class="takeover-actions">' +
+            '<button class="btn primary" data-copy-prompt="' + escape(targetMode) + '" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(targetCopyLabel(targetMode, target)) + '</button>' +
+            '<button class="btn" data-copy-prompt="full" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">Copy Full Prompt</button>' +
+            '<button class="btn wide" data-copy-prompt="mcp" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">Copy MCP Pull Instruction</button>' +
+          '</div>' +
+        '</section>' +
         '<div class="tabs">' + tabButtons + '</div>' +
         '<div id="tab-content">' + renderTab(packet) + '</div>';
       for (const tab of document.querySelectorAll(".tab")) {
@@ -1315,6 +1755,32 @@ function renderDashboardHtml(state) {
         });
       }
       wireCopyButtons();
+      wirePromptButtons();
+    }
+
+    function renderTargets() {
+      const targets = state.targets || [];
+      el("target-count").textContent = targets.filter((target) => target.signals && target.signals.length).length + " detected";
+      if (!targets.length) {
+        el("target-list").innerHTML = '<div class="empty">No targets configured.</div>';
+        return;
+      }
+      el("target-list").innerHTML = targets.map((target) => {
+        const signals = target.signals && target.signals.length
+          ? '<div class="badge-row">' + target.signals.slice(0, 2).map((signal) => '<span class="badge good">' + escape(signal.replace(/^.*:/, "")) + '</span>').join("") + '</div>'
+          : '';
+        return '<button class="target-card ' + (target.id === selectedTargetId ? 'active' : '') + '" data-target="' + escape(target.id) + '">' +
+          '<div class="target-top"><span class="target-title">' + escape(target.title) + '</span><span class="badge">' + escape(target.confidence) + '</span></div>' +
+          '<div class="target-description">' + escape(target.description) + '</div>' +
+          signals +
+        '</button>';
+      }).join("");
+      for (const row of document.querySelectorAll(".target-card")) {
+        row.addEventListener("click", () => {
+          selectedTargetId = row.dataset.target;
+          render();
+        });
+      }
     }
 
     function renderTab(packet) {
@@ -1359,7 +1825,7 @@ function renderDashboardHtml(state) {
         return;
       }
       el("workspace-list").innerHTML = state.workspaces.map((item) =>
-        '<li><span>' + escape(item.workspace) + '</span><strong>' + escape(item.packets) + '</strong></li>'
+        '<li><span class="workspace-path">' + escape(item.workspace) + '</span><strong>' + escape(item.packets) + '</strong></li>'
       ).join("");
     }
 
@@ -1371,6 +1837,33 @@ function renderDashboardHtml(state) {
             showToast("Copied");
           } catch {
             showToast("Copy failed");
+          }
+        });
+      }
+    }
+
+    function wirePromptButtons() {
+      for (const button of document.querySelectorAll("[data-copy-prompt]")) {
+        if (button.dataset.copyPromptBound === "true") continue;
+        button.dataset.copyPromptBound = "true";
+        button.addEventListener("click", async () => {
+          const previous = button.textContent;
+          button.disabled = true;
+          button.textContent = "Copying...";
+          try {
+            const response = await fetch("/api/copy-prompt", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ id: button.dataset.id, mode: button.dataset.copyPrompt, target_id: button.dataset.targetId }),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) throw new Error(payload.error || "Copy failed");
+            showToast(payload.message || "Prompt copied");
+          } catch (error) {
+            showToast(error.message || "Copy failed");
+          } finally {
+            button.disabled = false;
+            button.textContent = previous;
           }
         });
       }
@@ -3319,6 +3812,19 @@ function renderBriefPrompt(packet) {
     "",
   );
   return `${lines.join("\n")}\n`;
+}
+
+function renderMcpTakeoverInstruction(packet, target = null) {
+  const client = target && target.id !== "auto" ? ` in ${target.title}` : "";
+  return [
+    `Use acb${client} to read this handoff before acting.`,
+    "",
+    `Call the ACB MCP tool read_handoff with id: ${packet.id}`,
+    "",
+    "After loading it, summarize the packet you read and continue from that context.",
+    "Do not assume hidden state beyond the ACB packet.",
+    "",
+  ].join("\n");
 }
 
 function printPacket(packet) {

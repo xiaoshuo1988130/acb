@@ -223,14 +223,14 @@ acb view --all --limit 50 --out ./acb-view.html
 
 This is still not a dashboard. It does not start a server, watch files, or sync data. The goal is to make local handoff history easier to scan while keeping the storage and review path inspectable.
 
-`acb dashboard` is the lightweight local dashboard step:
+`acb dashboard` is the lightweight local control-surface step:
 
 ```bash
 acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It starts a read-only local HTTP server with an HTML dashboard, `/api/state`, and `/health`. It reads the packet store on each request, so refreshes show recent handoffs. It does not write to the store, sync data, or edit third-party client config.
+It starts an explicit local HTTP server with an HTML dashboard, `/api/state`, `/api/copy-prompt`, and `/health`. It reads the packet store on each request, so refreshes show recent handoffs. The dashboard can render a brief takeover prompt, full takeover prompt, or MCP pull instruction and copy it to the system clipboard when the user clicks a button. It also detects likely target clients through read-only PATH, workspace, and common local config-location checks, then uses those signals to preselect the top `Next handoff` copy action. It does not write to the packet store, sync data, silently inject context into model requests, or edit third-party client config.
 
 `acb list`, `acb timeline`, and `acb export` also default to the current workspace. Use `--all` when you intentionally want to inspect or export cross-workspace history.
 

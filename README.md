@@ -240,16 +240,16 @@ The viewer is a static local file. It does not start a server, sync data, or wat
 
 ## Dashboard
 
-`acb dashboard` starts a read-only local server:
+`acb dashboard` starts an explicit local control surface:
 
 ```bash
 acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It serves a lightweight HTML dashboard and `/api/state`. It does not write to the packet store or edit any client configuration.
+It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP. It does not write to the packet store, silently inject prompt text, or edit any client configuration.
 
-The default host is `127.0.0.1`. Keep it loopback-only unless you trust the network, because `/api/state` includes local store metadata and workspace paths. A `--workspace` dashboard only shows packets and workspace summaries for that workspace; use `--all` when you intentionally want a global view.
+The default host is `127.0.0.1`. Keep it loopback-only unless you trust the network, because the dashboard includes local store metadata, workspace paths, and clipboard-copy controls. A `--workspace` dashboard only shows packets and workspace summaries for that workspace; use `--all` when you intentionally want a global view.
 
 ## Brief Mode
 
