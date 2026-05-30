@@ -104,6 +104,14 @@ Before handing off an older packet, check whether the workspace has changed sinc
 acb freshness --latest
 ```
 
+By default freshness uses the Git snapshot you saved with `--git`. For non-Git or ignored-but-important files, opt in explicitly with watched paths:
+
+```bash
+acb handoff --summary "Ready for next agent" --watch README.md --watch package.json
+```
+
+You can also create `.acb/watch` with one workspace-relative path per line. ACB fingerprints only those explicit paths; it does not scan your whole workspace by default.
+
 For one combined pre-handoff decision, run:
 
 ```bash
@@ -304,6 +312,7 @@ acb ready --latest
 acb save --from <agent> --summary <text> --file <path> --copy
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
+acb save --from <agent> --summary <text> --watch README.md
 acb save --from <agent> --summary <text> --diff
 acb update <packet-id> --status <text> --note <text>
 acb status

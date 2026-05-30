@@ -1071,6 +1071,55 @@ test("freshness reports unknown, fresh, and changed handoff state", () => {
   assert.equal(JSON.parse(run(["show", freshPacket.id, "--json"], { env }).stdout).freshness.status, "changed");
 });
 
+test("freshness can use explicit workspace watch fingerprints", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  fs.writeFileSync(path.join(workspace, "handoff-plan.md"), "step one\n", "utf8");
+  const saved = run(["save", "--workspace", workspace, "--summary", "Watch handoff plan", "--watch", "handoff-plan.md", "--json"], { env });
+  assert.equal(saved.status, 0);
+  const packet = JSON.parse(saved.stdout);
+  assert.equal(packet.fingerprint.file_count, 1);
+  assert.deepEqual(packet.fingerprint.watch_paths, ["handoff-plan.md"]);
+
+  const fresh = JSON.parse(run(["freshness", packet.id, "--json"], { env }).stdout);
+  assert.equal(fresh.status, "fresh");
+  assert.equal(fresh.packet_git, null);
+  assert.equal(fresh.packet_fingerprint.file_count, 1);
+
+  const updated = JSON.parse(run(["update", packet.id, "--status", "Still watched", "--json"], { env }).stdout);
+  assert.equal(updated.fingerprint.file_count, 1);
+
+  fs.appendFileSync(path.join(workspace, "handoff-plan.md"), "step two\n", "utf8");
+  const changed = JSON.parse(run(["freshness", packet.id, "--json"], { env }).stdout);
+  assert.equal(changed.status, "changed");
+  assert.ok(changed.changes.some((change) => change.includes("watch file changed: handoff-plan.md")));
+
+  const ready = JSON.parse(run(["ready", packet.id, "--json"], { env }).stdout);
+  assert.equal(ready.status, "needs_refresh");
+  assert.ok(ready.next.refresh_handoff.includes("--watch handoff-plan.md"));
+});
+
+test("freshness can load watch paths from .acb/watch", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(path.join(workspace, ".acb"), { recursive: true });
+  fs.writeFileSync(path.join(workspace, "package.json"), "{\"name\":\"demo\"}\n", "utf8");
+  fs.writeFileSync(path.join(workspace, ".acb", "watch"), "# explicit ACB watch paths\npackage.json\n", "utf8");
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const saved = JSON.parse(run(["save", "--workspace", workspace, "--summary", "Config watch", "--json"], { env }).stdout);
+  assert.equal(saved.fingerprint.file_count, 1);
+  assert.deepEqual(saved.fingerprint.watch_paths, ["package.json"]);
+
+  fs.writeFileSync(path.join(workspace, "package.json"), "{\"name\":\"changed\"}\n", "utf8");
+  const changed = JSON.parse(run(["freshness", saved.id, "--json"], { env }).stdout);
+  assert.equal(changed.status, "changed");
+  assert.ok(changed.changes.some((change) => change.includes("watch file changed: package.json")));
+});
+
 test("ready reports handoff readiness across freshness and safety gates", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const workspace = path.join(dir, "repo");

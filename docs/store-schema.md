@@ -56,6 +56,7 @@ Each packet currently has this shape:
   "tags": [],
   "body": null,
   "git": null,
+  "fingerprint": null,
   "acknowledgements": [
     {
       "id": "ack_20260529120500_def456",
@@ -78,6 +79,8 @@ Required for valid imports:
 Optional fields may be `null` or absent in older exports. Import normalizes missing optional fields.
 
 `acknowledgements` is optional in older stores. Newer ACB versions write it as an array of explicit receiving-side confirmations created by `acb ack`, the dashboard `Mark Received` action, or the MCP `acknowledge_handoff` tool.
+
+`fingerprint` is optional. It is written only when the user explicitly passes `--watch <path>` or creates `.acb/watch` in the workspace. It stores bounded `sha256` metadata for those explicit workspace-relative paths so freshness checks can detect changes outside the lightweight Git snapshot. ACB does not scan the full workspace by default.
 
 Derived fields such as `safety`, `event`, `acknowledgement`, `freshness`, `readiness`, `next_resume`, `next_brief`, `next_ack`, `next_freshness`, `next_ready`, `next_mcp_read`, and `next_mcp_ready` are read-time output helpers. They are not stored in `packets.json`.
 

@@ -65,6 +65,8 @@ acb verify workflow cline
 
 This checks recipe, handoff, brief, MCP, and dashboard surfaces without launching or editing the client.
 
+MCP writers can also pass `watch_paths` to `save_handoff` or `update_handoff` when the handoff depends on explicit workspace files that Git does not cover. ACB fingerprints only those provided paths.
+
 The generated config looks like this:
 
 ```json

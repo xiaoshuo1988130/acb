@@ -114,6 +114,14 @@ acb ack --latest --by opencode --note "已读取 packet，并会从这个上下�
 acb freshness --latest
 ```
 
+默认情况下，freshness 使用 `--git` 保存的 Git 快照。如果有非 Git 文件、被 ignore 但确实影响交接的关键文件，可以显式 watch：
+
+```bash
+acb handoff --summary "Ready for next agent" --watch README.md --watch package.json
+```
+
+也可以创建 `.acb/watch`，每行写一个 workspace 相对路径。ACB 只会 fingerprint 这些显式路径，不会默认扫描整个项目。
+
 如果想要一个综合的交接前判断：
 
 ```bash
@@ -297,6 +305,7 @@ Dashboard 是一个显式启动的本地控制面板：
 acb quickstart --check
 acb demo --lang zh-CN
 acb handoff --from <agent> --summary <text> --git
+acb save --from <agent> --summary <text> --watch README.md
 acb receive --latest
 acb resume
 acb brief

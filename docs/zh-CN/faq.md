@@ -57,13 +57,13 @@ acb show <packet-id> --prompt
 
 ## 怎么确认 handoff 还是最新的？
 
-如果 packet 是用 `--git` 保存的，可以运行：
+如果 packet 是用 `--git`、`--watch` 或 `.acb/watch` 保存了 freshness 信息，可以运行：
 
 ```bash
 acb freshness --latest
 ```
 
-ACB 会对比 packet 保存时的 Git 快照和当前 workspace，返回 `fresh`、`changed` 或 `unknown`。
+ACB 会对比 packet 保存时的 Git 快照、显式 watched path fingerprint 和当前 workspace，返回 `fresh`、`changed` 或 `unknown`。
 
 ## 怎么确认这个 packet 可以交接了？
 

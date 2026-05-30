@@ -57,13 +57,13 @@ If it cannot name the packet id, paste the full `acb resume --id <packet-id>` ou
 
 ## How do I know the handoff is still current?
 
-If the packet was saved with `--git`, run:
+If the packet was saved with `--git`, `--watch`, or `.acb/watch`, run:
 
 ```bash
 acb freshness --latest
 ```
 
-ACB compares the packet's saved Git snapshot with the current workspace. It reports `fresh`, `changed`, or `unknown`.
+ACB compares the packet's saved Git snapshot and explicit watched-path fingerprint with the current workspace. It reports `fresh`, `changed`, or `unknown`.
 
 ## Is this packet ready to hand off?
 

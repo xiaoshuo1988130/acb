@@ -22,6 +22,12 @@ import {
   writeStore,
 } from "../lib/runtime.js";
 import {
+  createWorkspaceFingerprint,
+  fingerprintSummary,
+  readWatchFingerprint,
+  watchConfigPath,
+} from "../lib/fingerprint.js";
+import {
   PROMPT_BODY_LIMIT,
   packetAcknowledgements,
   packetAcknowledgementSummary,
@@ -42,10 +48,10 @@ const LANGUAGE_VALUE_FLAGS = new Set(["--workspace", "--lang"]);
 const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
-  acb handoff [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--no-copy | --print-prompt | --json]
+  acb handoff [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--watch <path>...] [--diff-limit <chars>] [--no-copy | --print-prompt | --json]
   acb demo [--workspace <path>] [--from <agent>] [--lang en|zh-CN] [--json]
-  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--copy | --print-prompt | --json]
-  acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]
+  acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--watch <path>...] [--diff-limit <chars>] [--copy | --print-prompt | --json]
+  acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--watch <path>...] [--clear-notes] [--clear-tags] [--json]
   acb ack [packet-id|--latest] [--workspace <path>] [--by <agent>] [--note <text>] [--json]
   acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
   acb latest [--workspace <path>] [--all] [--json]
@@ -586,6 +592,7 @@ function saveCommand(args) {
   const gitResult = args.includes("--git") || args.includes("--diff")
     ? readGitSnapshot(workspace)
     : { ok: true, snapshot: null };
+  const fingerprintResult = readWatchFingerprint(workspace, argValues(args, "--watch"));
 
   if (!bodyResult.ok) {
     console.error(bodyResult.error);
@@ -595,9 +602,13 @@ function saveCommand(args) {
     console.error(gitResult.error);
     return 2;
   }
+  if (!fingerprintResult.ok) {
+    console.error(fingerprintResult.error);
+    return 2;
+  }
 
-  if (!summary && !status && notes.length === 0 && !bodyResult.body && !gitResult.snapshot) {
-    console.error("acb save needs at least --summary, --status, --note, --file, --stdin, --diff, or --git.");
+  if (!summary && !status && notes.length === 0 && !bodyResult.body && !gitResult.snapshot && !fingerprintResult.fingerprint) {
+    console.error("acb save needs at least --summary, --status, --note, --file, --stdin, --diff, --git, or --watch.");
     return 2;
   }
 
@@ -610,6 +621,7 @@ function saveCommand(args) {
     tags,
     body: bodyResult.body || null,
     git: gitResult.snapshot,
+    fingerprint: fingerprintResult.fingerprint,
   });
 
   const store = loadStore();
@@ -650,7 +662,7 @@ function saveOutputModes(args) {
   return ["--copy", "--print-prompt", "--json"].filter((flag) => args.includes(flag));
 }
 
-function createHandoffPacket({ from, workspace, summary = null, status = null, notes = [], tags = [], body = null, git = null }) {
+function createHandoffPacket({ from, workspace, summary = null, status = null, notes = [], tags = [], body = null, git = null, fingerprint = null }) {
   return {
     id: createPacketId(),
     version: STORE_VERSION,
@@ -663,6 +675,7 @@ function createHandoffPacket({ from, workspace, summary = null, status = null, n
     tags,
     body,
     git,
+    fingerprint,
     acknowledgements: [],
   };
 }
@@ -670,11 +683,11 @@ function createHandoffPacket({ from, workspace, summary = null, status = null, n
 function updateCommand(args) {
   const id = args[0] || argValue(args, "--id");
   if (!id) {
-    console.error("Usage: acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]");
+    console.error("Usage: acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--watch <path>...] [--clear-notes] [--clear-tags] [--json]");
     return 2;
   }
   if (!hasUpdateArgs(args)) {
-    console.error("acb update needs at least one change: --summary, --status, --note, --tag, --file, --stdin, --diff, --git, --clear-notes, or --clear-tags.");
+    console.error("acb update needs at least one change: --summary, --status, --note, --tag, --file, --stdin, --diff, --git, --watch, --clear-notes, or --clear-tags.");
     return 2;
   }
 
@@ -712,6 +725,15 @@ function updateCommand(args) {
       return 2;
     }
     packet.git = gitResult.snapshot;
+  }
+
+  if (argValues(args, "--watch").length || fs.existsSync(watchConfigPath(packet.workspace))) {
+    const fingerprintResult = readWatchFingerprint(packet.workspace, argValues(args, "--watch"));
+    if (!fingerprintResult.ok) {
+      console.error(fingerprintResult.error);
+      return 2;
+    }
+    packet.fingerprint = fingerprintResult.fingerprint;
   }
 
   packet.updated_at = new Date().toISOString();
@@ -3342,6 +3364,7 @@ function normalizeImportedPacket(packet) {
     tags: Array.isArray(packet?.tags) ? packet.tags : [],
     body: packet?.body || null,
     git: packet?.git || null,
+    fingerprint: packet?.fingerprint || null,
     acknowledgements: packetAcknowledgements(packet),
   };
 }
@@ -3399,6 +3422,15 @@ function renderMarkdownExport(packets, { workspace = null } = {}) {
     }
     if (packet.git) {
       lines.push("", "### Git", "", renderGitSnapshot(packet.git));
+    }
+    if (packet.fingerprint) {
+      lines.push(
+        "",
+        "### Workspace Fingerprint",
+        "",
+        `- watch_paths: ${(packet.fingerprint.watch_paths || []).join(", ") || "none"}`,
+        `- files: ${packet.fingerprint.file_count || 0}`,
+      );
     }
     if (packet.notes?.length) {
       lines.push("", "### Notes");
@@ -3672,67 +3704,70 @@ function buildFreshnessReport(packet) {
     dirty_files: packet.git.status?.length || 0,
     status: packet.git.status || [],
   } : null;
+  const packetFingerprint = packet.fingerprint ? fingerprintSummary(packet.fingerprint) : null;
   const next = {
     show: `acb show ${packet.id}`,
-    refresh_handoff: formatCommand("acb", ["handoff", "--workspace", packet.workspace, "--summary", "Refresh handoff context", "--git"]),
+    refresh_handoff: refreshHandoffCommand(packet),
   };
-  if (!packetGit) {
+  if (!packetGit && !packetFingerprint) {
     return {
       ok: false,
       status: "unknown",
-      reason: "Packet has no Git snapshot. Save with --git to enable freshness checks.",
+      reason: "Packet has no Git snapshot or workspace fingerprint. Save with --git or --watch to enable freshness checks.",
       packet: packetSummary(packet),
       acknowledged: acknowledgement.acknowledged,
       packet_git: null,
       current_git: null,
+      packet_fingerprint: null,
+      current_fingerprint: null,
       changes: [],
       next,
     };
   }
 
-  const current = readGitSnapshot(packet.workspace);
-  if (!current.ok) {
+  const current = packetGit ? readGitSnapshot(packet.workspace) : { ok: true, snapshot: null };
+  const currentFingerprint = packetFingerprint
+    ? createWorkspaceFingerprint(packet.workspace, packet.fingerprint.watch_paths || [])
+    : { ok: true, fingerprint: null };
+  if (!current.ok || !currentFingerprint.ok) {
     return {
       ok: false,
       status: "unknown",
-      reason: current.error,
+      reason: current.error || currentFingerprint.error,
       packet: packetSummary(packet),
       acknowledged: acknowledgement.acknowledged,
       packet_git: packetGit,
       current_git: null,
+      packet_fingerprint: packetFingerprint,
+      current_fingerprint: null,
       changes: [],
       next,
     };
   }
 
-  const currentGit = {
+  const currentGit = current.snapshot ? {
     root: current.snapshot.root || null,
     branch: current.snapshot.branch || null,
     head: current.snapshot.head || null,
     dirty_files: current.snapshot.status?.length || 0,
     status: current.snapshot.status || [],
-  };
+  } : null;
+  const currentFingerprintSummary = currentFingerprint.fingerprint ? fingerprintSummary(currentFingerprint.fingerprint) : null;
   const changes = [];
-  if (packetGit.root && currentGit.root && packetGit.root !== currentGit.root) changes.push(`git root changed: ${packetGit.root} -> ${currentGit.root}`);
-  if (packetGit.branch !== currentGit.branch) changes.push(`branch changed: ${packetGit.branch || "unknown"} -> ${currentGit.branch || "unknown"}`);
-  if (packetGit.head !== currentGit.head) changes.push(`HEAD changed: ${packetGit.head || "unknown"} -> ${currentGit.head || "unknown"}`);
-  if (packetGit.dirty_files !== currentGit.dirty_files) changes.push(`dirty file count changed: ${packetGit.dirty_files} -> ${currentGit.dirty_files}`);
-  const packetStatus = new Set(packetGit.status);
-  const currentStatus = new Set(currentGit.status);
-  const added = currentGit.status.filter((line) => !packetStatus.has(line));
-  const removed = packetGit.status.filter((line) => !currentStatus.has(line));
-  if (added.length) changes.push(`new dirty status: ${added.slice(0, 5).join("; ")}`);
-  if (removed.length) changes.push(`resolved dirty status: ${removed.slice(0, 5).join("; ")}`);
+  if (packetGit && currentGit) changes.push(...compareGitSnapshot(packetGit, currentGit));
+  if (packetFingerprint && currentFingerprintSummary) changes.push(...compareWorkspaceFingerprint(packetFingerprint, currentFingerprintSummary));
 
   const status = changes.length ? "changed" : "fresh";
   return {
     ok: status === "fresh",
     status,
-    reason: status === "fresh" ? "Current Git snapshot matches the packet snapshot." : "Current Git snapshot differs from the packet snapshot.",
+    reason: status === "fresh" ? "Current freshness signals match the packet snapshot." : "Current freshness signals differ from the packet snapshot.",
     packet: packetSummary(packet),
     acknowledged: acknowledgement.acknowledged,
     packet_git: packetGit,
     current_git: currentGit,
+    packet_fingerprint: packetFingerprint,
+    current_fingerprint: currentFingerprintSummary,
     changes,
     next,
   };
@@ -3751,6 +3786,49 @@ function buildReadyReport(packet) {
     warnings: readiness.warnings,
     next: readiness.next,
   };
+}
+
+function compareGitSnapshot(packetGit, currentGit) {
+  const changes = [];
+  if (packetGit.root && currentGit.root && packetGit.root !== currentGit.root) changes.push(`git root changed: ${packetGit.root} -> ${currentGit.root}`);
+  if (packetGit.branch !== currentGit.branch) changes.push(`branch changed: ${packetGit.branch || "unknown"} -> ${currentGit.branch || "unknown"}`);
+  if (packetGit.head !== currentGit.head) changes.push(`HEAD changed: ${packetGit.head || "unknown"} -> ${currentGit.head || "unknown"}`);
+  if (packetGit.dirty_files !== currentGit.dirty_files) changes.push(`dirty file count changed: ${packetGit.dirty_files} -> ${currentGit.dirty_files}`);
+  const packetStatus = new Set(packetGit.status);
+  const currentStatus = new Set(currentGit.status);
+  const added = currentGit.status.filter((line) => !packetStatus.has(line));
+  const removed = packetGit.status.filter((line) => !currentStatus.has(line));
+  if (added.length) changes.push(`new dirty status: ${added.slice(0, 5).join("; ")}`);
+  if (removed.length) changes.push(`resolved dirty status: ${removed.slice(0, 5).join("; ")}`);
+  return changes;
+}
+
+function compareWorkspaceFingerprint(packetFingerprint, currentFingerprint) {
+  const changes = [];
+  const packetEntries = new Map((packetFingerprint.entries || []).map((entry) => [entry.path, entry]));
+  const currentEntries = new Map((currentFingerprint.entries || []).map((entry) => [entry.path, entry]));
+  for (const [entryPath, current] of currentEntries) {
+    const saved = packetEntries.get(entryPath);
+    if (!saved) {
+      changes.push(`watch path added: ${entryPath}`);
+      continue;
+    }
+    if (saved.type !== current.type) changes.push(`watch path type changed: ${entryPath}`);
+    else if (saved.type === "file" && saved.sha256 !== current.sha256) changes.push(`watch file changed: ${entryPath}`);
+  }
+  for (const entryPath of packetEntries.keys()) {
+    if (!currentEntries.has(entryPath)) changes.push(`watch path removed: ${entryPath}`);
+  }
+  return changes.slice(0, 20);
+}
+
+function refreshHandoffCommand(packet) {
+  const args = ["handoff", "--workspace", packet.workspace, "--summary", "Refresh handoff context"];
+  if (packet.git) args.push("--git");
+  const watchPaths = packet.fingerprint?.watch_paths || [];
+  for (const watchPath of watchPaths) args.push("--watch", watchPath);
+  if (!packet.git && !watchPaths.length) args.push("--git");
+  return formatCommand("acb", args);
 }
 
 function printSafetyReport(report) {
@@ -3787,6 +3865,10 @@ function printFreshnessReport(report) {
   if (report.current_git) {
     console.log(`current_head: ${report.current_git.head || "unknown"}`);
     console.log(`current_dirty_files: ${report.current_git.dirty_files}`);
+  }
+  if (report.packet_fingerprint) {
+    console.log(`watch_paths: ${report.packet_fingerprint.watch_paths.join(", ") || "none"}`);
+    console.log(`watch_files: ${report.packet_fingerprint.file_count}`);
   }
   if (report.changes.length) {
     console.log("changes:");
@@ -5411,6 +5493,11 @@ function mcpTools() {
             type: "boolean",
             description: "Attach tracked staged and unstaged Git diff text when the workspace is a Git repository.",
           },
+          watch_paths: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional workspace-relative paths to fingerprint for freshness checks.",
+          },
           diff_limit: {
             type: "integer",
             minimum: 1,
@@ -5484,6 +5571,11 @@ function mcpTools() {
           include_diff: {
             type: "boolean",
             description: "Replace body with tracked staged and unstaged Git diff text and refresh Git snapshot.",
+          },
+          watch_paths: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional workspace-relative paths to refresh as a fingerprint for freshness checks.",
           },
           diff_limit: {
             type: "integer",
@@ -5709,9 +5801,10 @@ function mcpSaveHandoff(args) {
     body = body ? `${body.trimEnd()}\n\n${diffResult.body}` : diffResult.body;
   }
 
-  if (!summary && !status && notes.length === 0 && !body && !args.include_git && !args.include_diff) {
+  const watchPaths = normalizeStringArray(args.watch_paths);
+  if (!summary && !status && notes.length === 0 && !body && !args.include_git && !args.include_diff && !watchPaths.length) {
     return {
-      content: [{ type: "text", text: "save_handoff requires summary, status, notes, body, include_git, or include_diff." }],
+      content: [{ type: "text", text: "save_handoff requires summary, status, notes, body, include_git, include_diff, or watch_paths." }],
       isError: true,
     };
   }
@@ -5720,6 +5813,13 @@ function mcpSaveHandoff(args) {
   if (!gitResult.ok) {
     return {
       content: [{ type: "text", text: gitResult.error }],
+      isError: true,
+    };
+  }
+  const fingerprintResult = watchPaths.length ? createWorkspaceFingerprint(workspace, watchPaths) : { ok: true, fingerprint: null };
+  if (!fingerprintResult.ok) {
+    return {
+      content: [{ type: "text", text: fingerprintResult.error }],
       isError: true,
     };
   }
@@ -5733,6 +5833,7 @@ function mcpSaveHandoff(args) {
     tags,
     body,
     git: gitResult.snapshot,
+    fingerprint: fingerprintResult.fingerprint,
   });
   const store = loadStore();
   store.packets.unshift(packet);
@@ -5815,6 +5916,7 @@ function mcpUpdateHandoff(args) {
     packet.body = diffResult.body;
   }
 
+  const watchPaths = normalizeStringArray(args.watch_paths);
   if (args.include_git || args.include_diff) {
     const gitResult = readGitSnapshot(packet.workspace);
     if (!gitResult.ok) {
@@ -5824,6 +5926,16 @@ function mcpUpdateHandoff(args) {
       };
     }
     packet.git = gitResult.snapshot;
+  }
+  if (watchPaths.length) {
+    const fingerprintResult = createWorkspaceFingerprint(packet.workspace, watchPaths);
+    if (!fingerprintResult.ok) {
+      return {
+        content: [{ type: "text", text: fingerprintResult.error }],
+        isError: true,
+      };
+    }
+    packet.fingerprint = fingerprintResult.fingerprint;
   }
 
   packet.updated_at = new Date().toISOString();
@@ -5878,7 +5990,8 @@ function hasMcpUpdateArgs(args) {
     || Boolean(args.clear_notes)
     || Boolean(args.clear_tags)
     || Boolean(args.include_git)
-    || Boolean(args.include_diff);
+    || Boolean(args.include_diff)
+    || normalizeStringArray(args.watch_paths).length > 0;
 }
 
 function normalizeStringArray(value) {
@@ -5963,6 +6076,8 @@ function packetSummary(packet) {
     tags: packet.tags || [],
     body_chars: packet.body?.length || 0,
     git_dirty_files: packet.git?.status?.length || 0,
+    fingerprint_file_count: packet.fingerprint?.file_count || 0,
+    watch_paths: packet.fingerprint?.watch_paths || [],
     acknowledged: acknowledgement.acknowledged,
     acknowledgement_count: acknowledgement.count,
     latest_acknowledgement: acknowledgement.latest,
@@ -6135,6 +6250,10 @@ function printPacket(packet) {
     console.log(`git_head: ${packet.git.head || "unknown"}`);
     console.log(`git_dirty_files: ${packet.git.status?.length || 0}`);
   }
+  if (packet.fingerprint) {
+    console.log(`watch_paths: ${(packet.fingerprint.watch_paths || []).join(", ") || "none"}`);
+    console.log(`watch_files: ${packet.fingerprint.file_count || 0}`);
+  }
   const safety = packetSafety(packet);
   console.log(`safety: ${safety.level}`);
   if (safety.warnings.length) {
@@ -6201,34 +6320,43 @@ function createAcknowledgement({ by, note = null }) {
 }
 
 function packetFreshnessSummary(packet) {
-  if (!packet?.git) {
+  if (!packet?.git && !packet?.fingerprint) {
     return {
       status: "unknown",
-      reason: "no_git_snapshot",
+      reason: "no_freshness_snapshot",
       checked_at: null,
     };
   }
-  const current = readGitSnapshot(packet.workspace);
-  if (!current.ok) {
+  const current = packet.git ? readGitSnapshot(packet.workspace) : { ok: true, snapshot: null };
+  const currentFingerprint = packet.fingerprint
+    ? createWorkspaceFingerprint(packet.workspace, packet.fingerprint.watch_paths || [])
+    : { ok: true, fingerprint: null };
+  if (!current.ok || !currentFingerprint.ok) {
     return {
       status: "unknown",
-      reason: "git_unavailable",
+      reason: current.error ? "git_unavailable" : "fingerprint_unavailable",
       checked_at: new Date().toISOString(),
     };
   }
   const changes = [];
-  const packetStatus = packet.git.status || [];
-  const currentStatus = current.snapshot.status || [];
-  if ((packet.git.branch || null) !== (current.snapshot.branch || null)) changes.push("branch");
-  if ((packet.git.head || null) !== (current.snapshot.head || null)) changes.push("head");
-  if (packetStatus.length !== currentStatus.length) changes.push("dirty_count");
-  else {
-    const currentSet = new Set(currentStatus);
-    if (packetStatus.some((line) => !currentSet.has(line))) changes.push("dirty_status");
+  if (packet.git && current.snapshot) {
+    const packetStatus = packet.git.status || [];
+    const currentStatus = current.snapshot.status || [];
+    if ((packet.git.branch || null) !== (current.snapshot.branch || null)) changes.push("branch");
+    if ((packet.git.head || null) !== (current.snapshot.head || null)) changes.push("head");
+    if (packetStatus.length !== currentStatus.length) changes.push("dirty_count");
+    else {
+      const currentSet = new Set(currentStatus);
+      if (packetStatus.some((line) => !currentSet.has(line))) changes.push("dirty_status");
+    }
+  }
+  if (packet.fingerprint && currentFingerprint.fingerprint) {
+    const fingerprintChanges = compareWorkspaceFingerprint(fingerprintSummary(packet.fingerprint), fingerprintSummary(currentFingerprint.fingerprint));
+    if (fingerprintChanges.length) changes.push("watch_fingerprint");
   }
   return {
     status: changes.length ? "changed" : "fresh",
-    reason: changes.length ? changes.join(",") : "git_snapshot_match",
+    reason: changes.length ? changes.join(",") : "freshness_snapshot_match",
     checked_at: new Date().toISOString(),
   };
 }
@@ -6265,13 +6393,13 @@ function evaluatePacketReadiness(packet) {
   const addWarning = (id, detail) => warnings.push({ id, detail });
 
   if (freshness.status === "fresh") {
-    addCheck("freshness", "ok", "Current Git snapshot matches the packet.");
+    addCheck("freshness", "ok", "Current freshness signals match the packet.");
   } else if (freshness.status === "changed") {
     addCheck("freshness", "fail", `Workspace changed since packet save (${freshness.reason}).`);
     addBlocker("freshness_changed", "Refresh the handoff before passing it to another agent.");
   } else {
     addCheck("freshness", "fail", `Freshness is unknown (${freshness.reason}).`);
-    addBlocker("freshness_unknown", "Save the packet with --git or refresh it before handoff.");
+    addBlocker("freshness_unknown", "Save the packet with --git or --watch, or refresh it before handoff.");
   }
 
   if (safety.level === "ok") {
@@ -6321,7 +6449,7 @@ function evaluatePacketReadiness(packet) {
       freshness: `acb freshness ${packet.id}`,
       resume: `acb resume --id ${packet.id}`,
       ack: `acb ack ${packet.id} --by <agent>`,
-      refresh_handoff: formatCommand("acb", ["handoff", "--workspace", packet.workspace, "--summary", "Refresh handoff context", "--git"]),
+      refresh_handoff: refreshHandoffCommand(packet),
     },
   };
 }
@@ -6357,6 +6485,7 @@ function hasUpdateArgs(args) {
     || args.includes("--clear-notes")
     || args.includes("--clear-tags")
     || args.includes("--git")
+    || argValues(args, "--watch").length > 0
     || hasBodySource(args);
 }
 

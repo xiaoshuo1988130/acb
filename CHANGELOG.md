@@ -6,11 +6,13 @@
 
 - Added copyable Agent instruction patches for MCP-capable receiving clients so agents can check ACB readiness, read handoffs, summarize packets, and acknowledge receipt before editing.
 - Added Simplified Chinese Agent instruction docs with the same setup boundary.
+- Added opt-in workspace fingerprints via `--watch <path>` and `.acb/watch` so freshness can detect explicitly watched file changes beyond the Git snapshot.
 
 ### Changed
 
 - Clarified that ACB remains explicit-first, with MCP as a first-class pull mode rather than a hidden default route.
 - Clarified the five-minute demo positioning around not re-explaining repo state when switching coding agents.
+- Expanded freshness and readiness checks to accept either Git snapshots or explicit watched-path fingerprints.
 - Extracted prompt rendering and acknowledgement summary logic from `bin/acb.js` into `lib/prompts.js` as the first staged module split.
 
 ## 0.14.0

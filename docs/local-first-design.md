@@ -118,14 +118,14 @@ acb ack pkt_20260527123000_abc123 --by opencode --note "Read packet and continui
 
 `ack` appends an acknowledgement entry to the packet. It does not infer client behavior, watch third-party apps, or auto-mark packets as received.
 
-Older packets can be checked against the current Git snapshot before handoff:
+Older packets can be checked against the current freshness snapshot before handoff:
 
 ```bash
 acb freshness pkt_20260527123000_abc123
 acb freshness --workspace .
 ```
 
-Freshness is derived at read time. It does not watch files or update the store. Packets without a Git snapshot report `unknown`; packets whose saved branch, HEAD, or dirty status differs from the current workspace report `changed`.
+Freshness is derived at read time. It does not watch files continuously or update the store. Packets without a Git snapshot or explicit workspace fingerprint report `unknown`; packets whose saved branch, HEAD, dirty status, or watched file fingerprint differs from the current workspace report `changed`.
 
 `acb ready` is the combined pre-handoff gate:
 
@@ -134,7 +134,7 @@ acb ready pkt_20260527123000_abc123
 acb ready --workspace .
 ```
 
-It evaluates freshness, safety warnings, body coverage, and receiving-side acknowledgement state. Freshness drift, missing Git snapshots, safety warnings, or empty context become blockers; summary-only bodies and pending acknowledgement become warnings. The command does not mutate the store, copy text, start clients, or mark acknowledgement automatically.
+It evaluates freshness, safety warnings, body coverage, and receiving-side acknowledgement state. Freshness drift, missing freshness snapshots, safety warnings, or empty context become blockers; summary-only bodies and pending acknowledgement become warnings. The command does not mutate the store, copy text, start clients, or mark acknowledgement automatically.
 
 `acb preview` writes the current workspace handoff prompt to a Markdown file:
 
@@ -166,6 +166,24 @@ ACB records:
 - `git status --short`
 
 It intentionally does not capture `git diff` by default. Use `--diff` when the next agent needs the tracked staged and unstaged diff relative to `HEAD`. `--diff` is bounded by `--diff-limit` and does not include untracked file contents.
+
+## Workspace Fingerprint
+
+Git is the default freshness guard, but some handoffs depend on explicit non-Git or ignored local files. ACB supports opt-in fingerprints for those paths:
+
+```bash
+acb save --summary "Ready for another agent" --watch README.md --watch package.json
+```
+
+You can also create `.acb/watch` in the workspace, one relative path per line:
+
+```text
+README.md
+package.json
+docs
+```
+
+ACB fingerprints only these explicit paths. It does not scan the whole workspace by default, and it does not auto-discover ignored sensitive files. Directory watches are bounded and skip `.git`, `node_modules`, and `.DS_Store`.
 
 ## Clipboard
 
