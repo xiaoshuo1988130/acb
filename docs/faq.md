@@ -121,13 +121,13 @@ Then configure your MCP-capable client through that client's supported settings 
 For a quick visual demo:
 
 ```bash
-npx @xiaoshuo1988/acb@latest quickstart --check
-npx @xiaoshuo1988/acb@latest demo
-npx @xiaoshuo1988/acb@latest dashboard --workspace .
+npx @agentcontextbus/cli@latest quickstart --check
+npx @agentcontextbus/cli@latest demo
+npx @agentcontextbus/cli@latest dashboard --workspace .
 ```
 
 For a no-store smoke test:
 
 ```bash
-npx @xiaoshuo1988/acb@latest verify first-run
+npx @agentcontextbus/cli@latest verify first-run
 ```

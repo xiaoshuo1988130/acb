@@ -12,7 +12,7 @@
     <text x="28" y="78" fill="#8b949e">$ acb quickstart --check</text>
     <text x="28" y="108" fill="#e6edf3">ACB Quickstart Check</text>
     <text x="28" y="136" fill="#7ee787">version: acb 0.5.0</text>
-    <text x="28" y="164" fill="#e6edf3">package: @xiaoshuo1988/acb</text>
+    <text x="28" y="164" fill="#e6edf3">package: @agentcontextbus/cli</text>
     <text x="28" y="192" fill="#e6edf3">store_readable: yes</text>
     <text x="28" y="220" fill="#e6edf3">git_workspace: yes</text>
     <text x="28" y="248" fill="#e6edf3">clipboard_ready: yes</text>

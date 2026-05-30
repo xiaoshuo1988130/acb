@@ -18,14 +18,14 @@ ACB 的边界很明确：
 - 不做后台跨 Agent 自动化。
 - 不做云同步或托管 dashboard。
 
-npm 包名是 `@xiaoshuo1988/acb`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。
+npm 主包名是 `@agentcontextbus/cli`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。早期的 `@xiaoshuo1988/acb` 会继续作为兼容路径保留。
 
 ## 30 秒试用
 
 ```bash
-npx @xiaoshuo1988/acb@latest quickstart --check --lang zh-CN
-npx @xiaoshuo1988/acb@latest demo --lang zh-CN
-npx @xiaoshuo1988/acb@latest dashboard --workspace . --lang zh-CN
+npx @agentcontextbus/cli@latest quickstart --check --lang zh-CN
+npx @agentcontextbus/cli@latest demo --lang zh-CN
+npx @agentcontextbus/cli@latest dashboard --workspace . --lang zh-CN
 ```
 
 这会创建一条本地 demo packet，并打开 dashboard。进入页面后，先看首屏的 `第一次交接流程`：保存上下文、检查安全、验证流程、复制交接。
@@ -33,7 +33,7 @@ npx @xiaoshuo1988/acb@latest dashboard --workspace . --lang zh-CN
 如果你想先做完全不写真实 store 的 smoke test：
 
 ```bash
-npx @xiaoshuo1988/acb@latest verify first-run --lang zh-CN
+npx @agentcontextbus/cli@latest verify first-run --lang zh-CN
 ```
 
 `verify first-run` 会用临时本地 store 检查 quickstart、demo packet、brief/resume、dashboard state 和 setup workflow。除非你自己传入 `ACB_STORE`，否则不会写入真实 ACB store。
@@ -45,7 +45,7 @@ npx @xiaoshuo1988/acb@latest verify first-run --lang zh-CN
 ## 安装
 
 ```bash
-npm install -g @xiaoshuo1988/acb
+npm install -g @agentcontextbus/cli
 acb quickstart --check
 ```
 
@@ -64,7 +64,7 @@ ACB_LANG=zh-CN acb quickstart --check
 也可以不安装，直接运行：
 
 ```bash
-npx @xiaoshuo1988/acb quickstart --check
+npx @agentcontextbus/cli quickstart --check
 ```
 
 检查结果会给出推荐目标客户端、适合人看的“推荐下一步”，以及适合脚本读取的 `acb demo`、`acb receive --latest`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 命令。

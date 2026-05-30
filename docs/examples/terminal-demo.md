@@ -8,7 +8,7 @@ This is a copyable transcript for the first ACB workflow. It is intentionally pl
 $ acb quickstart --check
 ACB Quickstart Check
 version: acb 0.5.0
-package: @xiaoshuo1988/acb
+package: @agentcontextbus/cli
 store: /Users/you/.acb/packets.json
 store_readable: yes
 workspace: /Users/you/project

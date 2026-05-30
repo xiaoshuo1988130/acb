@@ -15,7 +15,7 @@ You should see:
 ```text
 ACB Quickstart Check
 version: acb 0.5.0
-package: @xiaoshuo1988/acb
+package: @agentcontextbus/cli
 store_readable: yes
 clipboard_ready: yes
 next_handoff: acb handoff --from codex --summary "Ready for the next agent" --git

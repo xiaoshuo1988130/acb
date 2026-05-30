@@ -16,15 +16,15 @@ ACB stays local and explicit throughout this flow:
 Install globally if you expect to use ACB often:
 
 ```bash
-npm install -g @xiaoshuo1988/acb
+npm install -g @agentcontextbus/cli
 acb quickstart --check
 ```
 
 Or try it without a global install:
 
 ```bash
-npx @xiaoshuo1988/acb quickstart --check
-npx @xiaoshuo1988/acb verify first-run
+npx @agentcontextbus/cli quickstart --check
+npx @agentcontextbus/cli verify first-run
 ```
 
 `quickstart --check` prints:
@@ -139,8 +139,8 @@ This checks the ACB-side recipe, handoff packet, brief, full resume prompt, MCP 
 ## Recommended First Path
 
 ```bash
-npx @xiaoshuo1988/acb quickstart --check
-npm install -g @xiaoshuo1988/acb
+npx @agentcontextbus/cli quickstart --check
+npm install -g @agentcontextbus/cli
 acb verify first-run
 acb demo
 acb dashboard --workspace .

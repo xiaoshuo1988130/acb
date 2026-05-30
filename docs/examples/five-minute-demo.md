@@ -16,19 +16,19 @@ The demo proves four things:
 ## 1. Check The Install
 
 ```bash
-npx @xiaoshuo1988/acb@latest quickstart --check
+npx @agentcontextbus/cli@latest quickstart --check
 ```
 
 For a fully temporary smoke test:
 
 ```bash
-npx @xiaoshuo1988/acb@latest verify first-run
+npx @agentcontextbus/cli@latest verify first-run
 ```
 
 ## 2. Install For Daily Use
 
 ```bash
-npm install -g @xiaoshuo1988/acb
+npm install -g @agentcontextbus/cli
 acb quickstart --check
 ```
 

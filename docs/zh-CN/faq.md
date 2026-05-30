@@ -121,13 +121,13 @@ acb verify mcp --config ./mcp.json --name acb
 快速可视化 demo：
 
 ```bash
-npx @xiaoshuo1988/acb@latest quickstart --check --lang zh-CN
-npx @xiaoshuo1988/acb@latest demo --lang zh-CN
-npx @xiaoshuo1988/acb@latest dashboard --workspace . --lang zh-CN
+npx @agentcontextbus/cli@latest quickstart --check --lang zh-CN
+npx @agentcontextbus/cli@latest demo --lang zh-CN
+npx @agentcontextbus/cli@latest dashboard --workspace . --lang zh-CN
 ```
 
 完全不写真实 store 的 smoke test：
 
 ```bash
-npx @xiaoshuo1988/acb@latest verify first-run --lang zh-CN
+npx @agentcontextbus/cli@latest verify first-run --lang zh-CN
 ```

@@ -328,11 +328,11 @@ function readPackageMeta() {
     const packageUrl = new URL("../package.json", import.meta.url);
     const parsed = JSON.parse(fs.readFileSync(packageUrl, "utf8"));
     return {
-      name: parsed.name || "@xiaoshuo1988/acb",
+      name: parsed.name || "@agentcontextbus/cli",
       version: parsed.version || "0.0.0",
     };
   } catch {
-    return { name: "@xiaoshuo1988/acb", version: "0.0.0" };
+    return { name: "@agentcontextbus/cli", version: "0.0.0" };
   }
 }
 

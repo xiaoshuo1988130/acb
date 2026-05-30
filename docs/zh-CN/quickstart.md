@@ -7,7 +7,7 @@
 全局安装：
 
 ```bash
-npm install -g @xiaoshuo1988/acb
+npm install -g @agentcontextbus/cli
 acb quickstart --check
 ```
 
@@ -20,8 +20,8 @@ acb quickstart --check --lang zh-CN
 不安装，直接试用：
 
 ```bash
-npx @xiaoshuo1988/acb quickstart --check
-npx @xiaoshuo1988/acb verify first-run --lang zh-CN
+npx @agentcontextbus/cli quickstart --check
+npx @agentcontextbus/cli verify first-run --lang zh-CN
 ```
 
 `quickstart --check` 会检查本地 store、Git、剪贴板、`acb` 是否在 PATH 里，并给出推荐目标客户端、“推荐下一步”操作卡片，以及 `acb demo`、`acb receive --latest`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 等命令。
@@ -133,7 +133,7 @@ acb verify workflow --all
 ## 推荐首跑顺序
 
 ```bash
-npx @xiaoshuo1988/acb quickstart --check
+npx @agentcontextbus/cli quickstart --check
 acb demo --lang zh-CN
 acb handoff --from codex --summary "Ready for next agent" --git
 acb receive --latest
@@ -144,7 +144,7 @@ acb dashboard --workspace . --lang zh-CN
 如果你还没有全局安装，第一行之后可以先运行：
 
 ```bash
-npm install -g @xiaoshuo1988/acb
+npm install -g @agentcontextbus/cli
 ```
 
 关于自动启动、剪贴板、客户端配置、数据位置和 MCP 接入等常见疑问，见 [常见问题](faq.md)。

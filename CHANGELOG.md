@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.15.0
+
+Primary npm scope migration and freshness fingerprints.
 
 ### Added
 
@@ -10,6 +12,7 @@
 
 ### Changed
 
+- Switched the primary npm package name to `@agentcontextbus/cli`; the legacy `@xiaoshuo1988/acb` package remains available as a compatibility path.
 - Clarified that ACB remains explicit-first, with MCP as a first-class pull mode rather than a hidden default route.
 - Clarified the five-minute demo positioning around not re-explaining repo state when switching coding agents.
 - Expanded freshness and readiness checks to accept either Git snapshots or explicit watched-path fingerprints.

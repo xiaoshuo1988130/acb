@@ -20,14 +20,14 @@ It is intentionally explicit:
 - No background cross-agent automation.
 - No cloud sync or hosted dashboard.
 
-The package is published as `@xiaoshuo1988/acb` and installs the short `acb` command. Use the scoped package name; the unscoped `acb` npm package name is already taken.
+The package is published as `@agentcontextbus/cli` and installs the short `acb` command. Use the scoped package name; the unscoped `acb` npm package name is already taken. The earlier `@xiaoshuo1988/acb` package remains available as a legacy compatibility path.
 
 ## Try In 30 Seconds
 
 ```bash
-npx @xiaoshuo1988/acb@latest quickstart --check
-npx @xiaoshuo1988/acb@latest demo
-npx @xiaoshuo1988/acb@latest dashboard --workspace .
+npx @agentcontextbus/cli@latest quickstart --check
+npx @agentcontextbus/cli@latest demo
+npx @agentcontextbus/cli@latest dashboard --workspace .
 ```
 
 This creates a local demo packet and opens the dashboard. In the first viewport, use `First handoff flow` to try `Save`, `Safety`, `Verify`, and `Copy`.
@@ -35,7 +35,7 @@ This creates a local demo packet and opens the dashboard. In the first viewport,
 Prefer a no-store smoke test first:
 
 ```bash
-npx @xiaoshuo1988/acb@latest verify first-run
+npx @agentcontextbus/cli@latest verify first-run
 ```
 
 `verify first-run` uses a temporary local store to check quickstart readiness, demo packet creation, brief/resume rendering, dashboard state, and setup workflow checks. It does not write to your real ACB store unless you pass `ACB_STORE` yourself.
@@ -47,14 +47,14 @@ Questions about auto-start, clipboard, client config, or data location? See the 
 ## Install
 
 ```bash
-npm install -g @xiaoshuo1988/acb
+npm install -g @agentcontextbus/cli
 acb quickstart --check
 ```
 
 Or run without installing:
 
 ```bash
-npx @xiaoshuo1988/acb quickstart --check
+npx @agentcontextbus/cli quickstart --check
 ```
 
 The check also prints a recommended client target, human-readable `Next actions`, and script-friendly `acb demo`, `acb setup --check`, `acb verify workflow`, and `acb dashboard` next steps.
