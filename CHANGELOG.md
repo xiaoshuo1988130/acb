@@ -6,6 +6,7 @@
 
 - Added a visual README hero that shows the local handoff flow from source agent to ACB packet to receiving MCP client.
 - Added a real dashboard screenshot to README visual demos.
+- Refined the dashboard visual treatment with a stronger control-panel header, highlighted handoff CTA, richer status badges, and updated screenshot asset.
 
 ## 0.15.1
 
