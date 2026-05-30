@@ -9,6 +9,9 @@ Packet safety hints.
 - Added derived packet safety hints for secret-like content, sensitive-looking paths, and large context bodies.
 - Exposed safety hints in packet JSON summaries, dashboard state, static HTML viewer cards, Markdown exports, and human `show` output.
 - Added dashboard safety warning counts so local handoff packets are easier to audit before copying into another agent.
+- Added `acb safety` and `acb verify safety` for terminal and CI-style packet safety review.
+- Added a dashboard Safety tab and lightweight structured timeline event metadata.
+- Added SDK and LangChain handoff examples for explicit ACB context loading.
 
 ## 0.12.1
 

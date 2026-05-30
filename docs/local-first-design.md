@@ -214,6 +214,8 @@ It prints recent handoff packets with:
 - Workspace
 - Compact facts such as note count, body size, dirty file count, and tags
 
+Timeline JSON also includes an additive `event` object with `event_type: "handoff_packet"`, packet id, workspace, source agent, summary, and safety level. This gives scripts a lightweight trace surface without introducing a daemon or external event log.
+
 This deliberately comes before a web dashboard. It validates whether handoff history is useful in daily work without adding frontend complexity.
 
 `acb view` is the next visual step. It writes a static local HTML file with recent handoff cards:

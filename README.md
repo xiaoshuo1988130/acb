@@ -116,6 +116,14 @@ Each packet can include:
 
 ACB also derives safety hints when packets are read or displayed. These hints flag secret-like text, sensitive-looking paths such as `.env` or key files, and large bodies that will be truncated in prompts. They are review aids only; ACB does not silently redact or mutate your packet contents.
 
+Review the latest packet for the current workspace:
+
+```bash
+acb safety
+acb safety --json
+acb verify safety
+```
+
 Override the store for experiments:
 
 ```bash
@@ -212,6 +220,7 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 - [First run](docs/first-run.md)
 - [Codex to OpenCode handoff](docs/examples/codex-to-opencode.md)
 - [Terminal demo transcript](docs/examples/terminal-demo.md)
+- [SDK and LangChain handoff](docs/examples/sdk-handoff.md)
 - [MCP client recipes](docs/recipes/mcp-clients.md)
 - [Brief mode](docs/brief.md)
 - [Dashboard](docs/dashboard.md)
@@ -244,11 +253,13 @@ acb list
 acb workspaces
 acb search <query>
 acb timeline
+acb safety
 acb view --open
 acb dashboard --workspace .
 acb recipe opencode
 acb verify workflow opencode
 acb verify first-run
+acb verify safety
 acb export --format markdown --out ./handoffs.md
 acb import --file ./handoffs.json
 acb delete <packet-id>
@@ -297,7 +308,7 @@ acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a client setup guide with copyable recipe/config/verify commands and an ACB-side workflow check button. It also shows derived safety hints before you copy context into another agent. It does not silently inject prompt text or edit any client configuration.
+It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a client setup guide with copyable recipe/config/verify commands and an ACB-side workflow check button. The packet detail also has a Safety tab for derived warnings before you copy context into another agent. It does not silently inject prompt text or edit any client configuration.
 
 The default host is `127.0.0.1`. Keep it loopback-only unless you trust the network, because the dashboard includes local store metadata, workspace paths, and clipboard-copy controls. A `--workspace` dashboard only shows packets and workspace summaries for that workspace; use `--all` when you intentionally want a global view.
 

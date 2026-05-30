@@ -49,6 +49,16 @@ The dashboard exposes the same ACB-side check as `Run ACB-side Check` in the sel
 
 `acb setup [target] --check` is the guided version of the same smoke test. It prints the setup commands and client prompt first, then appends a compact ACB-side check report so a new user can verify the handoff path before touching client configuration.
 
+`acb verify safety` checks the derived safety-hint path with a temporary local store:
+
+```bash
+acb verify safety
+acb verify safety --workspace . --json
+acb verify safety --keep-artifacts
+```
+
+It creates one packet with fake secret-shaped text and sensitive-looking paths, plus one clean packet. The check passes when ACB flags the risky packet, leaves the clean packet as `ok`, and confirms safety metadata is derived at read time rather than stored in `packets.json`.
+
 ## What It Does Not Do
 
 It does not launch OpenCode, Cline, Roo, Claude Desktop, Codex, or any other third-party client.

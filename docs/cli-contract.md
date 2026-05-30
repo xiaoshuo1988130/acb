@@ -50,9 +50,11 @@ acb list --json
 acb workspaces --json
 acb search <query> --json
 acb timeline --json
+acb safety --json
 acb brief --json
 acb setup --json
 acb verify workflow codex --json
+acb verify safety --json
 acb store info --json
 acb store backup --json
 ```

@@ -52,6 +52,7 @@ Usage:
   acb workspaces [--limit <n>] [--json]
   acb search <query> [--workspace <path>] [--all] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--all] [--limit <n>] [--json]
+  acb safety [packet-id] [--workspace <path>] [--json]
   acb view [--workspace <path>] [--all] [--limit <n>] [--out <path>] [--open]
   acb dashboard [--workspace <path>] [--all] [--limit <n>] [--host <host>] [--port <port>] [--lang en|zh-CN] [--open]
   acb export [--workspace <path>] [--all] [--limit <n>] [--format markdown|json] [--out <path>]
@@ -65,6 +66,7 @@ Usage:
   acb verify first-run [--workspace <path>] [--target <target>] [--lang en|zh-CN] [--keep-artifacts] [--json]
   acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
   acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]
+  acb verify safety [--workspace <path>] [--keep-artifacts] [--json]
   acb serve
   acb store path
   acb store info [--json]
@@ -341,6 +343,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "workspaces") return workspacesCommand(args);
   if (command === "search") return searchCommand(args);
   if (command === "timeline") return timelineCommand(args);
+  if (command === "safety") return safetyCommand(args);
   if (command === "view") return viewCommand(args);
   if (command === "dashboard") return dashboardCommand(args);
   if (command === "export") return exportCommand(args);
@@ -1076,6 +1079,27 @@ function timelineCommand(args) {
   return 0;
 }
 
+function safetyCommand(args) {
+  const id = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
+  const workspace = id
+    ? null
+    : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const packet = findPacket({ id, workspace });
+  if (!packet) {
+    console.error(id ? `No handoff packet found for id: ${id}` : `No handoff packet found for workspace: ${workspace}`);
+    return 1;
+  }
+
+  const report = buildSafetyReport(packet, { workspace });
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+
+  printSafetyReport(report);
+  return report.safety.level === "ok" ? 0 : 1;
+}
+
 function viewCommand(args) {
   const scope = resolveHistoryScope(args);
   if (!scope.ok) {
@@ -1627,7 +1651,7 @@ function dashboardLabels(lang) {
       copyFullPrompt: "复制完整提示词",
       copyBriefPrompt: "复制简短提示词",
       forTarget: "给",
-      tabs: { overview: "概览", commands: "命令", body: "正文", git: "Git" },
+      tabs: { overview: "概览", commands: "命令", safety: "安全", body: "正文", git: "Git" },
       noBody: "这个上下文包没有正文预览。",
       noGit: "没有记录 Git 快照。",
       noDirtyFiles: "没有记录改动文件。",
@@ -1719,7 +1743,7 @@ function dashboardLabels(lang) {
     copyFullPrompt: "Copy Full Prompt",
     copyBriefPrompt: "Copy Brief Prompt",
     forTarget: "for",
-    tabs: { overview: "overview", commands: "commands", body: "body", git: "git" },
+    tabs: { overview: "overview", commands: "commands", safety: "safety", body: "body", git: "git" },
     noBody: "No body preview captured for this packet.",
     noGit: "No Git snapshot captured.",
     noDirtyFiles: "No dirty files captured.",
@@ -2265,7 +2289,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         wireCreateDemoButtons();
         return;
       }
-      const tabs = ["overview", "commands", "body", "git"];
+      const tabs = ["overview", "commands", "safety", "body", "git"];
       const tabButtons = tabs.map((tab) => '<button class="tab ' + (tab === activeTab ? 'active' : '') + '" data-tab="' + tab + '">' + escape(labels.tabs[tab] || tab) + '</button>').join("");
       const target = selectedTarget();
       const targetMode = copyModeForTarget(target);
@@ -2371,6 +2395,11 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         return packet.body_preview
           ? '<pre>' + escape(packet.body_preview) + '</pre>'
           : '<div class="empty">' + escape(labels.noBody) + '</div>';
+      }
+      if (activeTab === "safety") {
+        const warnings = packet.safety && packet.safety.warnings ? packet.safety.warnings : [];
+        if (!warnings.length) return '<div class="empty">' + escape(labels.noSafetyWarnings) + '</div>';
+        return '<p>' + escape(labels.safetyReview) + '</p><ul>' + warnings.map((warning) => '<li><span>' + escape(warning.title + ": " + warning.detail) + '</span></li>').join("") + '</ul>';
       }
       if (activeTab === "git") {
         if (!packet.git) return '<div class="empty">' + escape(labels.noGit) + '</div>';
@@ -2964,6 +2993,7 @@ function defaultPreviewPath(packet) {
 function printTimelinePacket(packet) {
   const summary = packet.summary || packet.status || "(no summary)";
   const facts = [];
+  facts.push("event:handoff_packet");
   if (packet.body) facts.push(`body:${packet.body.length}`);
   if (packet.notes?.length) facts.push(`notes:${packet.notes.length}`);
   if (packet.git?.status?.length) facts.push(`dirty:${packet.git.status.length}`);
@@ -2974,6 +3004,35 @@ function printTimelinePacket(packet) {
   console.log(`  ${summary}`);
   console.log(`  workspace: ${packet.workspace}`);
   if (facts.length) console.log(`  ${facts.join("  ")}`);
+}
+
+function buildSafetyReport(packet, { workspace = null } = {}) {
+  return {
+    ok: packetSafety(packet).level === "ok",
+    workspace: workspace || packet.workspace,
+    packet: packetSummary(packet),
+    safety: packetSafety(packet),
+    limitation: "Safety hints are local review aids only; ACB does not silently redact, rewrite, or delete packet content.",
+  };
+}
+
+function printSafetyReport(report) {
+  console.log("ACB Safety");
+  console.log(`packet: ${report.packet.id}`);
+  console.log(`workspace: ${report.packet.workspace}`);
+  console.log(`level: ${report.safety.level}`);
+  console.log(`warnings: ${report.safety.warnings.length}`);
+  if (report.safety.warnings.length) {
+    for (const warning of report.safety.warnings) {
+      console.log(`- ${warning.title}: ${warning.detail}`);
+    }
+  } else {
+    console.log("- no obvious safety warnings");
+  }
+  console.log("next:");
+  console.log(`  acb show ${report.packet.id}`);
+  console.log(`  acb resume --id ${report.packet.id}`);
+  console.log(`limitation: ${report.limitation}`);
 }
 
 function searchPackets({ query, workspace = null, limit = DEFAULT_LIMIT }) {
@@ -3364,8 +3423,9 @@ function verifyCommand(args) {
   const target = args[0];
   if (target === "first-run") return verifyFirstRunCommand(args.slice(1));
   if (target === "workflow") return verifyWorkflowCommand(args.slice(1));
+  if (target === "safety") return verifySafetyCommand(args.slice(1));
   if (target !== "mcp") {
-    console.error("Usage: acb verify first-run [--workspace <path>] [--target <target>] [--keep-artifacts] [--json]\n       acb verify mcp [--config <path>] [--name <server-name>] [--json]\n       acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]");
+    console.error("Usage: acb verify first-run [--workspace <path>] [--target <target>] [--keep-artifacts] [--json]\n       acb verify mcp [--config <path>] [--name <server-name>] [--json]\n       acb verify workflow <target|--all> [--workspace <path>] [--keep-artifacts] [--json]\n       acb verify safety [--workspace <path>] [--keep-artifacts] [--json]");
     return 2;
   }
 
@@ -3387,6 +3447,20 @@ function verifyCommand(args) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     printMcpVerifyReport(report);
+  }
+  return report.ok ? 0 : 1;
+}
+
+function verifySafetyCommand(args) {
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const report = buildSafetyVerifyReport({
+    workspace,
+    keepArtifacts: args.includes("--keep-artifacts"),
+  });
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  } else {
+    printSafetyVerifyReport(report);
   }
   return report.ok ? 0 : 1;
 }
@@ -3448,6 +3522,86 @@ function verifyWorkflowCommand(args) {
     printWorkflowVerifyReport(report);
   }
   return report.ok ? 0 : 1;
+}
+
+function buildSafetyVerifyReport({ workspace, keepArtifacts = false } = {}) {
+  const oldStore = process.env.ACB_STORE;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-safety-"));
+  const tempStore = path.join(tempDir, "packets.json");
+  let report = null;
+  process.env.ACB_STORE = tempStore;
+  try {
+    const riskyPacket = createHandoffPacket({
+      from: "acb-verify",
+      workspace,
+      summary: "Safety smoke packet",
+      status: "local verification",
+      notes: [
+        "Review API_KEY=sk_fakeSafetyVerifyToken1234567890 before sharing.",
+        "Touched .env.local and certs/demo-private.pem.",
+      ],
+      tags: ["safety", "verify"],
+      body: "NPM_TOKEN=npm_fakeSafetyVerifyToken123456\nFiles: .npmrc, keys/demo-private.pem\n",
+      git: { branch: "verify", head: "0000000", status: ["?? .env.local", "?? keys/demo-private.pem"] },
+    });
+    const cleanPacket = createHandoffPacket({
+      from: "acb-verify",
+      workspace,
+      summary: "Clean safety packet",
+      status: "local verification",
+      notes: ["No secrets or sensitive paths in this sample."],
+      tags: ["safety", "clean"],
+      body: "Small ordinary context body.\n",
+      git: null,
+    });
+    writeStore({ version: STORE_VERSION, packets: [riskyPacket, cleanPacket] });
+
+    const riskyReport = buildSafetyReport(riskyPacket, { workspace });
+    const cleanReport = buildSafetyReport(cleanPacket, { workspace });
+    const storedRisky = findPacket({ id: riskyPacket.id });
+    const checks = {
+      secret_like_content: riskyReport.safety.warnings.some((warning) => warning.id === "secret_like_content"),
+      sensitive_path: riskyReport.safety.warnings.some((warning) => warning.id === "sensitive_path"),
+      clean_packet_ok: cleanReport.safety.level === "ok",
+      derived_not_stored: storedRisky && storedRisky.safety === undefined,
+    };
+    report = {
+      ok: Object.values(checks).every(Boolean),
+      workspace,
+      store_path: tempStore,
+      artifacts_retained: keepArtifacts,
+      risky_packet: packetSummary(riskyPacket),
+      clean_packet: packetSummary(cleanPacket),
+      checks,
+      limitation: "This verifies ACB's derived safety hints only; it is not a full secret scanner or compliance gate.",
+    };
+    return report;
+  } finally {
+    if (oldStore === undefined) delete process.env.ACB_STORE;
+    else process.env.ACB_STORE = oldStore;
+    if (!keepArtifacts) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        if (report) report.artifacts_cleaned = true;
+      } catch (error) {
+        if (report) {
+          report.artifacts_cleaned = false;
+          report.cleanup_error = error.message;
+        }
+      }
+    }
+  }
+}
+
+function printSafetyVerifyReport(report) {
+  console.log("ACB Safety Verify");
+  console.log(`workspace: ${report.workspace}`);
+  console.log(`store: ${report.store_path}${report.artifacts_cleaned ? " (cleaned)" : ""}`);
+  for (const [name, ok] of Object.entries(report.checks)) {
+    console.log(`${name}: ${ok ? "ok" : "failed"}`);
+  }
+  console.log(`ok: ${report.ok ? "yes" : "no"}`);
+  console.log(`limitation: ${report.limitation}`);
 }
 
 function buildWorkflowMatrixReport(recipes, workspace, { keepArtifacts = false } = {}) {
@@ -4795,6 +4949,7 @@ function mcpListWorkspaces(args) {
 }
 
 function packetSummary(packet) {
+  const safety = packetSafety(packet);
   return {
     id: packet.id,
     created_at: packet.created_at,
@@ -4806,12 +4961,26 @@ function packetSummary(packet) {
     tags: packet.tags || [],
     body_chars: packet.body?.length || 0,
     git_dirty_files: packet.git?.status?.length || 0,
-    safety: packetSafety(packet),
+    safety,
+    event: packetTraceEvent(packet, safety),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
+  };
+}
+
+function packetTraceEvent(packet, safety = packetSafety(packet)) {
+  return {
+    event_type: "handoff_packet",
+    event_id: `evt_${packet.id}`,
+    packet_id: packet.id,
+    created_at: packet.created_at,
+    workspace: packet.workspace,
+    actor: packet.from,
+    summary: packet.summary || packet.status || null,
+    safety_level: safety.level,
   };
 }
 

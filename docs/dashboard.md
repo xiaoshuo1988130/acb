@@ -32,7 +32,7 @@ The HTML view is a three-pane local audit workspace:
 - Packet list with search.
 - An empty-state onboarding panel that can create a safe local demo packet, copy a real handoff command, or copy setup verification.
 - A top-level `Next handoff` strip that auto-selects the best detected target client and keeps the recommended copy action in the first viewport.
-- Packet detail tabs for overview, copyable commands, body preview, and Git snapshot.
+- Packet detail tabs for overview, copyable commands, safety review, body preview, and Git snapshot.
 - Derived packet safety hints for secret-like content, sensitive-looking paths, and large context bodies.
 - A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard.
 - Detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP clients.
@@ -53,7 +53,7 @@ The only state-changing controls are explicit local actions: clipboard copy, dem
 
 Target detection is read-only. ACB checks the current workspace, PATH, and a small set of common local client locations. The dashboard uses those signals to choose the initial `Next handoff` target, but you can still switch targets manually. It does not patch client settings, edit extension storage, or open private client databases.
 
-Safety hints are also read-only. They are derived from packet text and Git metadata when the dashboard renders; they do not redact, rewrite, or delete stored packet content.
+Safety hints are also read-only. They are derived from packet text and Git metadata when the dashboard renders; they do not redact, rewrite, or delete stored packet content. The Safety tab mirrors the CLI `acb safety` review so users can inspect warnings before copying a handoff into another agent.
 
 It still exposes local ACB metadata to anyone who can reach the server. The default host is `127.0.0.1`; avoid `--host 0.0.0.0` unless you are on a trusted network. In `--workspace` mode, the dashboard scopes packet data and workspace summaries to that workspace. Use `--all` only when you intentionally want to inspect every workspace in the local store.
 
@@ -69,6 +69,7 @@ Use the dashboard when you want to inspect:
 - Which target client path looks most appropriate for the selected handoff.
 - Which setup commands and first prompt apply to a target client.
 - Whether the ACB side of a target workflow passes before touching the client.
+- Whether the selected packet has secret-like text, sensitive-looking paths, or a large body that will be truncated in prompts.
 - Whether recent packets carry Git state or long body context.
 - The JSON shape a script or client could consume from `/api/state`.
 

@@ -109,12 +109,14 @@ test("prints version and help", () => {
   assert.match(help.stdout, /acb save/);
   assert.match(help.stdout, /acb view/);
   assert.match(help.stdout, /acb dashboard/);
+  assert.match(help.stdout, /acb safety/);
   assert.match(help.stdout, /acb brief/);
   assert.match(help.stdout, /acb recipe/);
   assert.match(help.stdout, /acb setup/);
   assert.match(help.stdout, /acb quickstart/);
   assert.match(help.stdout, /acb demo/);
   assert.match(help.stdout, /acb verify first-run/);
+  assert.match(help.stdout, /acb verify safety/);
 
   const quickstart = run(["quickstart"]);
   assert.equal(quickstart.status, 0);
@@ -483,6 +485,9 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(timelineSummary.next_show_prompt, `acb show ${packet.id} --prompt`);
   assert.equal(timelineSummary.next_mcp_read, "read_handoff");
   assert.equal(timelineSummary.next_mcp_brief, "read_handoff_brief");
+  assert.equal(timelineSummary.event.event_type, "handoff_packet");
+  assert.equal(timelineSummary.event.packet_id, packet.id);
+  assert.equal(timelineSummary.event.safety_level, "ok");
 
   const markdownExport = run(["export", "--workspace", workspace], { env });
   assert.equal(markdownExport.status, 0);
@@ -579,6 +584,20 @@ test("packet summaries include derived safety hints", () => {
   assert.equal(shown.status, 0);
   assert.match(shown.stdout, /safety: warn/);
   assert.match(shown.stdout, /possible secret-like content/);
+
+  const safety = run(["safety", packet.id], { env });
+  assert.equal(safety.status, 1);
+  assert.match(safety.stdout, /ACB Safety/);
+  assert.match(safety.stdout, /level: warn/);
+  assert.match(safety.stdout, /sensitive-looking path/);
+
+  const safetyJson = run(["safety", "--workspace", workspace, "--json"], { env });
+  assert.equal(safetyJson.status, 0);
+  const safetyReport = JSON.parse(safetyJson.stdout);
+  assert.equal(safetyReport.ok, false);
+  assert.equal(safetyReport.safety.level, "warn");
+  assert.equal(safetyReport.packet.id, packet.id);
+  assert.equal(safetyReport.packet.event.event_type, "handoff_packet");
 
   const exported = run(["export", "--workspace", workspace], { env });
   assert.equal(exported.status, 0);
@@ -1256,6 +1275,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Copy Full Prompt/);
     assert.match(html, /Copy MCP Pull Instruction/);
     assert.match(html, /Start here/);
+    assert.match(html, /"overview", "commands", "safety", "body", "git"/);
     assert.match(html, /Next handoff/);
     assert.match(html, /Target Client/);
     assert.match(html, /Client setup/);
@@ -1642,6 +1662,40 @@ test("verify workflow smoke tests client handoff surfaces", () => {
   const missing = run(["verify", "workflow", "missing-client"]);
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /Unknown workflow target/);
+});
+
+test("verify safety checks derived warning workflow", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+
+  const verified = run(["verify", "safety", "--workspace", workspace]);
+  assert.equal(verified.status, 0);
+  assert.match(verified.stdout, /ACB Safety Verify/);
+  assert.match(verified.stdout, /secret_like_content: ok/);
+  assert.match(verified.stdout, /sensitive_path: ok/);
+  assert.match(verified.stdout, /derived_not_stored: ok/);
+
+  const json = run(["verify", "safety", "--workspace", workspace, "--json"]);
+  assert.equal(json.status, 0);
+  const report = JSON.parse(json.stdout);
+  assert.equal(report.ok, true);
+  assert.equal(report.workspace, realWorkspace(workspace));
+  assert.equal(report.artifacts_cleaned, true);
+  assert.equal(fs.existsSync(report.store_path), false);
+  assert.equal(report.checks.secret_like_content, true);
+  assert.equal(report.checks.sensitive_path, true);
+  assert.equal(report.checks.clean_packet_ok, true);
+  assert.equal(report.checks.derived_not_stored, true);
+  assert.equal(report.risky_packet.safety.level, "warn");
+  assert.equal(report.clean_packet.safety.level, "ok");
+
+  const retained = run(["verify", "safety", "--workspace", workspace, "--keep-artifacts", "--json"]);
+  assert.equal(retained.status, 0);
+  const retainedReport = JSON.parse(retained.stdout);
+  assert.equal(retainedReport.artifacts_retained, true);
+  assert.equal(fs.existsSync(retainedReport.store_path), true);
+  fs.rmSync(path.dirname(retainedReport.store_path), { recursive: true, force: true });
 });
 
 test("verify first-run checks install-to-handoff path", () => {
