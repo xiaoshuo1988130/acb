@@ -100,6 +100,14 @@ acb resume
 
 把复制出来的提示词粘贴给下一个编码 Agent。如果系统剪贴板不可用，ACB 会把提示词打印到终端，方便手动复制。
 
+当接收端 Agent 读完 packet 后，可以显式记录一条本地接收确认：
+
+```bash
+acb ack --latest --by opencode --note "已读取 packet，并会从这个上下文继续。"
+```
+
+这样 `acb show`、`acb status`、JSON 输出、MCP 读取和 dashboard 都能看到这次 handoff 是否已经闭环。
+
 如果想先给下一个 Agent 一个更短的起步消息：
 
 ```bash
@@ -141,6 +149,7 @@ acb dashboard --workspace .
 - workspace 路径。
 - 轻量 Git 快照，包括 repo root、branch、short HEAD 和 `git status --short`。
 - 当你显式传入 `--diff` 时，可附带有长度上限的 tracked diff。
+- 当接收端显式运行 `acb ack`、点击 `Mark Received` 或调用 `acknowledge_handoff` 时，会记录 acknowledgement。
 
 实验时可以覆盖 store 路径：
 
@@ -188,6 +197,7 @@ MCP server 暴露这些工具：
 - `read_handoff`
 - `save_handoff`
 - `update_handoff`
+- `acknowledge_handoff`
 - `search_handoffs`
 - `list_handoffs`
 - `list_workspaces`
@@ -259,6 +269,7 @@ acb demo --lang zh-CN
 acb handoff --from <agent> --summary <text> --git
 acb resume
 acb brief
+acb ack --latest --by <agent>
 acb dashboard --workspace .
 acb setup --check
 acb verify first-run --lang zh-CN

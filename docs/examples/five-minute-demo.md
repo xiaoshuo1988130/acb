@@ -46,7 +46,8 @@ In the dashboard, inspect the first viewport:
 
 - `Next handoff` shows the currently selected packet and target.
 - `First handoff flow` shows `Save`, `Safety`, `Verify`, and `Copy`.
-- The packet detail panel has `overview`, `commands`, `safety`, `body`, and `git` tabs.
+- The packet detail panel has `overview`, `commands`, `ack`, `safety`, `body`, and `git` tabs.
+- `Mark Received` records an explicit local acknowledgement after a receiving agent has read the packet.
 - The target panel shows setup guidance for the detected or selected client.
 
 Try the local-only buttons:

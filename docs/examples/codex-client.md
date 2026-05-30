@@ -65,6 +65,12 @@ acb safety
 acb show <packet-id>
 ```
 
+After Codex confirms those fields, record the closure:
+
+```bash
+acb ack <packet-id> --by codex --note "Codex summarized the packet and continued from it."
+```
+
 If Codex cannot name the packet id, ask it to stop and paste the `acb resume --id <packet-id>` output again.
 
 ## JSON Path For Scripts

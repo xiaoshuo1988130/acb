@@ -63,6 +63,12 @@ acb safety
 acb show <packet-id>
 ```
 
+After OpenCode confirms those fields, record the closure:
+
+```bash
+acb ack <packet-id> --by opencode --note "OpenCode summarized the packet and continued from it."
+```
+
 If OpenCode summarizes only your prompt but cannot name the packet id, it has not really loaded the handoff. Paste the full `acb resume --id <packet-id>` output again.
 
 ## Dashboard Path

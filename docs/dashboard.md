@@ -21,6 +21,7 @@ The dashboard serves:
 - `/` as a lightweight HTML view.
 - `/api/state` as machine-readable JSON.
 - `/api/copy-prompt` as a local-only POST endpoint used by the page's takeover buttons.
+- `/api/ack` as a local-only POST endpoint used by the explicit `Mark Received` button.
 - `/api/create-demo` as a local-only POST endpoint used by the empty state `Create demo packet` action.
 - `/api/verify-workflow` as a local-only POST endpoint that runs the same ACB-side smoke test as `acb verify workflow <target>`.
 - `/health` as a small readiness check.
@@ -33,9 +34,9 @@ The HTML view is a three-pane local audit workspace:
 - An empty-state onboarding panel that can create a safe local demo packet, copy a real handoff command, or copy setup verification.
 - A top-level `Next handoff` strip that auto-selects the best detected target client and keeps the recommended copy action in the first viewport.
 - A first-viewport `First handoff flow` strip with copyable `Save`, `Safety`, `Verify`, and `Copy` steps.
-- Packet detail tabs for overview, copyable commands, safety review, body preview, and Git snapshot.
+- Packet detail tabs for overview, copyable commands, acknowledgement history, safety review, body preview, and Git snapshot.
 - Derived packet safety hints for secret-like content, sensitive-looking paths, and large context bodies.
-- A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard.
+- A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard, plus an explicit `Mark Received` acknowledgement.
 - Detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP clients.
 - A client setup guide with a compact checklist for saving context, reviewing safety, verifying the ACB-side workflow, and opening the handoff dashboard path.
 - Copyable recipe, MCP config, MCP verify, setup-check, and first-prompt text for the selected target.
@@ -51,7 +52,7 @@ The dashboard is intentionally local and explicit:
 - No hidden prompt injection.
 - No mutation of Cline, Roo, OpenCode, VS Code, Claude Desktop, or other client storage.
 
-The only state-changing controls are explicit local actions: clipboard copy, demo packet creation, and temporary local workflow verification. Clicking `Create demo packet` writes one sample packet to the local ACB store for the selected workspace. Clicking `Copy Brief Prompt`, `Copy Full Prompt`, or `Copy MCP Pull Instruction` asks the local ACB process to render the selected packet and write that text to your system clipboard. Clicking `Run ACB-side Check` creates a temporary smoke-test store, verifies ACB recipe/handoff/brief/MCP/dashboard surfaces, and cleans the temporary artifacts. You still decide where to paste or configure the result.
+The only state-changing controls are explicit local actions: clipboard copy, demo packet creation, handoff acknowledgement, and temporary local workflow verification. Clicking `Create demo packet` writes one sample packet to the local ACB store for the selected workspace. Clicking `Copy Brief Prompt`, `Copy Full Prompt`, or `Copy MCP Pull Instruction` asks the local ACB process to render the selected packet and write that text to your system clipboard. Clicking `Mark Received` appends one acknowledgement entry to the selected packet. Clicking `Run ACB-side Check` creates a temporary smoke-test store, verifies ACB recipe/handoff/brief/MCP/dashboard surfaces, and cleans the temporary artifacts. You still decide where to paste or configure the result.
 
 Target detection is read-only. ACB checks the current workspace, PATH, and a small set of common local client locations. The dashboard uses those signals to choose the initial `Next handoff` target, but you can still switch targets manually. It does not patch client settings, edit extension storage, or open private client databases.
 
@@ -71,6 +72,7 @@ Use the dashboard when you want to inspect:
 - Which target client path looks most appropriate for the selected handoff.
 - Which setup commands and first prompt apply to a target client.
 - Whether the ACB side of a target workflow passes before touching the client.
+- Whether the selected packet has been acknowledged by a receiving agent.
 - Whether the selected packet has secret-like text, sensitive-looking paths, or a large body that will be truncated in prompts.
 - Whether recent packets carry Git state or long body context.
 - The JSON shape a script or client could consume from `/api/state`.

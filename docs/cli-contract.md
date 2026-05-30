@@ -76,6 +76,7 @@ Minor releases can add:
 - New MCP tools.
 - New target client recipes.
 - New derived packet metadata such as safety hints.
+- New acknowledgement metadata such as `acknowledged`, `acknowledgement_count`, `latest_acknowledgement`, and `next_ack`.
 - New setup-guide helpers such as `steps`, `handoff_command`, `safety_command`, and `setup_check_command`.
 
 Minor releases should avoid:

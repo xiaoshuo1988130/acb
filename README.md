@@ -90,6 +90,14 @@ acb resume
 
 Paste the copied prompt into the next coding agent. If clipboard access is unavailable, ACB prints the prompt so you can copy it manually.
 
+After the receiving agent has read the packet, record an explicit local acknowledgement:
+
+```bash
+acb ack --latest --by opencode --note "Read packet and continuing from it."
+```
+
+This keeps the handoff visible as a closed loop in `acb show`, `acb status`, JSON output, MCP reads, and the dashboard.
+
 For a shorter first message:
 
 ```bash
@@ -126,6 +134,7 @@ Each packet can include:
 - Workspace path.
 - Lightweight Git snapshot with repo root, branch, short HEAD, and `git status --short`.
 - Optional bounded tracked diff when you explicitly pass `--diff`.
+- Optional acknowledgement entries when a receiving agent explicitly runs `acb ack`, clicks `Mark Received`, or calls `acknowledge_handoff`.
 
 ACB also derives safety hints when packets are read or displayed. These hints flag secret-like text, sensitive-looking paths such as `.env` or key files, and large bodies that will be truncated in prompts. They are review aids only; ACB does not silently redact or mutate your packet contents.
 
@@ -183,6 +192,7 @@ The MCP server exposes:
 - `read_handoff`
 - `save_handoff`
 - `update_handoff`
+- `acknowledge_handoff`
 - `search_handoffs`
 - `list_handoffs`
 - `list_workspaces`
@@ -257,6 +267,7 @@ acb demo
 acb handoff --from <agent> --summary <text> --status <text> --note <text>
 acb resume
 acb brief
+acb ack --latest --by <agent>
 acb save --from <agent> --summary <text> --file <path> --copy
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
@@ -325,7 +336,7 @@ acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a compact setup checklist: save context, review safety, verify the ACB-side workflow, and open the dashboard handoff path. The packet detail also has a Safety tab for derived warnings before you copy context into another agent. It does not silently inject prompt text or edit any client configuration.
+It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies plus an explicit `Mark Received` acknowledgement. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a compact setup checklist: save context, review safety, verify the ACB-side workflow, and open the dashboard handoff path. The packet detail also has Safety and acknowledgement tabs so you can see whether a handoff was received before you continue. It does not silently inject prompt text or edit any client configuration.
 
 The default host is `127.0.0.1`. Keep it loopback-only unless you trust the network, because the dashboard includes local store metadata, workspace paths, and clipboard-copy controls. A `--workspace` dashboard only shows packets and workspace summaries for that workspace; use `--all` when you intentionally want a global view.
 

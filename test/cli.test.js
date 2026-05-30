@@ -425,8 +425,12 @@ test("save, latest, list, and prompt use local store", () => {
   assert.deepEqual(packet.tags, ["mvp"]);
   assert.equal(packet.next_resume, `acb resume --id ${packet.id}`);
   assert.equal(packet.next_brief, `acb brief --id ${packet.id}`);
+  assert.equal(packet.next_ack, `acb ack ${packet.id} --by <agent>`);
   assert.equal(packet.next_mcp_read, "read_handoff");
   assert.equal(packet.next_mcp_brief, "read_handoff_brief");
+  assert.equal(packet.next_mcp_ack, "acknowledge_handoff");
+  assert.equal(packet.acknowledged, false);
+  assert.equal(packet.acknowledgement_count, 0);
   assert.equal(packet.safety.level, "ok");
   assert.deepEqual(packet.safety.warnings, []);
 
@@ -445,6 +449,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(statusReport.workspace_packets, 1);
   assert.equal(statusReport.next.resume, `acb resume --id ${packet.id}`);
   assert.equal(statusReport.next.brief, `acb brief --id ${packet.id}`);
+  assert.equal(statusReport.next.ack, `acb ack ${packet.id} --by <agent>`);
   assert.equal(statusReport.next.copy_prompt, `acb prompt --id ${packet.id}`);
   assert.equal(statusReport.next.mcp_status, "get_workspace_status");
   assert.equal(statusReport.next.mcp_read_latest, "read_latest_handoff");
@@ -495,11 +500,14 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(timelineSummary.next_resume, `acb resume --id ${packet.id}`);
   assert.equal(timelineSummary.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(timelineSummary.next_show_prompt, `acb show ${packet.id} --prompt`);
+  assert.equal(timelineSummary.next_ack, `acb ack ${packet.id} --by <agent>`);
   assert.equal(timelineSummary.next_mcp_read, "read_handoff");
   assert.equal(timelineSummary.next_mcp_brief, "read_handoff_brief");
+  assert.equal(timelineSummary.next_mcp_ack, "acknowledge_handoff");
   assert.equal(timelineSummary.event.event_type, "handoff_packet");
   assert.equal(timelineSummary.event.packet_id, packet.id);
   assert.equal(timelineSummary.event.safety_level, "ok");
+  assert.equal(timelineSummary.event.acknowledged, false);
 
   const markdownExport = run(["export", "--workspace", workspace], { env });
   assert.equal(markdownExport.status, 0);
@@ -552,6 +560,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(shownJsonPacket.id, packet.id);
   assert.equal(shownJsonPacket.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(shownJsonPacket.next_show_prompt, `acb show ${packet.id} --prompt`);
+  assert.equal(shownJsonPacket.acknowledgement.acknowledged, false);
 
   const shownPrompt = run(["show", packet.id, "--prompt"], { env });
   assert.equal(shownPrompt.status, 0);
@@ -965,6 +974,46 @@ test("update validates packet id and requested changes", () => {
   assert.match(missing.stderr, /No handoff packet found/);
 });
 
+test("ack records receiving-side handoff confirmation", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run(["save", "--workspace", workspace, "--summary", "Needs explicit acknowledgement"], { env });
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+
+  const acknowledged = run(["ack", packet.id, "--by", "opencode", "--note", "Read packet and continuing.", "--json"], { env });
+  assert.equal(acknowledged.status, 0);
+  const payload = JSON.parse(acknowledged.stdout);
+  assert.equal(payload.packet.id, packet.id);
+  assert.equal(payload.packet.acknowledgement.acknowledged, true);
+  assert.equal(payload.packet.acknowledgement.count, 1);
+  assert.equal(payload.acknowledgement.by, "opencode");
+  assert.equal(payload.acknowledgement.note, "Read packet and continuing.");
+
+  const shown = run(["show", packet.id], { env });
+  assert.equal(shown.status, 0);
+  assert.match(shown.stdout, /acknowledged: yes/);
+  assert.match(shown.stdout, /latest_ack_by: opencode/);
+  assert.match(shown.stdout, /next_ack: acb ack/);
+
+  const latestAck = run(["ack", "--latest", "--workspace", workspace, "--by", "codex"], { env });
+  assert.equal(latestAck.status, 0);
+  assert.match(latestAck.stdout, /acknowledged handoff packet/);
+  const latest = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.equal(latest.acknowledgement.count, 2);
+  assert.equal(latest.latest_acknowledgement.by, "codex");
+
+  const searched = run(["search", "opencode", "--workspace", workspace, "--json"], { env });
+  assert.equal(searched.status, 0);
+  assert.equal(JSON.parse(searched.stdout)[0].id, packet.id);
+
+  const invalid = run(["ack", packet.id, "--latest"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use either a packet id or --latest/);
+});
+
 test("save can attach an explicit git snapshot", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const workspace = path.join(dir, "repo");
@@ -1287,7 +1336,8 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Copy Full Prompt/);
     assert.match(html, /Copy MCP Pull Instruction/);
     assert.match(html, /Start here/);
-    assert.match(html, /"overview", "commands", "safety", "body", "git"/);
+    assert.match(html, /Mark Received/);
+    assert.match(html, /"overview", "commands", "ack", "safety", "body", "git"/);
     assert.match(html, /Next handoff/);
     assert.match(html, /First handoff flow/);
     assert.match(html, /Target Client/);
@@ -1301,6 +1351,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Explicit local controls/);
     assert.match(html, /\/api\/copy-prompt/);
     assert.match(html, /\/api\/verify-workflow/);
+    assert.match(html, /\/api\/ack/);
 
     const zhHtml = await httpGet(`${url}?lang=zh-CN`);
     assert.match(zhHtml, /ACB 控制台/);
@@ -1310,6 +1361,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(zhHtml, /第一次交接流程/);
     assert.match(zhHtml, /运行 ACB 侧检查/);
     assert.match(zhHtml, /复制简短提示词/);
+    assert.match(zhHtml, /标记已接收/);
 
     const state = JSON.parse(await httpGet(`${url}api/state`));
     assert.equal(state.version, pkg.version);
@@ -1320,6 +1372,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.equal(state.total_packets, 1);
     assert.equal(state.workspace_count, 1);
     assert.equal(state.safety_warning_count, 0);
+    assert.equal(state.acknowledged_packet_count, 0);
     assert.ok(state.targets.some((target) => target.id === "auto"));
     assert.ok(state.targets.some((target) => target.id === "opencode"));
     assert.ok(state.targets.some((target) => target.id === "codex"));
@@ -1335,6 +1388,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.deepEqual(state.workspaces.map((item) => item.workspace), [realWorkspace(workspace)]);
     assert.equal(state.latest_packet.summary, "Dashboard smoke");
     assert.equal(state.latest_packet.safety.level, "ok");
+    assert.equal(state.latest_packet.acknowledged, false);
     assert.match(state.latest_packet.next_brief, /^acb brief --id pkt_/);
     assert.doesNotMatch(JSON.stringify(state), /Other workspace packet/);
     assert.doesNotMatch(JSON.stringify(state), new RegExp(otherWorkspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -1373,6 +1427,21 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.equal(workflowPayload.target, "codex");
     assert.equal(workflowPayload.report.checks.dashboard_html, true);
     assert.equal(workflowPayload.report.artifacts_cleaned, true);
+
+    const acked = await httpPostJson(`${url}api/ack`, {
+      id: state.latest_packet.id,
+      by: "OpenCode",
+      note: "Read packet from dashboard",
+    });
+    assert.equal(acked.statusCode, 200);
+    const ackedPayload = JSON.parse(acked.body);
+    assert.equal(ackedPayload.ok, true);
+    assert.equal(ackedPayload.acknowledgement.by, "OpenCode");
+    assert.equal(ackedPayload.acknowledgement.note, "Read packet from dashboard");
+    const ackedState = JSON.parse(await httpGet(`${url}api/state`));
+    assert.equal(ackedState.acknowledged_packet_count, 1);
+    assert.equal(ackedState.latest_packet.latest_acknowledgement.by, "OpenCode");
+    assert.equal(ackedState.latest_packet.acknowledgement_count, 1);
 
     const blocked = await httpPostJson(`${url}api/copy-prompt`, {
       id: JSON.parse(run(["latest", "--workspace", otherWorkspace, "--json"], { env }).stdout).id,
@@ -1872,17 +1941,20 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "read_handoff_brief"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "search_handoffs"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "update_handoff"));
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "acknowledge_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "list_workspaces"));
   assert.match(messages[2].result.content[0].text, /ACB Status/);
   assert.equal(messages[2].result.structuredContent.report.workspace_packets, 1);
   assert.match(messages[2].result.structuredContent.report.next.resume, /^acb resume --id pkt_/);
   assert.match(messages[2].result.structuredContent.report.next.brief, /^acb brief --id pkt_/);
+  assert.match(messages[2].result.structuredContent.report.next.ack, /^acb ack pkt_/);
   assert.equal(messages[2].result.structuredContent.report.next.mcp_read_latest, "read_latest_handoff");
   assert.equal(messages[2].result.structuredContent.report.next.mcp_read_brief, "read_handoff_brief");
   assert.match(messages[3].result.content[0].text, /MCP handoff/);
   assert.equal(messages[3].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[3].result.structuredContent.packet.next_mcp_read, "read_handoff");
   assert.equal(messages[3].result.structuredContent.packet.next_mcp_brief, "read_handoff_brief");
+  assert.equal(messages[3].result.structuredContent.packet.next_mcp_ack, "acknowledge_handoff");
   assert.equal(messages[4].result.structuredContent.packets.length, 1);
   assert.equal(messages[4].result.structuredContent.packets[0].next_mcp_read, "read_handoff");
   assert.equal(messages[5].result.structuredContent.packets[0].summary, "MCP handoff");
@@ -1903,6 +1975,16 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.equal(readMessage.result.structuredContent.packet.id, id);
   assert.equal(readMessage.result.structuredContent.packet.next_show_prompt, `acb show ${id} --prompt`);
   assert.match(readMessage.result.content[0].text, /MCP handoff/);
+
+  const ackById = run(["serve"], {
+    env,
+    input: rpc("tools/call", { name: "acknowledge_handoff", arguments: { id, by: "mcp-test", note: "Read via MCP" } }, 1),
+  });
+  assert.equal(ackById.status, 0);
+  const [ackMessage] = parseJsonLines(ackById.stdout);
+  assert.equal(ackMessage.result.structuredContent.packet.id, id);
+  assert.equal(ackMessage.result.structuredContent.packet.acknowledgement.count, 1);
+  assert.equal(ackMessage.result.structuredContent.acknowledgement.by, "mcp-test");
 });
 
 test("serve can save handoff packets over MCP stdio", () => {

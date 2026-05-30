@@ -55,7 +55,15 @@ Each packet currently has this shape:
   "notes": [],
   "tags": [],
   "body": null,
-  "git": null
+  "git": null,
+  "acknowledgements": [
+    {
+      "id": "ack_20260529120500_def456",
+      "acknowledged_at": "2026-05-29T12:05:00.000Z",
+      "by": "opencode",
+      "note": "Read packet and continuing from it."
+    }
+  ]
 }
 ```
 
@@ -69,7 +77,9 @@ Required for valid imports:
 
 Optional fields may be `null` or absent in older exports. Import normalizes missing optional fields.
 
-Derived fields such as `safety`, `event`, `next_resume`, `next_brief`, and `next_mcp_read` are read-time output helpers. They are not stored in `packets.json`.
+`acknowledgements` is optional in older stores. Newer ACB versions write it as an array of explicit receiving-side confirmations created by `acb ack`, the dashboard `Mark Received` action, or the MCP `acknowledge_handoff` tool.
+
+Derived fields such as `safety`, `event`, `acknowledgement`, `next_resume`, `next_brief`, `next_ack`, and `next_mcp_read` are read-time output helpers. They are not stored in `packets.json`.
 
 ## Write Safety
 

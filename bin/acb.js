@@ -40,6 +40,7 @@ Usage:
   acb demo [--workspace <path>] [--from <agent>] [--lang en|zh-CN] [--json]
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--diff-limit <chars>] [--copy | --print-prompt | --json]
   acb update <packet-id> [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--clear-notes] [--clear-tags] [--json]
+  acb ack [packet-id|--latest] [--workspace <path>] [--by <agent>] [--note <text>] [--json]
   acb diff-preview [--workspace <path>] [--diff-limit <chars>] [--out <path>]
   acb latest [--workspace <path>] [--all] [--json]
   acb status [--workspace <path>] [--json]
@@ -331,6 +332,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "demo") return demoCommand(args);
   if (command === "save") return saveCommand(args);
   if (command === "update") return updateCommand(args);
+  if (command === "ack" || command === "acknowledge") return ackCommand(args);
   if (command === "diff-preview") return diffPreviewCommand(args);
   if (command === "latest") return latestCommand(args);
   if (command === "status") return statusCommand(args);
@@ -648,6 +650,7 @@ function createHandoffPacket({ from, workspace, summary = null, status = null, n
     tags,
     body,
     git,
+    acknowledgements: [],
   };
 }
 
@@ -707,6 +710,45 @@ function updateCommand(args) {
   }
   console.log(`[acb] updated handoff packet: ${packet.id}`);
   console.log(`[acb] next: acb show ${packet.id}`);
+  return 0;
+}
+
+function ackCommand(args) {
+  const positions = positionalArgs(args, new Set(["--id", "--workspace", "--by", "--note"]));
+  const id = argValue(args, "--id") || positions[0] || null;
+  const wantsLatest = args.includes("--latest") || !id;
+  if (id && args.includes("--latest")) {
+    console.error("Use either a packet id or --latest, not both.");
+    return 2;
+  }
+
+  const workspace = normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const packet = wantsLatest ? findPacket({ workspace }) : findPacket({ id });
+  if (!packet) {
+    console.error(wantsLatest ? `No handoff packet found for workspace: ${workspace}` : `No handoff packet found for id: ${id}`);
+    return 1;
+  }
+
+  const acknowledgement = createAcknowledgement({
+    by: argValue(args, "--by") || process.env.ACB_AGENT || "unknown",
+    note: argValue(args, "--note") || null,
+  });
+  const updated = {
+    ...packet,
+    acknowledgements: [...packetAcknowledgements(packet), acknowledgement],
+    updated_at: new Date().toISOString(),
+  };
+  replacePacket(updated);
+
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify({ ok: true, packet: packetWithNextSteps(updated), acknowledgement }, null, 2)}\n`);
+    return 0;
+  }
+
+  console.log(`[acb] acknowledged handoff packet: ${updated.id}`);
+  console.log(`[acb] by: ${acknowledgement.by}`);
+  if (acknowledgement.note) console.log(`[acb] note: ${acknowledgement.note}`);
+  console.log(`[acb] next: acb show ${updated.id}`);
   return 0;
 }
 
@@ -1172,6 +1214,10 @@ function dashboardCommand(args) {
       await handleDashboardVerifyWorkflow(request, response, { workspace });
       return;
     }
+    if (request.method === "POST" && url.pathname === "/api/ack") {
+      await handleDashboardAck(request, response, { workspace });
+      return;
+    }
     if (request.method !== "GET") {
       sendDashboardResponse(response, 405, "text/plain; charset=utf-8", "Method not allowed\n");
       return;
@@ -1280,6 +1326,46 @@ async function handleDashboardCopyPrompt(request, response, { workspace = null }
     copied: true,
     prompt_chars: prompt.length,
     message: `${label} copied to clipboard.`,
+  });
+}
+
+async function handleDashboardAck(request, response, { workspace = null } = {}) {
+  let payload;
+  try {
+    payload = await readJsonRequestBody(request, 4096);
+  } catch (error) {
+    sendDashboardJson(response, 400, { ok: false, error: error.message });
+    return;
+  }
+
+  const id = typeof payload.id === "string" ? payload.id.trim() : "";
+  if (!id) {
+    sendDashboardJson(response, 400, { ok: false, error: "id is required" });
+    return;
+  }
+
+  const packet = findPacket({ id });
+  if (!packet || (workspace && packet.workspace !== workspace)) {
+    sendDashboardJson(response, 404, { ok: false, error: `No handoff packet found for id: ${id}` });
+    return;
+  }
+
+  const acknowledgement = createAcknowledgement({
+    by: typeof payload.by === "string" && payload.by.trim() ? payload.by : "dashboard",
+    note: typeof payload.note === "string" && payload.note.trim() ? payload.note : null,
+  });
+  const updated = {
+    ...packet,
+    acknowledgements: [...packetAcknowledgements(packet), acknowledgement],
+    updated_at: new Date().toISOString(),
+  };
+  replacePacket(updated);
+  sendDashboardJson(response, 200, {
+    ok: true,
+    id: updated.id,
+    acknowledgement,
+    packet: dashboardPacketSummary(updated),
+    message: "Acknowledgement recorded.",
   });
 }
 
@@ -1427,6 +1513,7 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     dirty_file_count: packets.reduce((sum, packet) => sum + (packet.git?.status?.length || 0), 0),
     body_chars: packets.reduce((sum, packet) => sum + (packet.body?.length || 0), 0),
     safety_warning_count: packets.reduce((sum, packet) => sum + packetSafety(packet).warnings.length, 0),
+    acknowledged_packet_count: packets.filter((packet) => packetAcknowledgementSummary(packet).acknowledged).length,
     latest_packet: packets[0] ? dashboardPacketSummary(packets[0]) : null,
     packets: packets.map(dashboardPacketSummary),
     workspaces,
@@ -1613,6 +1700,7 @@ function dashboardPacketSummary(packet) {
   return {
     ...packetSummary(packet),
     notes: packet.notes || [],
+    acknowledgements: packetAcknowledgements(packet),
     body_preview: packet.body ? truncateText(packet.body, 2600) : "",
     git: packet.git ? {
       branch: packet.git.branch || null,
@@ -1636,6 +1724,7 @@ function dashboardLabels(lang) {
       dirtyFilesCaptured: "已记录改动文件",
       bodyCharsShown: "正文字符",
       safetyWarnings: "安全提示",
+      acknowledgedPackets: "已确认交接",
       packets: "上下文包",
       searchPlaceholder: "搜索 summary、status、tags、notes",
       targetClient: "目标客户端",
@@ -1647,6 +1736,12 @@ function dashboardLabels(lang) {
       copyFailed: "复制失败",
       copying: "复制中...",
       promptCopied: "提示词已复制",
+      acknowledged: "已确认",
+      unacknowledged: "待确认",
+      markReceived: "标记已接收",
+      acknowledging: "确认中...",
+      ackRecorded: "已记录接收确认",
+      ackFailed: "确认失败",
       shown: "个结果",
       noPacketMatch: "没有匹配的上下文包。",
       noPacketAvailable: "还没有可用的 handoff packet。",
@@ -1661,7 +1756,7 @@ function dashboardLabels(lang) {
       saveRealHandoff: "保存真实 handoff",
       runSetup: "检查客户端接入",
       safetyTitle: "本地显式控制",
-      safetyBody: "Dashboard 只会在你点击时复制文本、创建本地 demo packet，或运行 ACB 侧检查；不会修改第三方客户端配置。",
+      safetyBody: "Dashboard 只会在你点击时复制文本、创建本地 demo packet、记录接收确认，或运行 ACB 侧检查；不会修改第三方客户端配置。",
       noTargets: "没有配置目标客户端。",
       noSetupGuide: "选择一个具体目标客户端后，会显示接入命令和验证。",
       clientSetup: "客户端接入",
@@ -1710,7 +1805,7 @@ function dashboardLabels(lang) {
       copyFullPrompt: "复制完整提示词",
       copyBriefPrompt: "复制简短提示词",
       forTarget: "给",
-      tabs: { overview: "概览", commands: "命令", safety: "安全", body: "正文", git: "Git" },
+      tabs: { overview: "概览", commands: "命令", ack: "确认", safety: "安全", body: "正文", git: "Git" },
       noBody: "这个上下文包没有正文预览。",
       noGit: "没有记录 Git 快照。",
       noDirtyFiles: "没有记录改动文件。",
@@ -1738,6 +1833,7 @@ function dashboardLabels(lang) {
     dirtyFilesCaptured: "dirty files captured",
     bodyCharsShown: "body chars shown",
     safetyWarnings: "safety warnings",
+    acknowledgedPackets: "acknowledged",
     packets: "Packets",
     searchPlaceholder: "Search summary, status, tags, notes",
     targetClient: "Target Client",
@@ -1749,6 +1845,12 @@ function dashboardLabels(lang) {
     copyFailed: "Copy failed",
     copying: "Copying...",
     promptCopied: "Prompt copied",
+    acknowledged: "acknowledged",
+    unacknowledged: "pending ack",
+    markReceived: "Mark Received",
+    acknowledging: "Acknowledging...",
+    ackRecorded: "Acknowledgement recorded",
+    ackFailed: "Acknowledgement failed",
     shown: "shown",
     noPacketMatch: "No packets match this filter.",
     noPacketAvailable: "No handoff packet available yet.",
@@ -1763,7 +1865,7 @@ function dashboardLabels(lang) {
     saveRealHandoff: "Save real handoff",
     runSetup: "Check client setup",
     safetyTitle: "Explicit local controls",
-    safetyBody: "The dashboard only copies text, creates a local demo packet, or runs ACB-side checks when you click. It does not modify third-party client configuration.",
+    safetyBody: "The dashboard only copies text, creates a local demo packet, records acknowledgement, or runs ACB-side checks when you click. It does not modify third-party client configuration.",
     noTargets: "No targets configured.",
     noSetupGuide: "Select a concrete target client to see setup commands and verification.",
     clientSetup: "Client setup",
@@ -1812,7 +1914,7 @@ function dashboardLabels(lang) {
     copyFullPrompt: "Copy Full Prompt",
     copyBriefPrompt: "Copy Brief Prompt",
     forTarget: "for",
-    tabs: { overview: "overview", commands: "commands", safety: "safety", body: "body", git: "git" },
+    tabs: { overview: "overview", commands: "commands", ack: "ack", safety: "safety", body: "body", git: "git" },
     noBody: "No body preview captured for this packet.",
     noGit: "No Git snapshot captured.",
     noDirtyFiles: "No dirty files captured.",
@@ -2211,6 +2313,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       <div class="stat"><strong>${state.dirty_file_count}</strong><span>${escapeHtml(labels.dirtyFilesCaptured)}</span></div>
       <div class="stat"><strong>${state.body_chars}</strong><span>${escapeHtml(labels.bodyCharsShown)}</span></div>
       <div class="stat"><strong>${state.safety_warning_count}</strong><span>${escapeHtml(labels.safetyWarnings)}</span></div>
+      <div class="stat"><strong>${state.acknowledged_packet_count}</strong><span>${escapeHtml(labels.acknowledgedPackets)}</span></div>
     </section>
     <section class="grid">
       <aside class="panel">
@@ -2316,10 +2419,13 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         const safety = packet.safety && packet.safety.warnings && packet.safety.warnings.length
           ? '<span class="badge warn">' + packet.safety.warnings.length + ' ' + escape(labels.safety) + '</span>'
           : '<span class="badge good">' + escape(labels.safety) + '</span>';
+        const ack = packet.acknowledged
+          ? '<span class="badge good">' + escape(labels.acknowledged) + '</span>'
+          : '<span class="badge warn">' + escape(labels.unacknowledged) + '</span>';
         return '<button class="packet-row ' + (packet.id === selectedId ? 'active' : '') + '" data-id="' + escape(packet.id) + '">' +
           '<div class="packet-title">' + escape(packetTitle(packet)) + '</div>' +
           '<div class="packet-sub">' + escape(packet.from) + ' · ' + escape(packet.created_at) + '</div>' +
-          '<div class="badge-row">' + dirty + safety + tags + '</div>' +
+          '<div class="badge-row">' + dirty + safety + ack + tags + '</div>' +
         '</button>';
       }).join("");
       for (const row of document.querySelectorAll(".packet-row")) {
@@ -2412,14 +2518,17 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
               '<span class="badge accent">' + escape(target.title) + ' · ' + escape(targetStatusLabel(target)) + '</span>' +
               '<span class="badge">' + escape(packet.from || labels.unknown) + '</span>' +
               '<span class="badge ' + (packet.git_dirty_files ? 'warn' : 'good') + '">' + escape(dirty) + '</span>' +
+              '<span class="badge ' + (packet.acknowledged ? 'good' : 'warn') + '">' + escape(packet.acknowledged ? labels.acknowledged : labels.unacknowledged) + '</span>' +
             '</div>' +
           '</div>' +
           '<div class="next-actions">' +
             '<button class="btn primary" data-copy-prompt="' + escape(targetMode) + '" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(targetCopyLabel(targetMode, target)) + '</button>' +
+            '<button class="btn" data-ack="' + escape(packet.id) + '" data-ack-by="' + escape(target.id === "auto" ? "dashboard" : target.title) + '">' + escape(labels.markReceived) + '</button>' +
             '<button class="btn" data-focus-packet="' + escape(packet.id) + '">' + escape(labels.inspectPacket) + '</button>' +
           '</div>' +
         '</section>';
       wirePromptButtons();
+      wireAckButtons();
       for (const button of document.querySelectorAll("[data-focus-packet]")) {
         button.addEventListener("click", () => {
           selectedId = button.dataset.focusPacket;
@@ -2438,7 +2547,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         wireCreateDemoButtons();
         return;
       }
-      const tabs = ["overview", "commands", "safety", "body", "git"];
+      const tabs = ["overview", "commands", "ack", "safety", "body", "git"];
       const tabButtons = tabs.map((tab) => '<button class="tab ' + (tab === activeTab ? 'active' : '') + '" data-tab="' + tab + '">' + escape(labels.tabs[tab] || tab) + '</button>').join("");
       const target = selectedTarget();
       const targetMode = copyModeForTarget(target);
@@ -2450,6 +2559,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
           '<div><div class="kicker">' + escape(labels.startHere) + '</div><h3>' + escape(labels.moveContextInto) + ' ' + escape(target.title) + '</h3><p>' + escape(target.description || labels.chooseTarget) + '</p></div>' +
           '<div class="takeover-actions">' +
             '<button class="btn primary" data-copy-prompt="' + escape(targetMode) + '" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(targetCopyLabel(targetMode, target)) + '</button>' +
+            '<button class="btn" data-ack="' + escape(packet.id) + '" data-ack-by="' + escape(target.id === "auto" ? "dashboard" : target.title) + '">' + escape(labels.markReceived) + '</button>' +
             '<button class="btn" data-copy-prompt="full" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(labels.copyFullPrompt) + '</button>' +
             '<button class="btn wide" data-copy-prompt="mcp" data-id="' + escape(packet.id) + '" data-target-id="' + escape(target.id) + '">' + escape(labels.copyMcpInstruction) + '</button>' +
           '</div>' +
@@ -2464,6 +2574,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       }
       wireCopyButtons();
       wirePromptButtons();
+      wireAckButtons();
     }
 
     function renderTargets() {
@@ -2543,6 +2654,15 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
           ? '<pre>' + escape(packet.body_preview) + '</pre>'
           : '<div class="empty">' + escape(labels.noBody) + '</div>';
       }
+      if (activeTab === "ack") {
+        const acknowledgements = packet.acknowledgements || [];
+        if (!acknowledgements.length) {
+          return '<div class="empty">' + escape(labels.unacknowledged) + '</div>';
+        }
+        return '<ul>' + acknowledgements.map((ack) =>
+          '<li><span><strong>' + escape(ack.by) + '</strong> · ' + escape(ack.acknowledged_at) + (ack.note ? '<br>' + escape(ack.note) : '') + '</span></li>'
+        ).join("") + '</ul>';
+      }
       if (activeTab === "safety") {
         const warnings = packet.safety && packet.safety.warnings ? packet.safety.warnings : [];
         if (!warnings.length) return '<div class="empty">' + escape(labels.noSafetyWarnings) + '</div>';
@@ -2568,6 +2688,8 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         '<div>created</div><div>' + escape(fmt(packet.created_at)) + '</div>' +
         '<div>updated</div><div>' + escape(fmt(packet.updated_at)) + '</div>' +
         '<div>status</div><div>' + escape(fmt(packet.status)) + '</div>' +
+        '<div>acknowledged</div><div>' + escape(packet.acknowledged ? labels.acknowledged : labels.unacknowledged) + '</div>' +
+        '<div>ack count</div><div>' + escape(fmt(packet.acknowledgement_count)) + '</div>' +
         '<div>body chars</div><div>' + escape(fmt(packet.body_chars)) + '</div>' +
         '</div><h3>' + escape(labels.safety) + '</h3>' + safetyWarnings + '<h3 style="margin-top: 14px;">Tags</h3>' + tags + '<h3 style="margin-top: 14px;">Notes</h3>' + notes;
     }
@@ -2696,6 +2818,33 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
           } catch (error) {
             showToast(error.message || labels.copyFailed);
           } finally {
+            button.disabled = false;
+            button.textContent = previous;
+          }
+        });
+      }
+    }
+
+    function wireAckButtons() {
+      for (const button of document.querySelectorAll("[data-ack]")) {
+        if (button.dataset.ackBound === "true") continue;
+        button.dataset.ackBound = "true";
+        button.addEventListener("click", async () => {
+          const previous = button.textContent;
+          button.disabled = true;
+          button.textContent = labels.acknowledging;
+          try {
+            const response = await fetch("/api/ack", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ id: button.dataset.ack, by: button.dataset.ackBy }),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) throw new Error(payload.error || labels.ackFailed);
+            showToast(payload.message || labels.ackRecorded);
+            window.location.reload();
+          } catch (error) {
+            showToast(error.message || labels.ackFailed);
             button.disabled = false;
             button.textContent = previous;
           }
@@ -2866,6 +3015,7 @@ function normalizeImportedPacket(packet) {
     tags: Array.isArray(packet?.tags) ? packet.tags : [],
     body: packet?.body || null,
     git: packet?.git || null,
+    acknowledgements: packetAcknowledgements(packet),
   };
 }
 
@@ -2909,6 +3059,11 @@ function renderMarkdownExport(packets, { workspace = null } = {}) {
     if (packet.updated_at) lines.push(`- updated_at: ${packet.updated_at}`);
     if (packet.status) lines.push(`- status: ${packet.status}`);
     if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
+    const acknowledgement = packetAcknowledgementSummary(packet);
+    lines.push(`- acknowledged: ${acknowledgement.acknowledged ? "yes" : "no"}`);
+    if (acknowledgement.latest) {
+      lines.push(`- latest_acknowledgement: ${acknowledgement.latest.by} at ${acknowledgement.latest.acknowledged_at}`);
+    }
     const safety = packetSafety(packet);
     lines.push(`- safety: ${safety.level}`);
     if (safety.warnings.length) {
@@ -3093,6 +3248,10 @@ function renderHtmlPacketCard(packet) {
   const tags = (packet.tags || []).map((tag) => `<span class="pill">${escapeHtml(tag)}</span>`).join("");
   const gitDirty = packet.git?.status?.length || 0;
   const safety = packetSafety(packet);
+  const acknowledgement = packetAcknowledgementSummary(packet);
+  const ackHtml = acknowledgement.acknowledged
+    ? `<div class="commands"><span class="pill good">acknowledged by ${escapeHtml(acknowledgement.latest.by)}</span><span class="pill">${escapeHtml(acknowledgement.latest.acknowledged_at)}</span></div>`
+    : `<div class="commands"><span class="pill warn">pending acknowledgement</span></div>`;
   const safetyHtml = safety.warnings.length
     ? `<div class="commands">
       <span class="pill warn">${safety.warnings.length} safety warning(s)</span>
@@ -3122,6 +3281,7 @@ function renderHtmlPacketCard(packet) {
       ${tags}
     </div>
     ${notes}
+    ${ackHtml}
     ${safetyHtml}
     ${git}
     ${body}
@@ -3146,6 +3306,8 @@ function printTimelinePacket(packet) {
   if (packet.git?.status?.length) facts.push(`dirty:${packet.git.status.length}`);
   const safety = packetSafety(packet);
   if (safety.warnings.length) facts.push(`safety:${safety.warnings.length}`);
+  const acknowledgement = packetAcknowledgementSummary(packet);
+  if (acknowledgement.acknowledged) facts.push(`ack:${acknowledgement.count}`);
   if (packet.tags?.length) facts.push(`tags:${packet.tags.join(",")}`);
   console.log(`* ${packet.created_at}  ${packet.from}  ${packet.id}`);
   console.log(`  ${summary}`);
@@ -3201,6 +3363,7 @@ function searchablePacketText(packet) {
     ...(packet.notes || []),
     ...(packet.tags || []),
     packet.body,
+    ...packetAcknowledgements(packet).flatMap((ack) => [ack.by, ack.note]),
     packet.git?.branch,
     packet.git?.head,
     ...(packet.git?.status || []),
@@ -3213,6 +3376,7 @@ function searchablePacketText(packet) {
 function listWorkspaceSummaries(limit = DEFAULT_LIMIT) {
   const byWorkspace = new Map();
   for (const packet of loadStore().packets) {
+    const acknowledgement = packetAcknowledgementSummary(packet);
     const current = byWorkspace.get(packet.workspace);
     if (!current) {
       byWorkspace.set(packet.workspace, {
@@ -3226,8 +3390,12 @@ function listWorkspaceSummaries(limit = DEFAULT_LIMIT) {
         latest_tags: packet.tags || [],
         latest_body_chars: packet.body?.length || 0,
         latest_git_dirty_files: packet.git?.status?.length || 0,
+        latest_acknowledged: acknowledgement.acknowledged,
+        latest_acknowledgement_count: acknowledgement.count,
+        latest_acknowledgement: acknowledgement.latest,
         next_resume: `acb resume --id ${packet.id}`,
         next_brief: `acb brief --id ${packet.id}`,
+        next_ack: `acb ack ${packet.id} --by <agent>`,
       });
     } else {
       current.packets += 1;
@@ -3259,6 +3427,7 @@ function buildStatusReport(workspace) {
     next: latest ? {
       resume: `acb resume --id ${latest.id}`,
       brief: `acb brief --id ${latest.id}`,
+      ack: `acb ack ${latest.id} --by <agent>`,
       copy_prompt: `acb prompt --id ${latest.id}`,
       show_prompt: `acb show ${latest.id} --prompt`,
       mcp_status: "get_workspace_status",
@@ -3302,8 +3471,14 @@ function formatStatusReport(report) {
   lines.push(`latest_created_at: ${report.latest_packet.created_at}`);
   if (report.latest_packet.summary) lines.push(`latest_summary: ${report.latest_packet.summary}`);
   if (report.latest_packet.status) lines.push(`latest_status: ${report.latest_packet.status}`);
+  lines.push(`latest_acknowledged: ${report.latest_packet.acknowledged ? "yes" : "no"}`);
+  if (report.latest_packet.latest_acknowledgement) {
+    lines.push(`latest_ack_by: ${report.latest_packet.latest_acknowledgement.by}`);
+    lines.push(`latest_ack_at: ${report.latest_packet.latest_acknowledgement.acknowledged_at}`);
+  }
   lines.push(`next_resume: ${report.next.resume}`);
   lines.push(`next_brief: ${report.next.brief}`);
+  lines.push(`next_ack: ${report.next.ack}`);
   lines.push(`next_show_prompt: ${report.next.show_prompt}`);
   lines.push(`next_mcp_read_latest: ${report.next.mcp_read_latest}`);
   lines.push(`next_mcp_read_brief: ${report.next.mcp_read_brief}`);
@@ -4211,7 +4386,7 @@ function verifyMcpServer(name, server, { workspace = process.cwd(), expectLatest
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["get_workspace_status", "read_latest_handoff", "read_handoff_brief", "save_handoff", "update_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
+  const requiredTools = ["get_workspace_status", "read_latest_handoff", "read_handoff_brief", "save_handoff", "update_handoff", "acknowledge_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   if (workspaceStatus?.result?.isError === false && workspaceStatus.result.content?.[0]?.text?.includes("ACB Status")) {
     report.checks.workspace_status = true;
@@ -4767,6 +4942,30 @@ function mcpTools() {
       },
     },
     {
+      name: "acknowledge_handoff",
+      title: "Acknowledge Handoff",
+      description: "Record that a receiving agent explicitly read a local ACB handoff packet.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "Handoff packet id.",
+          },
+          by: {
+            type: "string",
+            description: "Receiving agent or client name. Defaults to mcp-client.",
+          },
+          note: {
+            type: "string",
+            description: "Optional short confirmation note.",
+          },
+        },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    {
       name: "search_handoffs",
       title: "Search Handoffs",
       description: "Search local ACB handoff packet summaries, notes, tags, body text, workspace paths, and lightweight Git metadata.",
@@ -4841,6 +5040,7 @@ function mcpCallTool(params) {
   if (name === "read_handoff_brief") return mcpReadHandoffBrief(args);
   if (name === "save_handoff") return mcpSaveHandoff(args);
   if (name === "update_handoff") return mcpUpdateHandoff(args);
+  if (name === "acknowledge_handoff") return mcpAcknowledgeHandoff(args);
   if (name === "read_handoff") return mcpReadHandoff(args);
   if (name === "search_handoffs") return mcpSearchHandoffs(args);
   if (name === "list_workspaces") return mcpListWorkspaces(args);
@@ -5041,6 +5241,39 @@ function mcpUpdateHandoff(args) {
   };
 }
 
+function mcpAcknowledgeHandoff(args) {
+  const id = typeof args.id === "string" ? args.id : "";
+  if (!id) {
+    return {
+      content: [{ type: "text", text: "id is required." }],
+      isError: true,
+    };
+  }
+  const packet = findPacket({ id });
+  if (!packet) {
+    return {
+      content: [{ type: "text", text: `No handoff packet found for id: ${id}` }],
+      isError: true,
+    };
+  }
+  const acknowledgement = createAcknowledgement({
+    by: typeof args.by === "string" && args.by.trim() ? args.by : "mcp-client",
+    note: typeof args.note === "string" && args.note.trim() ? args.note : null,
+  });
+  const updated = {
+    ...packet,
+    acknowledgements: [...packetAcknowledgements(packet), acknowledgement],
+    updated_at: new Date().toISOString(),
+  };
+  replacePacket(updated);
+
+  return {
+    content: [{ type: "text", text: `Acknowledged ACB handoff packet: ${updated.id}` }],
+    structuredContent: { packet: packetWithNextSteps(updated), acknowledgement },
+    isError: false,
+  };
+}
+
 function hasMcpUpdateArgs(args) {
   return typeof args.summary === "string"
     || typeof args.status === "string"
@@ -5121,6 +5354,7 @@ function mcpListWorkspaces(args) {
 
 function packetSummary(packet) {
   const safety = packetSafety(packet);
+  const acknowledgement = packetAcknowledgementSummary(packet);
   return {
     id: packet.id,
     created_at: packet.created_at,
@@ -5132,17 +5366,22 @@ function packetSummary(packet) {
     tags: packet.tags || [],
     body_chars: packet.body?.length || 0,
     git_dirty_files: packet.git?.status?.length || 0,
+    acknowledged: acknowledgement.acknowledged,
+    acknowledgement_count: acknowledgement.count,
+    latest_acknowledgement: acknowledgement.latest,
     safety,
-    event: packetTraceEvent(packet, safety),
+    event: packetTraceEvent(packet, safety, acknowledgement),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
+    next_ack: `acb ack ${packet.id} --by <agent>`,
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
+    next_mcp_ack: "acknowledge_handoff",
   };
 }
 
-function packetTraceEvent(packet, safety = packetSafety(packet)) {
+function packetTraceEvent(packet, safety = packetSafety(packet), acknowledgement = packetAcknowledgementSummary(packet)) {
   return {
     event_type: "handoff_packet",
     event_id: `evt_${packet.id}`,
@@ -5152,18 +5391,28 @@ function packetTraceEvent(packet, safety = packetSafety(packet)) {
     actor: packet.from,
     summary: packet.summary || packet.status || null,
     safety_level: safety.level,
+    acknowledged: acknowledgement.acknowledged,
+    acknowledgement_count: acknowledgement.count,
   };
 }
 
 function packetWithNextSteps(packet) {
+  const acknowledgement = packetAcknowledgementSummary(packet);
   return {
     ...packet,
+    acknowledgements: packetAcknowledgements(packet),
+    acknowledgement,
+    acknowledged: acknowledgement.acknowledged,
+    acknowledgement_count: acknowledgement.count,
+    latest_acknowledgement: acknowledgement.latest,
     safety: packetSafety(packet),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
+    next_ack: `acb ack ${packet.id} --by <agent>`,
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
+    next_mcp_ack: "acknowledge_handoff",
   };
 }
 
@@ -5251,6 +5500,7 @@ function jsonRpcError(code, message) {
 }
 
 function renderHandoffPrompt(packet) {
+  const acknowledgement = packetAcknowledgementSummary(packet);
   const lines = [
     "You are taking over work from another local coding agent.",
     "",
@@ -5267,6 +5517,8 @@ function renderHandoffPrompt(packet) {
   if (packet.summary) lines.push(`- summary: ${packet.summary}`);
   if (packet.status) lines.push(`- status: ${packet.status}`);
   if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
+  lines.push(`- acknowledged: ${acknowledgement.acknowledged ? "yes" : "no"}`);
+  if (acknowledgement.latest) lines.push(`- latest_acknowledgement: ${acknowledgement.latest.by} at ${acknowledgement.latest.acknowledged_at}`);
   if (packet.git) {
     lines.push("", "## Git Snapshot", "", renderGitSnapshot(packet.git));
   }
@@ -5282,6 +5534,7 @@ function renderHandoffPrompt(packet) {
     "## Requested Behavior",
     "",
     "- Continue from this context instead of asking the user to repeat it.",
+    `- After you summarize this packet, record receipt with: acb ack ${packet.id} --by <agent>`,
     "- If anything is ambiguous or risky, ask one concise question before making changes.",
     "- Preserve user edits and verify before proposing any release or publish step.",
     "",
@@ -5290,6 +5543,7 @@ function renderHandoffPrompt(packet) {
 }
 
 function renderBriefPrompt(packet) {
+  const acknowledgement = packetAcknowledgementSummary(packet);
   const lines = [
     "You are taking over local coding work from an ACB brief.",
     "",
@@ -5306,6 +5560,8 @@ function renderBriefPrompt(packet) {
   if (packet.summary) lines.push(`- summary: ${packet.summary}`);
   if (packet.status) lines.push(`- status: ${packet.status}`);
   if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
+  lines.push(`- acknowledged: ${acknowledgement.acknowledged ? "yes" : "no"}`);
+  if (acknowledgement.latest) lines.push(`- latest_acknowledgement: ${acknowledgement.latest.by} at ${acknowledgement.latest.acknowledged_at}`);
   if (packet.git) {
     lines.push(
       `- git_branch: ${packet.git.branch || "unknown"}`,
@@ -5332,6 +5588,7 @@ function renderBriefPrompt(packet) {
     "## Requested Behavior",
     "",
     "- Continue from this brief without assuming hidden state.",
+    `- After you summarize this packet, record receipt with: acb ack ${packet.id} --by <agent>`,
     "- Inspect the workspace before editing files.",
     "- Ask one concise question if the brief is insufficient.",
     "",
@@ -5353,6 +5610,7 @@ function renderMcpTakeoverInstruction(packet, target = null) {
 }
 
 function printPacket(packet) {
+  const acknowledgement = packetAcknowledgementSummary(packet);
   console.log(`id: ${packet.id}`);
   console.log(`from: ${packet.from}`);
   console.log(`created_at: ${packet.created_at}`);
@@ -5361,6 +5619,13 @@ function printPacket(packet) {
   if (packet.summary) console.log(`summary: ${packet.summary}`);
   if (packet.status) console.log(`status: ${packet.status}`);
   if (packet.tags?.length) console.log(`tags: ${packet.tags.join(", ")}`);
+  console.log(`acknowledged: ${acknowledgement.acknowledged ? "yes" : "no"}`);
+  console.log(`acknowledgement_count: ${acknowledgement.count}`);
+  if (acknowledgement.latest) {
+    console.log(`latest_ack_by: ${acknowledgement.latest.by}`);
+    console.log(`latest_ack_at: ${acknowledgement.latest.acknowledged_at}`);
+    if (acknowledgement.latest.note) console.log(`latest_ack_note: ${acknowledgement.latest.note}`);
+  }
   if (packet.git) {
     console.log(`git_branch: ${packet.git.branch || "unknown"}`);
     console.log(`git_head: ${packet.git.head || "unknown"}`);
@@ -5376,8 +5641,10 @@ function printPacket(packet) {
   console.log(`next_resume: acb resume --id ${packet.id}`);
   console.log(`next_brief: acb brief --id ${packet.id}`);
   console.log(`next_show_prompt: acb show ${packet.id} --prompt`);
+  console.log(`next_ack: acb ack ${packet.id} --by <agent>`);
   console.log("next_mcp_read: read_handoff");
   console.log("next_mcp_brief: read_handoff_brief");
+  console.log("next_mcp_ack: acknowledge_handoff");
   if (packet.notes?.length) {
     console.log("notes:");
     for (const note of packet.notes) console.log(`- ${note}`);
@@ -5412,6 +5679,39 @@ function createPacketId() {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const random = Math.random().toString(36).slice(2, 8);
   return `pkt_${stamp}_${random}`;
+}
+
+function createAcknowledgement({ by, note = null }) {
+  const stamp = new Date().toISOString();
+  const random = Math.random().toString(36).slice(2, 8);
+  return {
+    id: `ack_${stamp.replace(/[-:.TZ]/g, "").slice(0, 14)}_${random}`,
+    acknowledged_at: stamp,
+    by: String(by || "unknown").trim() || "unknown",
+    note: typeof note === "string" && note.trim() ? note.trim() : null,
+  };
+}
+
+function packetAcknowledgements(packet) {
+  if (!Array.isArray(packet?.acknowledgements)) return [];
+  return packet.acknowledgements
+    .filter((ack) => ack && typeof ack.acknowledged_at === "string" && typeof ack.by === "string")
+    .map((ack) => ({
+      id: typeof ack.id === "string" && ack.id ? ack.id : `ack_${String(ack.acknowledged_at).replace(/[^0-9]/g, "").slice(0, 14) || "legacy"}`,
+      acknowledged_at: ack.acknowledged_at,
+      by: ack.by,
+      note: typeof ack.note === "string" && ack.note.trim() ? ack.note : null,
+    }));
+}
+
+function packetAcknowledgementSummary(packet) {
+  const acknowledgements = packetAcknowledgements(packet);
+  const latest = acknowledgements[acknowledgements.length - 1] || null;
+  return {
+    acknowledged: acknowledgements.length > 0,
+    count: acknowledgements.length,
+    latest,
+  };
 }
 
 function timestampForFile() {

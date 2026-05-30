@@ -39,6 +39,7 @@ The command uses a temporary local store and checks:
 - A compact brief can be rendered.
 - An MCP config can be generated.
 - The MCP server exposes the required tools and can read the smoke packet from the target workspace.
+- The MCP server exposes `acknowledge_handoff` for explicit receiving-side confirmation.
 - Dashboard state and dashboard HTML can render the packet.
 
 The temporary store is deleted by default after the report is built. Use `--keep-artifacts` only when you need to inspect the generated smoke-test store. The command prints next commands for the real workflow after the smoke test passes.
