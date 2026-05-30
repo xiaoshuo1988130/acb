@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added a visual README hero that shows the local handoff flow from source agent to ACB packet to receiving MCP client.
+
 ## 0.15.1
 
 Terminal capture and missed handoff recovery.

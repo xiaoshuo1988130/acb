@@ -2,23 +2,18 @@
 
 [English](README.md) | 简体中文
 
-AgentContextBus 是一个 local-first 的编码 Agent 上下文交接 CLI。
+![AgentContextBus visual handoff flow](docs/assets/readme-hero.svg)
 
-它解决一个很常见的问题：
+AgentContextBus 是一个 local-first 的编码 Agent 交接层。当前工具保存一个紧凑的本地 packet，下一个工具通过 CLI、dashboard 或 MCP 拉取、检查、复述并确认接收。
 
-> 我在 Codex、OpenCode、Cline、Claude Code、脚本和终端之间切换时，不想一遍遍解释当前项目做到哪里了。
+当你在 Codex、OpenCode、Cline、Roo Code、Claude Desktop、脚本和终端之间切换时，用它避免一遍遍重讲当前项目状态。
 
-ACB 让当前 Agent 留下一个本地上下文包，然后让下一个 Agent 通过可复制的提示词、dashboard 复制按钮或显式 MCP 工具读取它。
+这张图表达的是：
 
-ACB 的边界很明确：
-
-- 不做隐藏 prompt 注入。
-- 默认不拦截网络流量。
-- 不修改 Cline、Roo、OpenCode、VS Code、Claude Desktop 等客户端的私有存储。
-- 不做后台跨 Agent 自动化。
-- 不做云同步或托管 dashboard。
-
-npm 主包名是 `@agentcontextbus/cli`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。早期的 `@xiaoshuo1988/acb` 会继续作为兼容路径保留。
+- `acb handoff --git` 把当前 repo 状态保存成本地 packet。
+- `acb panic -- npm test` 在终端报错时捕获命令、退出码、stdout 和 stderr。
+- MCP 客户端可以调用 `check_latest_handoff_ready`，读取 packet，复述摘要，并确认接收。
+- packet 始终保存在本地，可检查、可复制、可审计。
 
 ## 30 秒试用
 
@@ -38,11 +33,7 @@ npx @agentcontextbus/cli@latest verify first-run --lang zh-CN
 
 `verify first-run` 会用临时本地 store 检查 quickstart、demo packet、brief/resume、dashboard state 和 setup workflow。除非你自己传入 `ACB_STORE`，否则不会写入真实 ACB store。
 
-关于自动启动、剪贴板、客户端配置、数据位置等常见疑问，见 [常见问题](docs/zh-CN/faq.md)。
-
-![ACB terminal demo](docs/assets/terminal-demo.svg)
-
-![ACB freshness gate demo](docs/assets/freshness-gate-demo.svg)
+npm 主包名是 `@agentcontextbus/cli`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。早期的 `@xiaoshuo1988/acb` 会继续作为兼容路径保留。
 
 ## 安装
 
@@ -84,6 +75,10 @@ acb dashboard --workspace . --lang zh-CN
 acb verify first-run --lang zh-CN
 ```
 
+## 信任边界
+
+ACB 不会把上下文隐藏注入到模型请求里，不拦截流量，不同步到云端 dashboard，也不会静默修改客户端私有存储。每一次保存、读取、恢复、复制和确认接收，都是显式动作。
+
 ## 60 秒流程
 
 在掌握当前上下文的 Agent 里运行：
@@ -93,6 +88,12 @@ acb handoff --from codex --summary "Ready for OpenCode to continue" --git
 ```
 
 ACB 会保存一个本地上下文包，并把交接提示词复制到剪贴板。
+
+如果要交接的是刚刚失败的终端命令，可以直接捕获现场：
+
+```bash
+acb panic -- npm test
+```
 
 在下一个 Agent 或终端里运行：
 
@@ -148,6 +149,12 @@ acb brief
 ```
 
 `acb brief` 会复制一个精简接管摘要，并告诉接收方需要完整上下文时如何读取完整 packet。
+
+## 可视化示例
+
+![ACB terminal demo](docs/assets/terminal-demo.svg)
+
+![ACB freshness gate demo](docs/assets/freshness-gate-demo.svg)
 
 想使用某个客户端的推荐路径：
 
@@ -237,6 +244,7 @@ MCP server 暴露这些工具：
 - `check_handoff_ready`
 - `read_handoff`
 - `save_handoff`
+- `generate_missed_handoff`
 - `update_handoff`
 - `acknowledge_handoff`
 - `search_handoffs`

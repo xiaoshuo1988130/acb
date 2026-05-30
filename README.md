@@ -2,25 +2,18 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-AgentContextBus is a local-first context handoff CLI for coding agents.
+![AgentContextBus visual handoff flow](docs/assets/readme-hero.svg)
 
-It solves one daily problem:
+AgentContextBus is a local-first handoff layer for coding agents. It saves a compact local packet from the current tool, then lets the next tool pull, check, summarize, and acknowledge it through CLI, dashboard, or MCP.
 
-> I switch between Codex, OpenCode, Cline, Claude Code, scripts, and terminals, and I do not want to explain the same workspace context again.
+Use it when switching between Codex, OpenCode, Cline, Roo Code, Claude Desktop, scripts, and terminals without re-explaining the same workspace state.
 
-ACB gives the current agent a clean way to leave a compact local context packet, then gives the next agent a paste-ready prompt, dashboard copy action, or explicit MCP tool to read it.
+What the picture is showing:
 
-Use it when you want a small, inspectable control plane between local agents without giving ACB control over those clients.
-
-It is intentionally explicit:
-
-- No hidden prompt injection.
-- No traffic interception by default.
-- No edits to Cline, Roo, OpenCode, VS Code, or Claude private storage.
-- No background cross-agent automation.
-- No cloud sync or hosted dashboard.
-
-The package is published as `@agentcontextbus/cli` and installs the short `acb` command. Use the scoped package name; the unscoped `acb` npm package name is already taken. The earlier `@xiaoshuo1988/acb` package remains available as a legacy compatibility path.
+- `acb handoff --git` saves the repo state as a local packet.
+- `acb panic -- npm test` captures the command, exit code, stdout, and stderr when terminal context matters.
+- MCP clients can call `check_latest_handoff_ready`, read the packet, summarize it, and acknowledge receipt.
+- The packet stays local and inspectable.
 
 ## Try In 30 Seconds
 
@@ -40,11 +33,7 @@ npx @agentcontextbus/cli@latest verify first-run
 
 `verify first-run` uses a temporary local store to check quickstart readiness, demo packet creation, brief/resume rendering, dashboard state, and setup workflow checks. It does not write to your real ACB store unless you pass `ACB_STORE` yourself.
 
-Questions about auto-start, clipboard, client config, or data location? See the [FAQ](docs/faq.md).
-
-![ACB terminal demo](docs/assets/terminal-demo.svg)
-
-![ACB freshness gate demo](docs/assets/freshness-gate-demo.svg)
+The package is published as `@agentcontextbus/cli` and installs the short `acb` command. Use the scoped package name; the unscoped `acb` npm package name is already taken. The earlier `@xiaoshuo1988/acb` package remains available as a legacy compatibility path.
 
 ## Install
 
@@ -74,6 +63,10 @@ To self-test the full first-run path without touching your real store:
 acb verify first-run
 ```
 
+## Trust Boundary
+
+ACB does not hide context in model requests, intercept traffic, sync to a cloud dashboard, or silently edit client private storage. You explicitly save, read, recover, copy, or acknowledge each handoff.
+
 ## 60 Second Flow
 
 From the agent that has the context:
@@ -83,6 +76,12 @@ acb handoff --from codex --summary "Ready for OpenCode to continue" --git
 ```
 
 ACB saves a local packet and copies a handoff prompt to your clipboard.
+
+If the thing you want to hand off is a failing command, capture the terminal moment:
+
+```bash
+acb panic -- npm test
+```
 
 In the next agent or terminal:
 
@@ -138,6 +137,12 @@ acb brief
 ```
 
 `acb brief` copies a compact takeover summary and points the receiving agent to the full packet when needed.
+
+## Visual Demos
+
+![ACB terminal demo](docs/assets/terminal-demo.svg)
+
+![ACB freshness gate demo](docs/assets/freshness-gate-demo.svg)
 
 Need a client-specific path:
 
@@ -232,6 +237,7 @@ The MCP server exposes:
 - `check_handoff_ready`
 - `read_handoff`
 - `save_handoff`
+- `generate_missed_handoff`
 - `update_handoff`
 - `acknowledge_handoff`
 - `search_handoffs`
