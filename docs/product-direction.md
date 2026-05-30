@@ -22,13 +22,16 @@ AgentContextBus should validate one daily pain first:
 ACB keeps an explicit-first trust boundary: users or agents must deliberately save, read, or acknowledge a handoff. The next product work should reduce friction inside that boundary rather than add hidden automation.
 
 - **Zero-text handoff:** if a user runs `acb handoff --git` without `--summary`, ACB should generate an `[Auto]` summary locally and include compact Git status/stat context in the packet. The receiving agent should not need extra tool calls just to discover the basic diff shape.
+- **Terminal context cache:** Git context alone is not enough differentiation because coding agents can run Git themselves. ACB should capture explicit terminal output, failing commands, exit codes, and traceback context when the user deliberately pipes output or runs an ACB wrapper command. This gives the next agent process context it cannot reconstruct from the file tree alone.
 - **Soft missing-handoff warning:** if an MCP receiving client checks a dirty workspace with no packet, ACB should warn that no explicit handoff exists instead of blocking unrelated questions. Stale saved packets remain a hard `needs_refresh` gate.
+- **Recoverable missed handoff:** a dirty workspace without a packet should offer a user-confirmed recovery path. The receiving agent can ask permission, then call an ACB tool that saves a missed handoff packet and restores the timeline.
 - **Interactive setup helper:** setup automation may be useful, but only when it is explicit, previewable, backed up, and confirmed by the user. Dry-run, print, and copy modes remain required fallbacks.
 
 ## Not In The MVP
 
 - Hidden traffic interception.
 - Automatic prompt injection.
+- Reading shell history by default.
 - Silently editing Cline/Roo/OpenCode private storage.
 - Auto-patching client configuration files without user confirmation, backup, and a dry-run path.
 - Cloud dashboard, sync, or background daemon.

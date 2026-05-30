@@ -1302,6 +1302,43 @@ test("handoff can auto-generate summary and compact git context", () => {
   assert.match(packet.body, /README\.md/);
 });
 
+test("panic captures terminal output and preserves exit code", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const captured = run([
+    "panic",
+    "--workspace",
+    workspace,
+    "--from",
+    "opencode",
+    "--no-copy",
+    "--",
+    process.execPath,
+    "-e",
+    "console.log('panic stdout'); console.error('panic stderr'); process.exit(7);",
+  ], { env });
+  assert.equal(captured.status, 7);
+  assert.match(captured.stdout, /panic stdout/);
+  assert.match(captured.stderr, /panic stderr/);
+  assert.match(captured.stdout, /saved panic handoff packet/);
+
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.match(packet.summary, /^\[Panic\]/);
+  assert.equal(packet.status, "terminal command failed");
+  assert.ok(packet.tags.includes("panic"));
+  assert.ok(packet.tags.includes("terminal"));
+  assert.match(packet.body, /## Terminal Panic Capture/);
+  assert.match(packet.body, /exit_code: 7/);
+  assert.match(packet.body, /panic stdout/);
+  assert.match(packet.body, /panic stderr/);
+  assert.equal(packet.git.status.length, 1);
+});
+
 test("save can attach a bounded git diff body", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const workspace = path.join(dir, "repo");
@@ -2253,6 +2290,7 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "check_latest_handoff_ready"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "check_handoff_ready"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "search_handoffs"));
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "generate_missed_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "update_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "acknowledge_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "list_workspaces"));
@@ -2336,8 +2374,29 @@ test("serve returns a soft warning for dirty workspaces without handoff packets"
   assert.equal(message.result.structuredContent.report.ready, true);
   assert.equal(message.result.structuredContent.report.status, "warning_dirty_workspace");
   assert.equal(message.result.structuredContent.report.git.dirty_files, 1);
+  assert.equal(message.result.structuredContent.report.next.mcp_generate_missed_handoff, "generate_missed_handoff");
   assert.match(message.result.content[0].text, /warning_dirty_workspace/);
   assert.match(message.result.content[0].text, /acb handoff/);
+
+  const recovered = run(["serve"], {
+    env,
+    input: rpc("tools/call", {
+      name: "generate_missed_handoff",
+      arguments: { workspace, from: "cline", note: "User confirmed missed handoff recovery" },
+    }, 1),
+  });
+  assert.equal(recovered.status, 0);
+  const [recoveredMessage] = parseJsonLines(recovered.stdout);
+  assert.equal(recoveredMessage.result.isError, false);
+  assert.match(recoveredMessage.result.content[0].text, /Generated missed ACB handoff packet/);
+  assert.match(recoveredMessage.result.structuredContent.packet.summary, /^\[Auto\]/);
+  assert.equal(recoveredMessage.result.structuredContent.packet.status, "missed handoff recovery");
+  assert.ok(recoveredMessage.result.structuredContent.packet.tags.includes("missed-handoff"));
+  assert.match(recoveredMessage.result.structuredContent.packet.body, /## Auto Handoff Context/);
+
+  const latest = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.equal(latest.id, recoveredMessage.result.structuredContent.packet.id);
+  assert.equal(latest.from, "cline");
 });
 
 test("serve can save handoff packets over MCP stdio", () => {

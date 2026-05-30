@@ -9,6 +9,8 @@
 - Added a visual freshness gate demo asset for README and example docs.
 - Added zero-text `acb handoff --git` support with an automatic `[Auto]` summary and compact Git context body.
 - Added a soft MCP `warning_dirty_workspace` readiness response when a dirty workspace has no explicit handoff packet.
+- Added `acb panic -- <command>` to explicitly capture terminal stdout, stderr, exit code, duration, and optional Git state into a handoff packet.
+- Added MCP `generate_missed_handoff` so receiving agents can recover a dirty-workspace timeline gap after explicit user confirmation.
 - Added `acb integrate <client>` as an explicit MCP setup helper with dry-run, print/copy, confirmation, backup, and `--yes` modes.
 
 ### Changed

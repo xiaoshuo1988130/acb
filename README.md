@@ -310,6 +310,7 @@ acb quickstart --check
 acb demo
 acb handoff --from <agent> --summary <text> --status <text> --note <text>
 acb handoff --git
+acb panic -- npm test
 acb receive --latest
 acb resume
 acb brief

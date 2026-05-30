@@ -26,7 +26,7 @@ When starting work in a workspace, check whether the ACB MCP tools are available
 
 If ACB tools are available:
 1. Call check_latest_handoff_ready for the current workspace before editing files.
-2. If the result is warning_dirty_workspace, do not refuse the user's request. Start with a brief note that the workspace has local changes but no explicit ACB handoff, then continue with simple questions. For implementation work, recommend `acb handoff --git`.
+2. If the result is warning_dirty_workspace, do not refuse the user's request. Continue with simple questions after a brief note. For implementation work, ask whether the user wants you to recover the missed handoff; only after explicit confirmation call generate_missed_handoff, then read and summarize the generated packet.
 3. If the result is needs_refresh or needs_review, stop and tell the user the blocker. Do not continue from stale or unsafe handoff context.
 4. If the handoff is ready, call read_latest_handoff or read_handoff_brief.
 5. If the packet summary starts with [Auto], use the captured packet body, Git status, and diff stat as the initial handoff context. Do not spend extra tool calls re-reading the diff unless the packet is insufficient for the user's task.
@@ -47,7 +47,7 @@ If available, call check_latest_handoff_ready for this workspace.
 
 - If status is needs_refresh, stop and ask the user to refresh the ACB handoff.
 - If status is needs_review, stop and summarize the safety or context blocker.
-- If status is warning_dirty_workspace, give a short warning that no explicit handoff exists for the dirty workspace. Continue for simple questions; ask for `acb handoff --git` before implementation handoff work.
+- If status is warning_dirty_workspace, give a short warning that no explicit handoff exists for the dirty workspace. Continue for simple questions. For implementation work, ask whether the user wants you to recover the missed handoff; only after explicit confirmation call generate_missed_handoff, then read and summarize the generated packet.
 - If status is ready or ready_with_notes, call read_latest_handoff or read_handoff_brief.
 
 Before making changes, summarize:
@@ -89,7 +89,7 @@ OpenCode 可以走复制粘贴 handoff，也可以走 MCP pull。使用 MCP 时�
 Use ACB before continuing this workspace.
 
 1. Call check_latest_handoff_ready.
-2. If the result is warning_dirty_workspace, gently tell the user no explicit handoff exists for the dirty workspace, then continue for simple questions.
+2. If the result is warning_dirty_workspace, gently tell the user no explicit handoff exists for the dirty workspace, then continue for simple questions. For implementation work, ask for confirmation before calling generate_missed_handoff.
 3. If the result is not ready, stop and explain the blocker.
 4. If ready, call read_latest_handoff.
 5. Summarize the handoff packet before editing files.

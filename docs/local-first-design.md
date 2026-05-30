@@ -170,6 +170,25 @@ It intentionally does not capture `git diff` by default. Use `--diff` when the n
 
 If `--summary` is omitted while saving with `--git`, ACB generates an `[Auto]` summary from the local Git snapshot and adds a compact body with branch, HEAD, `git status --short`, and bounded diff statistics. This keeps the sending side low-friction without forcing the receiving agent to spend extra tool calls just to rediscover the basic workspace shape.
 
+## Terminal Capture
+
+Git snapshots do not capture the terminal moment that often matters most: the command that just failed and the traceback the next agent needs.
+
+Use an explicit pipe when you already ran the command yourself:
+
+```bash
+pytest 2>&1 | acb handoff --stdin --git
+```
+
+Use `acb panic` when you want ACB to run the command, capture stdout/stderr, save a packet, and still preserve the command's exit status:
+
+```bash
+acb panic -- npm test
+acb panic --from opencode --workspace . -- pytest -q
+```
+
+The packet body records the command, exit code, duration, bounded stdout/stderr, and optional Git snapshot. ACB does not read shell history by default, because shell history can contain secrets, machine-specific paths, or unrelated private commands.
+
 ## Workspace Fingerprint
 
 Git is the default freshness guard, but some handoffs depend on explicit non-Git or ignored local files. ACB supports opt-in fingerprints for those paths:
@@ -345,6 +364,8 @@ This keeps both export and ingestion explicit. An upstream agent must call `save
 MCP tools still need agent-side instructions to be useful at session start. Copyable client instruction patches live in [agent-instructions.md](agent-instructions.md); they tell receiving agents to check readiness, read the packet, summarize it, and acknowledge it before editing.
 
 If `check_latest_handoff_ready` finds no packet but the workspace is a dirty Git checkout, it returns a soft `warning_dirty_workspace` report instead of a hard error. This is not a handoff substitute; it lets the agent gently remind the user to run `acb handoff --git` while still allowing simple questions to proceed. A saved packet whose freshness signals changed remains a hard `needs_refresh` gate.
+
+For MCP clients, `generate_missed_handoff` is the explicit recovery tool. The agent should ask the user first; after confirmation, it can call this tool to save a local missed-handoff packet with an automatic `[Auto]` Git summary. This closes the timeline gap without letting the agent invent hidden context.
 
 Example MCP server config shape:
 

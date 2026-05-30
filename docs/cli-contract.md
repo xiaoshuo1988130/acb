@@ -84,6 +84,8 @@ Minor releases can add:
 - New receiving-side helpers such as `next_receive` and `acb receive --json`.
 - New setup-guide helpers such as `steps`, `handoff_command`, `safety_command`, and `setup_check_command`.
 - New explicit integration helpers such as `acb integrate <client>` and soft readiness statuses such as `warning_dirty_workspace`.
+- New explicit terminal-capture helpers such as `acb panic -- <command>`.
+- New MCP recovery helpers such as `generate_missed_handoff`.
 
 Minor releases should avoid:
 

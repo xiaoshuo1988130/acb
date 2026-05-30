@@ -67,6 +67,7 @@ const VERSION = PACKAGE_META.version;
 const PACKAGE_NAME = PACKAGE_META.name;
 const DEFAULT_LIMIT = 10;
 const DIFF_BODY_LIMIT = 20000;
+const PANIC_OUTPUT_LIMIT = 30000;
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const LANGUAGE_VALUE_FLAGS = new Set(["--workspace", "--lang"]);
 
@@ -74,6 +75,7 @@ const usage = `AgentContextBus (acb) ${VERSION}
 
 Usage:
   acb handoff [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--watch <path>...] [--diff-limit <chars>] [--no-copy | --print-prompt | --json]
+  acb panic [--from <agent>] [--workspace <path>] [--summary <text>] [--tag <tag>] [--limit <chars>] [--no-git] [--no-copy | --print-prompt | --json] -- <command> [args...]
   acb demo [--workspace <path>] [--from <agent>] [--lang en|zh-CN] [--json]
   acb demo freshness [--lang en|zh-CN] [--json]
   acb save [--from <agent>] [--workspace <path>] [--summary <text>] [--status <text>] [--note <text>] [--tag <tag>] [--file <path> | --stdin | --diff] [--git] [--watch <path>...] [--diff-limit <chars>] [--copy | --print-prompt | --json]
@@ -176,6 +178,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "--version" || command === "-v" || command === "version") return print(`acb ${VERSION}\n`);
   if (command === "quickstart") return quickstartCommand(args);
   if (command === "handoff") return handoffCommand(args);
+  if (command === "panic") return panicCommand(args);
   if (command === "demo") return demoCommand(args);
   if (command === "save") return saveCommand(args);
   if (command === "update") return updateCommand(args);
@@ -226,6 +229,129 @@ function handoffCommand(args) {
     return saveCommand(cleanArgs);
   }
   return saveCommand([...cleanArgs, "--copy"]);
+}
+
+function panicCommand(args) {
+  if (panicOutputModes(args).length > 1) {
+    console.error("Use only one panic output mode: --no-copy, --print-prompt, or --json.");
+    return 2;
+  }
+  const separatorIndex = args.indexOf("--");
+  const commandArgs = separatorIndex === -1 ? [] : args.slice(separatorIndex + 1);
+  const optionArgs = separatorIndex === -1 ? args : args.slice(0, separatorIndex);
+  if (!commandArgs.length) {
+    console.error("Usage: acb panic [--from <agent>] [--workspace <path>] [--summary <text>] [--tag <tag>] [--limit <chars>] [--no-git] [--no-copy | --print-prompt | --json] -- <command> [args...]");
+    return 2;
+  }
+
+  const workspace = normalizeWorkspace(argValue(optionArgs, "--workspace") || process.cwd());
+  const from = argValue(optionArgs, "--from") || process.env.ACB_AGENT || "unknown";
+  const tags = uniqueStrings(["panic", "terminal", ...argValues(optionArgs, "--tag")]);
+  const limit = argValue(optionArgs, "--limit") === undefined ? PANIC_OUTPUT_LIMIT : parseLimit(argValue(optionArgs, "--limit"));
+  if (!limit) {
+    console.error("--limit must be a positive integer.");
+    return 2;
+  }
+
+  const started = Date.now();
+  const result = spawnSync(commandArgs[0], commandArgs.slice(1), {
+    cwd: workspace,
+    encoding: "utf8",
+    maxBuffer: Math.max(limit * 4, 1024 * 1024),
+  });
+  const durationMs = Date.now() - started;
+  const exitCode = result.status ?? (result.error ? 127 : 0);
+  const commandText = formatCommand(commandArgs[0], commandArgs.slice(1));
+  const body = buildPanicBody({
+    command: commandText,
+    exitCode,
+    durationMs,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+    error: result.error?.message || null,
+    limit,
+  });
+  const gitResult = optionArgs.includes("--no-git")
+    ? { ok: true, snapshot: null }
+    : readGitSnapshot(workspace);
+  const git = gitResult.ok ? gitResult.snapshot : null;
+  const summary = argValue(optionArgs, "--summary")
+    || `${exitCode === 0 ? "[Run]" : "[Panic]"} ${commandText} exited ${exitCode}`;
+
+  const packet = createHandoffPacket({
+    from,
+    workspace,
+    summary,
+    status: exitCode === 0 ? "terminal command completed" : "terminal command failed",
+    notes: gitResult.ok ? [] : [`Git snapshot unavailable: ${gitResult.error}`],
+    tags,
+    body,
+    git,
+    fingerprint: null,
+  });
+  const store = loadStore();
+  store.packets.unshift(packet);
+  writeStore(store);
+
+  if (optionArgs.includes("--json")) {
+    process.stdout.write(`${JSON.stringify({ packet, command: { command: commandText, exit_code: exitCode, duration_ms: durationMs } }, null, 2)}\n`);
+    return exitCode;
+  }
+
+  if (!optionArgs.includes("--print-prompt")) {
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    if (result.error) process.stderr.write(`[acb panic] command error: ${result.error.message}\n`);
+  }
+
+  if (optionArgs.includes("--print-prompt")) {
+    process.stdout.write(renderHandoffPrompt(packet));
+    return exitCode;
+  }
+
+  if (!optionArgs.includes("--no-copy")) {
+    const copied = copyToClipboard(renderHandoffPrompt(packet));
+    if (copied.ok) {
+      console.log(`[acb] saved panic handoff packet: ${packet.id}`);
+      console.log(`[acb] command_exit_code: ${exitCode}`);
+      console.log("[acb] handoff prompt copied to clipboard.");
+      return exitCode;
+    }
+    console.error(`[acb] clipboard unavailable: ${copied.error}`);
+  }
+
+  console.log(`[acb] saved panic handoff packet: ${packet.id}`);
+  console.log(`[acb] command_exit_code: ${exitCode}`);
+  console.log(`[acb] next: acb resume --id ${packet.id}`);
+  return exitCode;
+}
+
+function panicOutputModes(args) {
+  return ["--no-copy", "--print-prompt", "--json"].filter((flag) => args.includes(flag));
+}
+
+function buildPanicBody({ command, exitCode, durationMs, stdout, stderr, error, limit }) {
+  const sections = [
+    "## Terminal Panic Capture",
+    "",
+    "Captured explicitly by `acb panic`. Shell history is not read.",
+    "",
+    "### Command",
+    "",
+    "```bash",
+    command,
+    "```",
+    "",
+    "### Result",
+    "",
+    `- exit_code: ${exitCode}`,
+    `- duration_ms: ${durationMs}`,
+  ];
+  if (error) sections.push(`- spawn_error: ${error}`);
+  if (stdout.trim()) sections.push("", "### Stdout", "", "```text", truncateText(stdout.trimEnd(), limit), "```");
+  if (stderr.trim()) sections.push("", "### Stderr", "", "```text", truncateText(stderr.trimEnd(), limit), "```");
+  if (!stdout.trim() && !stderr.trim()) sections.push("", "_Command produced no stdout or stderr._");
+  return `${sections.join("\n")}\n`;
 }
 
 function resolveLanguage(args = []) {
@@ -4790,7 +4916,7 @@ function verifyMcpServer(name, server, { workspace = process.cwd(), expectLatest
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["get_workspace_status", "read_latest_handoff", "read_handoff_brief", "check_latest_handoff_ready", "check_handoff_ready", "save_handoff", "update_handoff", "acknowledge_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
+  const requiredTools = ["get_workspace_status", "read_latest_handoff", "read_handoff_brief", "check_latest_handoff_ready", "check_handoff_ready", "save_handoff", "generate_missed_handoff", "update_handoff", "acknowledge_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   if (workspaceStatus?.result?.isError === false && workspaceStatus.result.content?.[0]?.text?.includes("ACB Status")) {
     report.checks.workspace_status = true;
@@ -5320,6 +5446,29 @@ function mcpTools() {
       },
     },
     {
+      name: "generate_missed_handoff",
+      title: "Generate Missed Handoff",
+      description: "After user confirmation, save a missed local handoff packet for a dirty workspace that had no explicit packet.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspace: {
+            type: "string",
+            description: "Workspace path. Defaults to the MCP server process current working directory.",
+          },
+          from: {
+            type: "string",
+            description: "Receiving agent or client name that is recovering the missed handoff. Defaults to mcp-client.",
+          },
+          note: {
+            type: "string",
+            description: "Optional note confirming the user authorized this recovery.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
       name: "read_handoff",
       title: "Read Handoff",
       description: "Read a specific local ACB handoff packet by id.",
@@ -5499,6 +5648,7 @@ function mcpCallTool(params) {
   if (name === "check_latest_handoff_ready") return mcpCheckLatestHandoffReady(args);
   if (name === "check_handoff_ready") return mcpCheckHandoffReady(args);
   if (name === "save_handoff") return mcpSaveHandoff(args);
+  if (name === "generate_missed_handoff") return mcpGenerateMissedHandoff(args);
   if (name === "update_handoff") return mcpUpdateHandoff(args);
   if (name === "acknowledge_handoff") return mcpAcknowledgeHandoff(args);
   if (name === "read_handoff") return mcpReadHandoff(args);
@@ -5625,7 +5775,7 @@ function buildMissingHandoffWarningReport(workspace) {
     warnings: [
       {
         id: "dirty_workspace_without_handoff",
-        detail: "Continue with visible user instructions for simple questions. For implementation handoff, ask the user to run acb handoff --git.",
+        detail: "Continue with visible user instructions for simple questions. For implementation work, ask the user before calling generate_missed_handoff or request acb handoff --git.",
       },
     ],
     git: {
@@ -5639,6 +5789,7 @@ function buildMissingHandoffWarningReport(workspace) {
       handoff: formatCommand("acb", ["handoff", "--workspace", workspace, "--git"]),
       status: "get_workspace_status",
       save: "save_handoff",
+      mcp_generate_missed_handoff: "generate_missed_handoff",
     },
   };
 }
@@ -5653,6 +5804,7 @@ function formatMissingHandoffWarningReport(report) {
     `workspace: ${report.workspace}`,
     `git_dirty_files: ${report.git.dirty_files}`,
     `next_handoff: ${report.next.handoff}`,
+    `next_mcp_generate_missed_handoff: ${report.next.mcp_generate_missed_handoff}`,
   ];
   if (report.git.status.length) {
     lines.push("git_status:");
@@ -5727,6 +5879,54 @@ function mcpSaveHandoff(args) {
   return {
     content: [{ type: "text", text: `Saved ACB handoff packet: ${packet.id}` }],
     structuredContent: { packet },
+    isError: false,
+  };
+}
+
+function mcpGenerateMissedHandoff(args) {
+  const workspace = args.workspace ? normalizeWorkspace(args.workspace) : normalizeWorkspace(process.cwd());
+  if (findPacket({ workspace })) {
+    return {
+      content: [{ type: "text", text: "A handoff packet already exists for this workspace; use save_handoff or update_handoff instead of missed-handoff recovery." }],
+      isError: true,
+    };
+  }
+  const gitResult = readGitSnapshot(workspace);
+  if (!gitResult.ok) {
+    return {
+      content: [{ type: "text", text: gitResult.error }],
+      isError: true,
+    };
+  }
+  if (!gitResult.snapshot?.status?.length) {
+    return {
+      content: [{ type: "text", text: "Workspace is clean; no missed dirty handoff to generate." }],
+      isError: true,
+    };
+  }
+
+  const autoContext = buildAutoGitHandoffContext(workspace, gitResult.snapshot);
+  const note = typeof args.note === "string" && args.note.trim()
+    ? args.note.trim()
+    : "Generated after the user confirmed recovery for a dirty workspace without an explicit handoff.";
+  const packet = createHandoffPacket({
+    from: typeof args.from === "string" && args.from.trim() ? args.from : "mcp-client",
+    workspace,
+    summary: autoContext.summary,
+    status: "missed handoff recovery",
+    notes: [note],
+    tags: ["missed-handoff", "recovery"],
+    body: autoContext.body,
+    git: gitResult.snapshot,
+    fingerprint: null,
+  });
+  const store = loadStore();
+  store.packets.unshift(packet);
+  writeStore(store);
+
+  return {
+    content: [{ type: "text", text: `Generated missed ACB handoff packet: ${packet.id}` }],
+    structuredContent: { packet: packetWithNextSteps(packet) },
     isError: false,
   };
 }

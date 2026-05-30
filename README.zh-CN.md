@@ -320,6 +320,7 @@ acb quickstart --check
 acb demo --lang zh-CN
 acb handoff --from <agent> --summary <text> --git
 acb handoff --git
+acb panic -- npm test
 acb save --from <agent> --summary <text> --watch README.md
 acb receive --latest
 acb resume
