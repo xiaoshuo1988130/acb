@@ -44,6 +44,8 @@ Questions about auto-start, clipboard, client config, or data location? See the 
 
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
 
+![ACB freshness gate demo](docs/assets/freshness-gate-demo.svg)
+
 ## Install
 
 ```bash

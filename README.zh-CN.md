@@ -42,6 +42,8 @@ npx @agentcontextbus/cli@latest verify first-run --lang zh-CN
 
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
 
+![ACB freshness gate demo](docs/assets/freshness-gate-demo.svg)
+
 ## 安装
 
 ```bash

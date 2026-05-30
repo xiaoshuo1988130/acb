@@ -2,6 +2,8 @@
 
 This demo shows the ACB "needs refresh" moment without touching your real project.
 
+![ACB freshness gate demo](../assets/freshness-gate-demo.svg)
+
 Run:
 
 ```bash
