@@ -51,6 +51,7 @@ acb workspaces --json
 acb search <query> --json
 acb timeline --json
 acb safety --json
+acb receive --json
 acb brief --json
 acb setup --json
 acb verify workflow codex --json
@@ -79,6 +80,7 @@ Minor releases can add:
 - New acknowledgement metadata such as `acknowledged`, `acknowledgement_count`, `latest_acknowledgement`, and `next_ack`.
 - New freshness metadata such as `freshness`, `next_freshness`, and dashboard freshness counts.
 - New readiness metadata such as `readiness`, `next_ready`, `next_mcp_ready`, dashboard ready counts, and non-stored readiness checks.
+- New receiving-side helpers such as `next_receive` and `acb receive --json`.
 - New setup-guide helpers such as `steps`, `handoff_command`, `safety_command`, and `setup_check_command`.
 
 Minor releases should avoid:

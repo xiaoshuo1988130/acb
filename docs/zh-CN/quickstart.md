@@ -24,7 +24,7 @@ npx @xiaoshuo1988/acb quickstart --check
 npx @xiaoshuo1988/acb verify first-run --lang zh-CN
 ```
 
-`quickstart --check` 会检查本地 store、Git、剪贴板、`acb` 是否在 PATH 里，并给出推荐目标客户端、“推荐下一步”操作卡片，以及 `acb demo`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 等命令。
+`quickstart --check` 会检查本地 store、Git、剪贴板、`acb` 是否在 PATH 里，并给出推荐目标客户端、“推荐下一步”操作卡片，以及 `acb demo`、`acb receive --latest`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 等命令。
 
 ## 2. 先看一条安全示例
 
@@ -57,10 +57,10 @@ acb handoff --from codex --summary "Ready for next agent" --git
 在下一个 Agent 或终端里运行：
 
 ```bash
-acb resume
+acb receive --latest
 ```
 
-然后把输出或剪贴板里的提示词粘贴给下一个 Agent。
+`receive` 会先做 readiness 检查，packet 足够适合接收时才会复制接手提示词。然后把输出或剪贴板里的提示词粘贴给下一个 Agent。
 
 如果你希望第一次消息更短：
 
@@ -136,7 +136,7 @@ acb verify workflow --all
 npx @xiaoshuo1988/acb quickstart --check
 acb demo --lang zh-CN
 acb handoff --from codex --summary "Ready for next agent" --git
-acb resume
+acb receive --latest
 acb setup --check --lang zh-CN
 acb dashboard --workspace . --lang zh-CN
 ```

@@ -421,6 +421,7 @@ function quickstartCommand(args) {
       detected_targets: setupResult.ok ? setupResult.guide.detected_targets : [],
       next: {
         handoff: "acb handoff --from codex --summary \"Ready for the next agent\" --git",
+        receive: "acb receive --latest",
         resume: "acb resume",
         brief: "acb brief",
         doctor: "acb doctor",
@@ -1134,6 +1135,7 @@ function workspacesCommand(args) {
     console.log(`  packets: ${item.packets}`);
     console.log(`  latest: ${item.latest_packet_id}  ${item.latest_created_at}  ${item.latest_from}`);
     if (item.latest_summary) console.log(`  summary: ${item.latest_summary}`);
+    console.log(`  next_receive: ${item.next_receive}`);
     console.log(`  next_resume: ${item.next_resume}`);
     console.log(`  next_brief: ${item.next_brief}`);
   }
@@ -3881,12 +3883,13 @@ function listWorkspaceSummaries(limit = DEFAULT_LIMIT) {
         latest_tags: packet.tags || [],
         latest_body_chars: packet.body?.length || 0,
         latest_git_dirty_files: packet.git?.status?.length || 0,
-        latest_acknowledged: acknowledgement.acknowledged,
-        latest_acknowledgement_count: acknowledgement.count,
-        latest_acknowledgement: acknowledgement.latest,
-        next_resume: `acb resume --id ${packet.id}`,
-        next_brief: `acb brief --id ${packet.id}`,
-        next_ack: `acb ack ${packet.id} --by <agent>`,
+      latest_acknowledged: acknowledgement.acknowledged,
+      latest_acknowledgement_count: acknowledgement.count,
+      latest_acknowledgement: acknowledgement.latest,
+      next_receive: `acb receive ${packet.id}`,
+      next_resume: `acb resume --id ${packet.id}`,
+      next_brief: `acb brief --id ${packet.id}`,
+      next_ack: `acb ack ${packet.id} --by <agent>`,
       });
     } else {
       current.packets += 1;
@@ -3916,6 +3919,7 @@ function buildStatusReport(workspace) {
     latest_packet: latest ? packetSummary(latest) : null,
     git,
     next: latest ? {
+      receive: `acb receive ${latest.id}`,
       resume: `acb resume --id ${latest.id}`,
       brief: `acb brief --id ${latest.id}`,
       ack: `acb ack ${latest.id} --by <agent>`,
@@ -3968,6 +3972,7 @@ function formatStatusReport(report) {
     lines.push(`latest_ack_by: ${report.latest_packet.latest_acknowledgement.by}`);
     lines.push(`latest_ack_at: ${report.latest_packet.latest_acknowledgement.acknowledged_at}`);
   }
+  lines.push(`next_receive: ${report.next.receive}`);
   lines.push(`next_resume: ${report.next.resume}`);
   lines.push(`next_brief: ${report.next.brief}`);
   lines.push(`next_ack: ${report.next.ack}`);
@@ -5044,6 +5049,7 @@ function printQuickstartCheck(check, report, { lang = "en" } = {}) {
       console.log(`下一步 dashboard：${check.next.dashboard}`);
     }
     console.log(`下一步 handoff：${check.next.handoff}`);
+    console.log(`下一步 receive：${check.next.receive}`);
     console.log(`下一步 resume：${check.next.resume}`);
     console.log(`下一步 brief：${check.next.brief}`);
     console.log(`下一步 doctor：${check.next.doctor}`);
@@ -5078,6 +5084,7 @@ function printQuickstartCheck(check, report, { lang = "en" } = {}) {
     console.log(`next_dashboard: ${check.next.dashboard}`);
   }
   console.log(`next_handoff: ${check.next.handoff}`);
+  console.log(`next_receive: ${check.next.receive}`);
   console.log(`next_resume: ${check.next.resume}`);
   console.log(`next_brief: ${check.next.brief}`);
   console.log(`next_doctor: ${check.next.doctor}`);
@@ -5958,6 +5965,7 @@ function packetSummary(packet) {
     safety,
     event: packetTraceEvent(packet, safety, acknowledgement, freshness, readiness),
     next_resume: `acb resume --id ${packet.id}`,
+    next_receive: `acb receive ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_ack: `acb ack ${packet.id} --by <agent>`,
@@ -6003,6 +6011,7 @@ function packetWithNextSteps(packet) {
     readiness,
     safety: packetSafety(packet),
     next_resume: `acb resume --id ${packet.id}`,
+    next_receive: `acb receive ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_ack: `acb ack ${packet.id} --by <agent>`,
@@ -6237,6 +6246,7 @@ function printPacket(packet) {
     for (const warning of safety.warnings) console.log(`- ${warning.title}: ${warning.detail}`);
   }
   if (packet.body) console.log(`body: ${packet.body.length} chars`);
+  console.log(`next_receive: acb receive ${packet.id}`);
   console.log(`next_resume: acb resume --id ${packet.id}`);
   console.log(`next_brief: acb brief --id ${packet.id}`);
   console.log(`next_show_prompt: acb show ${packet.id} --prompt`);

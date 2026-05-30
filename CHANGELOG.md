@@ -17,6 +17,7 @@ Client setup polish.
 - Added `acb freshness` and dashboard freshness badges so older packets can be checked against the current Git snapshot before handoff.
 - Added `acb ready` and dashboard readiness badges/tabs to combine freshness, safety, acknowledgement, and context coverage into one pre-handoff decision.
 - Added `acb receive` as a receiving-side entrypoint that checks readiness before copying a full or brief takeover prompt.
+- Added `next_receive` helpers to packet summaries, workspace summaries, status output, quickstart output, and JSON docs.
 - Added MCP readiness tools `check_latest_handoff_ready` and `check_handoff_ready` for receiving clients that need to stop on stale or unsafe packets before editing.
 
 ### Changed

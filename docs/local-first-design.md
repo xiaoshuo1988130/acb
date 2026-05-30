@@ -186,7 +186,7 @@ It reports the current workspace, packet count, latest packet summary, Git state
 
 `acb latest` also defaults to the current workspace. Use `acb latest --all` only when you explicitly want the newest packet across every workspace.
 
-Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, `read_handoff_brief`, and `read_handoff`) return the stored packet plus derived `acknowledgement`, `freshness`, `readiness`, `next_resume`, `next_brief`, `next_ack`, `next_freshness`, `next_ready`, `next_show_prompt`, `next_mcp_read`, `next_mcp_brief`, `next_mcp_ack`, and `next_mcp_ready` fields. These fields are not written back into the packet store.
+Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, `read_handoff_brief`, and `read_handoff`) return the stored packet plus derived `acknowledgement`, `freshness`, `readiness`, `next_receive`, `next_resume`, `next_brief`, `next_ack`, `next_freshness`, `next_ready`, `next_show_prompt`, `next_mcp_read`, `next_mcp_brief`, `next_mcp_ack`, and `next_mcp_ready` fields. These fields are not written back into the packet store.
 
 `acb doctor` is a read-only local environment check.
 
@@ -226,7 +226,7 @@ acb workspaces
 acb workspaces --json
 ```
 
-This is the first multi-project view. It shows packet counts, the latest packet per workspace, and a copyable `next_resume` command without assuming any third-party client integration.
+This is the first multi-project view. It shows packet counts, the latest packet per workspace, and copyable `next_receive` and `next_resume` commands without assuming any third-party client integration.
 
 `acb search` keeps local history useful once packets accumulate:
 
@@ -238,7 +238,7 @@ acb search "blocked" --all --json
 
 It searches packet ids, source agent names, workspace paths, summaries, statuses, notes, tags, body text, and lightweight Git metadata. It defaults to the current workspace; use `--all` for cross-workspace search.
 
-JSON packet summaries include `next_resume`, `next_show_prompt`, and `next_mcp_read` so scripts and MCP-capable clients can move from discovery to ingestion without reconstructing commands.
+JSON packet summaries include `next_receive`, `next_resume`, `next_show_prompt`, and `next_mcp_read` so scripts and MCP-capable clients can move from discovery to ingestion without reconstructing commands.
 
 `acb timeline` is the first visualization layer.
 

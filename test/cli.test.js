@@ -142,6 +142,7 @@ test("prints version and help", () => {
   assert.match(quickstartCheck.stdout, /next_workflow_verify: acb verify workflow/);
   assert.match(quickstartCheck.stdout, /next_dashboard: acb dashboard --workspace/);
   assert.match(quickstartCheck.stdout, /next_handoff: acb handoff/);
+  assert.match(quickstartCheck.stdout, /next_receive: acb receive --latest/);
   assert.match(quickstartCheck.stdout, /next_resume: acb resume/);
   assert.match(quickstartCheck.stdout, /next_brief: acb brief/);
 
@@ -156,6 +157,7 @@ test("prints version and help", () => {
   assert.match(quickstartChinese.stdout, /下一步 setup：acb setup --workspace/);
   assert.match(quickstartChinese.stdout, /--lang zh-CN/);
   assert.match(quickstartChinese.stdout, /下一步 dashboard：acb dashboard --workspace/);
+  assert.match(quickstartChinese.stdout, /下一步 receive：acb receive --latest/);
 
   const quickstartJson = run(["quickstart", "--check", "--workspace", workspace, "--json"], { env: { ACB_STORE: storePath } });
   assert.equal(quickstartJson.status, 0);
@@ -174,6 +176,7 @@ test("prints version and help", () => {
   assert.match(quickstartReport.next.setup, /--check/);
   assert.match(quickstartReport.next.dashboard, /acb dashboard --workspace/);
   assert.match(quickstartReport.next.workflow_verify, /acb verify workflow/);
+  assert.equal(quickstartReport.next.receive, "acb receive --latest");
   assert.equal(quickstartReport.next.resume, "acb resume");
   assert.equal(quickstartReport.next.brief, "acb brief");
 });
@@ -425,6 +428,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.deepEqual(packet.notes, ["Do not publish yet"]);
   assert.deepEqual(packet.tags, ["mvp"]);
   assert.equal(packet.next_resume, `acb resume --id ${packet.id}`);
+  assert.equal(packet.next_receive, `acb receive ${packet.id}`);
   assert.equal(packet.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(packet.next_ack, `acb ack ${packet.id} --by <agent>`);
   assert.equal(packet.next_mcp_read, "read_handoff");
@@ -441,6 +445,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.match(status.stdout, /ACB Status/);
   assert.match(status.stdout, new RegExp(packet.id));
   assert.match(status.stdout, /next_resume/);
+  assert.match(status.stdout, new RegExp(`acb receive ${packet.id}`));
   assert.match(status.stdout, new RegExp(`acb resume --id ${packet.id}`));
   assert.match(status.stdout, new RegExp(`acb brief --id ${packet.id}`));
 
@@ -449,6 +454,7 @@ test("save, latest, list, and prompt use local store", () => {
   const statusReport = JSON.parse(statusJson.stdout);
   assert.equal(statusReport.latest_packet.id, packet.id);
   assert.equal(statusReport.workspace_packets, 1);
+  assert.equal(statusReport.next.receive, `acb receive ${packet.id}`);
   assert.equal(statusReport.next.resume, `acb resume --id ${packet.id}`);
   assert.equal(statusReport.next.brief, `acb brief --id ${packet.id}`);
   assert.equal(statusReport.next.ack, `acb ack ${packet.id} --by <agent>`);
@@ -469,6 +475,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(workspaces.status, 0);
   assert.match(workspaces.stdout, /ACB Workspaces/);
   assert.match(workspaces.stdout, new RegExp(workspace));
+  assert.match(workspaces.stdout, new RegExp(`next_receive: acb receive ${packet.id}`));
   assert.match(workspaces.stdout, new RegExp(`next_resume: acb resume --id ${packet.id}`));
   assert.match(workspaces.stdout, new RegExp(`next_brief: acb brief --id ${packet.id}`));
 
@@ -478,6 +485,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(workspaceSummary.workspace, realWorkspace(workspace));
   assert.equal(workspaceSummary.packets, 1);
   assert.equal(workspaceSummary.latest_packet_id, packet.id);
+  assert.equal(workspaceSummary.next_receive, `acb receive ${packet.id}`);
   assert.equal(workspaceSummary.next_resume, `acb resume --id ${packet.id}`);
   assert.equal(workspaceSummary.next_brief, `acb brief --id ${packet.id}`);
 
@@ -500,6 +508,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(timelineJson.status, 0);
   const timelineSummary = JSON.parse(timelineJson.stdout)[0];
   assert.equal(timelineSummary.id, packet.id);
+  assert.equal(timelineSummary.next_receive, `acb receive ${packet.id}`);
   assert.equal(timelineSummary.next_resume, `acb resume --id ${packet.id}`);
   assert.equal(timelineSummary.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(timelineSummary.next_show_prompt, `acb show ${packet.id} --prompt`);
@@ -555,6 +564,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(shown.status, 0);
   assert.match(shown.stdout, new RegExp(packet.id));
   assert.match(shown.stdout, /Implemented local handoff/);
+  assert.match(shown.stdout, new RegExp(`next_receive: acb receive ${packet.id}`));
   assert.match(shown.stdout, new RegExp(`next_resume: acb resume --id ${packet.id}`));
   assert.match(shown.stdout, new RegExp(`next_brief: acb brief --id ${packet.id}`));
 
@@ -562,6 +572,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(shownJson.status, 0);
   const shownJsonPacket = JSON.parse(shownJson.stdout);
   assert.equal(shownJsonPacket.id, packet.id);
+  assert.equal(shownJsonPacket.next_receive, `acb receive ${packet.id}`);
   assert.equal(shownJsonPacket.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(shownJsonPacket.next_show_prompt, `acb show ${packet.id} --prompt`);
   assert.equal(shownJsonPacket.acknowledgement.acknowledged, false);

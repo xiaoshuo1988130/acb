@@ -339,7 +339,7 @@ acb store backup --out ./acb-store.backup.json
 - Clipboard availability or fallback behavior.
 - Current workspace and Git detection.
 - Recommended target client and setup command.
-- Next handoff, resume, dashboard, workflow verify, doctor, and MCP commands.
+- Next handoff, receive, resume, dashboard, workflow verify, doctor, and MCP commands.
 - Next brief command for compact takeover prompts.
 
 `acb verify first-run` runs a temporary first-run smoke test covering quickstart readiness, demo packet creation, brief/resume rendering, dashboard state, and setup workflow checks. It does not write to your real ACB store unless you pass `ACB_STORE` yourself.

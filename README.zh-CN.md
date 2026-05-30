@@ -67,7 +67,7 @@ ACB_LANG=zh-CN acb quickstart --check
 npx @xiaoshuo1988/acb quickstart --check
 ```
 
-检查结果会给出推荐目标客户端、适合人看的“推荐下一步”，以及适合脚本读取的 `acb demo`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 命令。
+检查结果会给出推荐目标客户端、适合人看的“推荐下一步”，以及适合脚本读取的 `acb demo`、`acb receive --latest`、`acb setup --check`、`acb verify workflow` 和 `acb dashboard` 命令。
 
 如果还没有真实 handoff 历史，可以先创建一条本地示例上下文包：
 

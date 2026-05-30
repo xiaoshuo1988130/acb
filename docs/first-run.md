@@ -87,10 +87,10 @@ acb handoff \
 In the receiving agent or a terminal, run:
 
 ```bash
-acb resume
+acb receive --latest
 ```
 
-Paste the resulting prompt into the next coding agent.
+`receive` checks readiness first, then copies the takeover prompt when the packet is safe enough to receive. Paste the resulting prompt into the next coding agent.
 
 For a shorter first message:
 
@@ -145,7 +145,7 @@ acb verify first-run
 acb demo
 acb dashboard --workspace .
 acb handoff --from codex --summary "Ready for the next agent" --git
-acb resume
+acb receive --latest
 acb setup --check
 ```
 
