@@ -9,6 +9,8 @@ Client setup polish.
 - Added a guided setup path to `acb setup` with save, safety review, workflow verification, and dashboard handoff steps.
 - Exposed the same setup steps in dashboard target guides so first-run users can follow a compact client-specific checklist.
 - Added copyable handoff, safety, setup-check, and dashboard commands to setup JSON output for scripts and UI consumers.
+- Added a first-viewport dashboard flow strip for Save, Safety, Verify, and Copy.
+- Added a five-minute demo walkthrough for first-run evaluation.
 
 ## 0.13.0
 

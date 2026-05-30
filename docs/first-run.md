@@ -2,6 +2,8 @@
 
 This guide takes you from a fresh install to your first real agent handoff.
 
+For a shorter copy-and-run walkthrough, see [examples/five-minute-demo.md](examples/five-minute-demo.md).
+
 ACB stays local and explicit throughout this flow:
 
 - It writes handoff packets to your local ACB store.
@@ -50,6 +52,7 @@ If the dashboard starts on an empty workspace, click `Create demo packet`. It cr
 
 Use the dashboard to try:
 
+- The top `First handoff flow`: `Save`, `Safety`, `Verify`, and `Copy`.
 - `Copy Brief Prompt`
 - `Copy Full Prompt`
 - `Copy MCP Pull Instruction`

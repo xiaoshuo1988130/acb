@@ -32,6 +32,7 @@ The HTML view is a three-pane local audit workspace:
 - Packet list with search.
 - An empty-state onboarding panel that can create a safe local demo packet, copy a real handoff command, or copy setup verification.
 - A top-level `Next handoff` strip that auto-selects the best detected target client and keeps the recommended copy action in the first viewport.
+- A first-viewport `First handoff flow` strip with copyable `Save`, `Safety`, `Verify`, and `Copy` steps.
 - Packet detail tabs for overview, copyable commands, safety review, body preview, and Git snapshot.
 - Derived packet safety hints for secret-like content, sensitive-looking paths, and large context bodies.
 - A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard.

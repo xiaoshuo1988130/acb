@@ -1289,6 +1289,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Start here/);
     assert.match(html, /"overview", "commands", "safety", "body", "git"/);
     assert.match(html, /Next handoff/);
+    assert.match(html, /First handoff flow/);
     assert.match(html, /Target Client/);
     assert.match(html, /Client setup/);
     assert.match(html, /Recommended path/);
@@ -1306,6 +1307,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(zhHtml, /选择上下文包/);
     assert.match(zhHtml, /目标客户端/);
     assert.match(zhHtml, /客户端接入/);
+    assert.match(zhHtml, /第一次交接流程/);
     assert.match(zhHtml, /运行 ACB 侧检查/);
     assert.match(zhHtml, /复制简短提示词/);
 

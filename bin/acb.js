@@ -1665,6 +1665,14 @@ function dashboardLabels(lang) {
       noTargets: "没有配置目标客户端。",
       noSetupGuide: "选择一个具体目标客户端后，会显示接入命令和验证。",
       clientSetup: "客户端接入",
+      flowTitle: "第一次交接流程",
+      flowBody: "按这 4 步完成一次可审计、可复制的本地 Agent handoff。",
+      stepTitles: {
+        "save-context": "保存上下文",
+        "review-safety": "检查安全",
+        "verify-workflow": "验证流程",
+        handoff: "复制交接",
+      },
       runCheck: "运行 ACB 侧检查",
       recipe: "Recipe",
       mcpConfig: "MCP 配置",
@@ -1759,6 +1767,14 @@ function dashboardLabels(lang) {
     noTargets: "No targets configured.",
     noSetupGuide: "Select a concrete target client to see setup commands and verification.",
     clientSetup: "Client setup",
+    flowTitle: "First handoff flow",
+    flowBody: "Follow these 4 steps for an auditable local agent handoff.",
+    stepTitles: {
+      "save-context": "Save",
+      "review-safety": "Safety",
+      "verify-workflow": "Verify",
+      handoff: "Copy",
+    },
     runCheck: "Run ACB-side Check",
     recipe: "Recipe",
     mcpConfig: "MCP config",
@@ -1902,6 +1918,36 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       min-width: 260px;
     }
     .next-actions .primary { min-height: 42px; font-weight: 700; }
+    .handoff-flow {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .flow-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .flow-steps {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .flow-step {
+      border: 1px solid var(--line);
+      background: var(--soft);
+      border-radius: 8px;
+      padding: 9px;
+      min-width: 0;
+    }
+    .flow-step strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+    .flow-step p { font-size: 12px; margin: 3px 0 8px; }
+    .flow-step .btn { width: 100%; }
     .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .stat, .panel, .empty {
       background: var(--panel);
@@ -2124,6 +2170,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       .grid { grid-template-columns: 300px minmax(0, 1fr); }
       .side { grid-column: 1 / -1; }
       .next-handoff { grid-template-columns: 1fr; }
+      .flow-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .next-actions { min-width: 0; }
     }
     @media (max-width: 760px) {
@@ -2134,6 +2181,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       .command { grid-template-columns: 1fr; }
       .packet-list { max-height: none; }
       .kv { grid-template-columns: 1fr; }
+      .flow-steps { grid-template-columns: 1fr; }
       .takeover-actions { grid-template-columns: 1fr; }
       .takeover-actions .wide { grid-column: auto; }
     }
@@ -2155,6 +2203,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       </div>
     </header>
     <section id="next-handoff"></section>
+    <section id="handoff-flow"></section>
     <section class="stats" aria-label="summary">
       <div class="stat"><strong>${state.shown_packets}</strong><span>${escapeHtml(labels.packetsShown)}</span></div>
       <div class="stat"><strong>${state.total_packets}</strong><span>${escapeHtml(labels.totalPackets)}</span></div>
@@ -2230,6 +2279,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
     function render() {
       renderPackets();
       renderNextHandoff();
+      renderHandoffFlow();
       renderDetail();
       renderTargets();
       renderSetupGuide();
@@ -2304,6 +2354,42 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       if (!target) return labels.target;
       if (target.id === state.recommended_target_id) return labels.recommended;
       return labels[target.confidence] || target.confidence || labels.available;
+    }
+
+    function setupGuideTarget() {
+      const target = selectedTarget();
+      if (target.id !== "auto") return target;
+      return (state.targets || []).find((item) => item.id === state.recommended_target_id) || target;
+    }
+
+    function setupGuideForSelectedTarget() {
+      const target = setupGuideTarget();
+      return state.target_guides ? state.target_guides[target.id] : null;
+    }
+
+    function stepTitle(step) {
+      return labels.stepTitles && labels.stepTitles[step.id] ? labels.stepTitles[step.id] : step.title;
+    }
+
+    function renderHandoffFlow() {
+      const guide = setupGuideForSelectedTarget();
+      const steps = guide && guide.steps ? guide.steps : [];
+      if (!steps.length) {
+        el("handoff-flow").innerHTML = "";
+        return;
+      }
+      el("handoff-flow").innerHTML =
+        '<section class="handoff-flow" aria-label="first handoff flow">' +
+          '<div class="flow-head"><div><div class="kicker">' + escape(labels.flowTitle) + '</div><p>' + escape(labels.flowBody) + '</p></div><span class="badge accent">' + escape(guide.title) + '</span></div>' +
+          '<div class="flow-steps">' + steps.map((step, index) =>
+            '<div class="flow-step">' +
+              '<strong>' + (index + 1) + '. ' + escape(stepTitle(step)) + '</strong>' +
+              '<p>' + escape(step.description || '') + '</p>' +
+              '<button class="btn" data-copy="' + escape(step.command) + '">' + escape(labels.copy) + '</button>' +
+            '</div>'
+          ).join("") + '</div>' +
+        '</section>';
+      wireCopyButtons();
     }
 
     function renderNextHandoff() {
@@ -2405,15 +2491,9 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       }
     }
 
-    function setupGuideTarget() {
-      const target = selectedTarget();
-      if (target.id !== "auto") return target;
-      return (state.targets || []).find((item) => item.id === state.recommended_target_id) || target;
-    }
-
     function renderSetupGuide() {
       const target = setupGuideTarget();
-      const guide = state.target_guides ? state.target_guides[target.id] : null;
+      const guide = setupGuideForSelectedTarget();
       if (!guide) {
         el("setup-guide").innerHTML = '<div class="setup-guide"><h3>' + escape(labels.clientSetup) + '</h3><p>' + escape(labels.noSetupGuide) + '</p></div>';
         return;
@@ -2425,7 +2505,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         [labels.mcpVerify, labels.copyMcpVerify, guide.mcp_verify_command],
         [labels.recipe, labels.copyRecipe, guide.recipe_command],
       ];
-      const steps = (guide.steps || []).map((step, index) => '<div class="setup-step"><div><strong>' + (index + 1) + '. ' + escape(step.title) + '</strong><p>' + escape(step.description || '') + '</p></div>' +
+      const steps = (guide.steps || []).map((step, index) => '<div class="setup-step"><div><strong>' + (index + 1) + '. ' + escape(stepTitle(step)) + '</strong><p>' + escape(step.description || '') + '</p></div>' +
         '<div class="command"><code>' + escape(step.command) + '</code><button class="btn" data-copy="' + escape(step.command) + '">' + escape(labels.copy) + '</button></div></div>').join("");
       const notes = (guide.notes || []).slice(0, 3).map((note) => '<li>' + escape(note) + '</li>').join("");
       el("setup-guide").innerHTML =
