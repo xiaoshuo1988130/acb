@@ -1053,6 +1053,58 @@ test("freshness reports unknown, fresh, and changed handoff state", () => {
   assert.equal(JSON.parse(run(["show", freshPacket.id, "--json"], { env }).stdout).freshness.status, "changed");
 });
 
+test("ready reports handoff readiness across freshness and safety gates", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run(["save", "--workspace", workspace, "--summary", "No git snapshot"], { env });
+  const unknownReady = JSON.parse(run(["ready", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.equal(unknownReady.ready, false);
+  assert.equal(unknownReady.status, "needs_refresh");
+  assert.ok(unknownReady.blockers.some((blocker) => blocker.id === "freshness_unknown"));
+
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "ACB Test"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  spawnSync("git", ["add", "README.md"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["commit", "-m", "initial"], { cwd: workspace, encoding: "utf8" });
+
+  const bodyPath = path.join(dir, "body.md");
+  fs.writeFileSync(bodyPath, "Ready handoff body.\n", "utf8");
+  run(["save", "--workspace", workspace, "--summary", "Ready packet", "--file", bodyPath, "--git"], { env });
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  run(["ack", packet.id, "--by", "codex"], { env });
+
+  const ready = run(["ready", packet.id], { env });
+  assert.equal(ready.status, 0);
+  assert.match(ready.stdout, /ready: yes/);
+  assert.match(ready.stdout, /status: ready/);
+  const readyJson = JSON.parse(run(["ready", packet.id, "--json"], { env }).stdout);
+  assert.equal(readyJson.ready, true);
+  assert.equal(readyJson.status, "ready");
+  assert.equal(readyJson.checks.find((check) => check.id === "freshness").status, "ok");
+  assert.equal(readyJson.packet.readiness.ready, true);
+  assert.match(readyJson.packet.next_ready, /^acb ready pkt_/);
+
+  fs.appendFileSync(path.join(workspace, "README.md"), "changed\n", "utf8");
+  const changed = run(["ready", packet.id], { env });
+  assert.equal(changed.status, 1);
+  assert.match(changed.stdout, /ready: no/);
+  assert.match(changed.stdout, /status: needs_refresh/);
+  const changedJson = JSON.parse(run(["ready", packet.id, "--json"], { env }).stdout);
+  assert.equal(changedJson.ready, false);
+  assert.ok(changedJson.blockers.some((blocker) => blocker.id === "freshness_changed"));
+
+  run(["save", "--workspace", workspace, "--summary", "Token packet", "--note", "api_key: npm_12345678901234567890", "--git"], { env });
+  const unsafePacket = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  const unsafe = JSON.parse(run(["ready", unsafePacket.id, "--json"], { env }).stdout);
+  assert.equal(unsafe.ready, false);
+  assert.ok(unsafe.blockers.some((blocker) => blocker.id === "safety_review"));
+});
+
 test("save can attach an explicit git snapshot", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const workspace = path.join(dir, "repo");
@@ -1376,7 +1428,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Copy MCP Pull Instruction/);
     assert.match(html, /Start here/);
     assert.match(html, /Mark Received/);
-    assert.match(html, /"overview", "commands", "ack", "freshness", "safety", "body", "git"/);
+    assert.match(html, /"overview", "commands", "ack", "readiness", "freshness", "safety", "body", "git"/);
     assert.match(html, /Next handoff/);
     assert.match(html, /First handoff flow/);
     assert.match(html, /Target Client/);
@@ -1385,6 +1437,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Save current context/);
     assert.match(html, /safety warnings/);
     assert.match(html, /changed packets/);
+    assert.match(html, /ready packets/);
     assert.match(html, /Run ACB-side Check/);
     assert.match(html, /OpenCode/);
     assert.match(html, /Codex/);
@@ -1402,6 +1455,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(zhHtml, /运行 ACB 侧检查/);
     assert.match(zhHtml, /复制简短提示词/);
     assert.match(zhHtml, /标记已接收/);
+    assert.match(zhHtml, /交接状态/);
 
     const state = JSON.parse(await httpGet(`${url}api/state`));
     assert.equal(state.version, pkg.version);
@@ -1414,6 +1468,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.equal(state.safety_warning_count, 0);
     assert.equal(state.acknowledged_packet_count, 0);
     assert.equal(state.changed_packet_count, 0);
+    assert.equal(state.ready_packet_count, 0);
     assert.ok(state.targets.some((target) => target.id === "auto"));
     assert.ok(state.targets.some((target) => target.id === "opencode"));
     assert.ok(state.targets.some((target) => target.id === "codex"));
@@ -1431,8 +1486,13 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.equal(state.latest_packet.safety.level, "ok");
     assert.equal(state.latest_packet.acknowledged, false);
     assert.equal(state.latest_packet.freshness.status, "unknown");
+    assert.equal(state.latest_packet.readiness.ready, false);
+    assert.equal(state.latest_packet.readiness.status, "needs_refresh");
     assert.match(state.latest_packet.next_brief, /^acb brief --id pkt_/);
     assert.match(state.latest_packet.next_freshness, /^acb freshness pkt_/);
+    assert.match(state.latest_packet.next_ready, /^acb ready pkt_/);
+    assert.equal(state.latest_packet.ready_checks.length, 4);
+    assert.ok(state.latest_packet.ready_blockers.some((blocker) => blocker.id === "freshness_unknown"));
     assert.doesNotMatch(JSON.stringify(state), /Other workspace packet/);
     assert.doesNotMatch(JSON.stringify(state), new RegExp(otherWorkspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 

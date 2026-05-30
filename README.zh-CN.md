@@ -114,6 +114,14 @@ acb ack --latest --by opencode --note "已读取 packet，并会从这个上下�
 acb freshness --latest
 ```
 
+如果想要一个综合的交接前判断：
+
+```bash
+acb ready --latest
+```
+
+`ready` 会把 freshness、safety、接收确认和上下文正文情况汇总成明确的 `ready: yes/no`，并给出下一步命令。
+
 如果想先给下一个 Agent 一个更短的起步消息：
 
 ```bash
@@ -261,6 +269,7 @@ Dashboard 是一个显式启动的本地控制面板：
 - 查看当前 workspace 的 handoff 历史。
 - 如果当前 workspace 还是空的，可以一键创建本地 demo packet。
 - 搜索和检查 packet 细节。
+- 查看交接状态、freshness、safety 和接收确认。
 - 一键复制 brief、full prompt 或 MCP pull instruction。
 - 自动只读检测 OpenCode、Cline、Roo Code、Claude Desktop、Codex 和 generic MCP 等目标。
 - 为目标客户端展示紧凑 setup checklist 和 ACB-side check。
@@ -277,6 +286,7 @@ acb resume
 acb brief
 acb ack --latest --by <agent>
 acb freshness --latest
+acb ready --latest
 acb dashboard --workspace .
 acb setup --check
 acb verify first-run --lang zh-CN

@@ -55,6 +55,7 @@ Usage:
   acb timeline [--workspace <path>] [--all] [--limit <n>] [--json]
   acb safety [packet-id] [--workspace <path>] [--json]
   acb freshness [packet-id] [--workspace <path>] [--json]
+  acb ready [packet-id] [--workspace <path>] [--json]
   acb view [--workspace <path>] [--all] [--limit <n>] [--out <path>] [--open]
   acb dashboard [--workspace <path>] [--all] [--limit <n>] [--host <host>] [--port <port>] [--lang en|zh-CN] [--open]
   acb export [--workspace <path>] [--all] [--limit <n>] [--format markdown|json] [--out <path>]
@@ -348,6 +349,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "timeline") return timelineCommand(args);
   if (command === "safety") return safetyCommand(args);
   if (command === "freshness" || command === "fresh") return freshnessCommand(args);
+  if (command === "ready" || command === "readiness") return readyCommand(args);
   if (command === "view") return viewCommand(args);
   if (command === "dashboard") return dashboardCommand(args);
   if (command === "export") return exportCommand(args);
@@ -1165,6 +1167,27 @@ function freshnessCommand(args) {
   return 0;
 }
 
+function readyCommand(args) {
+  const id = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
+  const workspace = id
+    ? null
+    : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const packet = findPacket({ id, workspace });
+  if (!packet) {
+    console.error(id ? `No handoff packet found for id: ${id}` : `No handoff packet found for workspace: ${workspace}`);
+    return 1;
+  }
+
+  const report = buildReadyReport(packet);
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+
+  printReadyReport(report);
+  return report.ready ? 0 : 1;
+}
+
 function viewCommand(args) {
   const scope = resolveHistoryScope(args);
   if (!scope.ok) {
@@ -1538,6 +1561,7 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     safety_warning_count: packets.reduce((sum, packet) => sum + packetSafety(packet).warnings.length, 0),
     acknowledged_packet_count: packets.filter((packet) => packetAcknowledgementSummary(packet).acknowledged).length,
     changed_packet_count: packets.filter((packet) => packetFreshnessSummary(packet).status === "changed").length,
+    ready_packet_count: packets.filter((packet) => packetReadinessSummary(packet).ready).length,
     latest_packet: packets[0] ? dashboardPacketSummary(packets[0]) : null,
     packets: packets.map(dashboardPacketSummary),
     workspaces,
@@ -1721,8 +1745,12 @@ function dirIncludes(dirPath, needle) {
 }
 
 function dashboardPacketSummary(packet) {
+  const readiness = evaluatePacketReadiness(packet);
   return {
     ...packetSummary(packet),
+    ready_checks: readiness.checks,
+    ready_blockers: readiness.blockers,
+    ready_warnings: readiness.warnings,
     notes: packet.notes || [],
     acknowledgements: packetAcknowledgements(packet),
     body_preview: packet.body ? truncateText(packet.body, 2600) : "",
@@ -1750,6 +1778,7 @@ function dashboardLabels(lang) {
       safetyWarnings: "安全提示",
       acknowledgedPackets: "已确认交接",
       changedPackets: "已变化上下文",
+      readyPackets: "可交接上下文",
       packets: "上下文包",
       searchPlaceholder: "搜索 summary、status、tags、notes",
       targetClient: "目标客户端",
@@ -1767,6 +1796,30 @@ function dashboardLabels(lang) {
       changed: "已变化",
       unknownFreshness: "未知新鲜度",
       freshness: "新鲜度",
+      ready: "可交接",
+      notReady: "需处理",
+      readiness: "交接状态",
+      checks: "检查项",
+      blockers: "阻塞项",
+      warnings: "提示",
+      noBlockers: "没有阻塞项。",
+      noReadinessWarnings: "没有额外提示。",
+      checkStatus: { ok: "通过", warn: "提示", fail: "未通过" },
+      readyCheckNames: {
+        freshness: "新鲜度",
+        safety: "安全",
+        context: "上下文",
+        acknowledgement: "接收确认",
+      },
+      readyIssueDetails: {
+        freshness_changed: "交接前需要刷新 handoff。",
+        freshness_unknown: "请用 --git 保存或刷新 packet 后再交接。",
+        safety_review: "复制给另一个 Agent 前需要先检查安全提示。",
+        empty_context: "这个 packet 缺少可用上下文，请先补充 handoff 内容。",
+        summary_only: "如果下一个 Agent 需要更多细节，建议刷新并加入正文或 notes。",
+        body_truncated: "如果接收方需要完整正文，建议使用完整 packet 或 MCP 读取。",
+        pending_ack: "接收方读完 packet 后，建议运行 acb ack 记录确认。",
+      },
       markReceived: "标记已接收",
       acknowledging: "确认中...",
       ackRecorded: "已记录接收确认",
@@ -1849,7 +1902,7 @@ function dashboardLabels(lang) {
         branch: "分支",
         head: "HEAD",
       },
-      tabs: { overview: "概览", commands: "命令", ack: "确认", freshness: "新鲜度", safety: "安全", body: "正文", git: "Git" },
+      tabs: { overview: "概览", commands: "命令", ack: "确认", readiness: "交接状态", freshness: "新鲜度", safety: "安全", body: "正文", git: "Git" },
       noBody: "这个上下文包没有正文预览。",
       noGit: "没有记录 Git 快照。",
       noDirtyFiles: "没有记录改动文件。",
@@ -1881,6 +1934,7 @@ function dashboardLabels(lang) {
     safetyWarnings: "safety warnings",
     acknowledgedPackets: "acknowledged",
     changedPackets: "changed packets",
+    readyPackets: "ready packets",
     packets: "Packets",
     searchPlaceholder: "Search summary, status, tags, notes",
     targetClient: "Target Client",
@@ -1898,6 +1952,30 @@ function dashboardLabels(lang) {
     changed: "changed",
     unknownFreshness: "freshness unknown",
     freshness: "freshness",
+    ready: "ready",
+    notReady: "not ready",
+      readiness: "readiness",
+      checks: "checks",
+    blockers: "blockers",
+    warnings: "warnings",
+    noBlockers: "No blockers.",
+    noReadinessWarnings: "No extra warnings.",
+    checkStatus: { ok: "ok", warn: "warn", fail: "fail" },
+    readyCheckNames: {
+      freshness: "freshness",
+      safety: "safety",
+      context: "context",
+      acknowledgement: "acknowledgement",
+    },
+    readyIssueDetails: {
+      freshness_changed: "Refresh the handoff before passing it to another agent.",
+      freshness_unknown: "Save the packet with --git or refresh it before handoff.",
+      safety_review: "Review safety warnings before copying this packet to another agent.",
+      empty_context: "Add useful handoff context before using this packet.",
+      summary_only: "Consider refreshing with a body or notes if the next agent needs more detail.",
+      body_truncated: "Use full packet reads or MCP if the receiver needs the complete body.",
+      pending_ack: "Ask the receiving agent to run acb ack after it reads the packet.",
+    },
     markReceived: "Mark Received",
     acknowledging: "Acknowledging...",
     ackRecorded: "Acknowledgement recorded",
@@ -1980,7 +2058,7 @@ function dashboardLabels(lang) {
       branch: "branch",
       head: "head",
     },
-    tabs: { overview: "overview", commands: "commands", ack: "ack", freshness: "freshness", safety: "safety", body: "body", git: "git" },
+    tabs: { overview: "overview", commands: "commands", ack: "ack", readiness: "readiness", freshness: "freshness", safety: "safety", body: "body", git: "git" },
     noBody: "No body preview captured for this packet.",
     noGit: "No Git snapshot captured.",
     noDirtyFiles: "No dirty files captured.",
@@ -2383,6 +2461,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       <div class="stat"><strong>${state.safety_warning_count}</strong><span>${escapeHtml(labels.safetyWarnings)}</span></div>
       <div class="stat"><strong>${state.acknowledged_packet_count}</strong><span>${escapeHtml(labels.acknowledgedPackets)}</span></div>
       <div class="stat"><strong>${state.changed_packet_count}</strong><span>${escapeHtml(labels.changedPackets)}</span></div>
+      <div class="stat"><strong>${state.ready_packet_count}</strong><span>${escapeHtml(labels.readyPackets)}</span></div>
     </section>
     <section class="grid">
       <aside class="panel">
@@ -2492,10 +2571,11 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
           ? '<span class="badge good">' + escape(labels.acknowledged) + '</span>'
           : '<span class="badge warn">' + escape(labels.unacknowledged) + '</span>';
         const freshness = freshnessBadge(packet);
+        const readiness = readinessBadge(packet);
         return '<button class="packet-row ' + (packet.id === selectedId ? 'active' : '') + '" data-id="' + escape(packet.id) + '">' +
           '<div class="packet-title">' + escape(packetTitle(packet)) + '</div>' +
           '<div class="packet-sub">' + escape(packet.from) + ' · ' + escape(packet.created_at) + '</div>' +
-          '<div class="badge-row">' + dirty + safety + ack + freshness + tags + '</div>' +
+          '<div class="badge-row">' + readiness + dirty + safety + ack + freshness + tags + '</div>' +
         '</button>';
       }).join("");
       for (const row of document.querySelectorAll(".packet-row")) {
@@ -2531,6 +2611,12 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       if (status === "fresh") return '<span class="badge good">' + escape(labels.fresh) + '</span>';
       if (status === "changed") return '<span class="badge warn">' + escape(labels.changed) + '</span>';
       return '<span class="badge">' + escape(labels.unknownFreshness) + '</span>';
+    }
+
+    function readinessBadge(packet) {
+      const readiness = packet.readiness || { ready: false, status: "unknown" };
+      const label = readiness.ready ? labels.ready : labels.notReady;
+      return '<span class="badge ' + (readiness.ready ? 'good' : 'warn') + '">' + escape(label) + '</span>';
     }
 
     function targetStatusLabel(target) {
@@ -2594,6 +2680,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
             '<div class="next-meta">' +
               '<span class="badge accent">' + escape(target.title) + ' · ' + escape(targetStatusLabel(target)) + '</span>' +
               '<span class="badge">' + escape(packet.from || labels.unknown) + '</span>' +
+              readinessBadge(packet) +
               '<span class="badge ' + (packet.git_dirty_files ? 'warn' : 'good') + '">' + escape(dirty) + '</span>' +
               '<span class="badge ' + (packet.acknowledged ? 'good' : 'warn') + '">' + escape(packet.acknowledged ? labels.acknowledged : labels.unacknowledged) + '</span>' +
               freshnessBadge(packet) +
@@ -2625,7 +2712,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         wireCreateDemoButtons();
         return;
       }
-      const tabs = ["overview", "commands", "ack", "freshness", "safety", "body", "git"];
+      const tabs = ["overview", "commands", "ack", "readiness", "freshness", "safety", "body", "git"];
       const tabButtons = tabs.map((tab) => '<button class="tab ' + (tab === activeTab ? 'active' : '') + '" data-tab="' + tab + '">' + escape(labels.tabs[tab] || tab) + '</button>').join("");
       const target = selectedTarget();
       const targetMode = copyModeForTarget(target);
@@ -2717,12 +2804,52 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       wireVerifyButtons();
     }
 
+    function renderCheckList(checks) {
+      if (!checks.length) return '<div class="empty">—</div>';
+      return '<ul>' + checks.map((check) =>
+        '<li><span><strong>' + escape(checkName(check.id)) + '</strong> · ' + escape(checkStatus(check.status)) + '<br>' + escape(checkDetail(check)) + '</span></li>'
+      ).join("") + '</ul>';
+    }
+
+    function renderIssueList(items, emptyLabel) {
+      if (!items.length) return '<div class="empty">' + escape(emptyLabel) + '</div>';
+      return '<ul>' + items.map((item) => '<li><span><strong>' + escape(item.id) + '</strong><br>' + escape(issueDetail(item)) + '</span></li>').join("") + '</ul>';
+    }
+
+    function checkName(id) {
+      return labels.readyCheckNames && labels.readyCheckNames[id] ? labels.readyCheckNames[id] : id;
+    }
+
+    function checkStatus(status) {
+      return labels.checkStatus && labels.checkStatus[status] ? labels.checkStatus[status] : status;
+    }
+
+    function checkDetail(check) {
+      if (labels.lang === "zh-CN") {
+        if (check.id === "freshness" && check.status === "ok") return "当前 Git 快照与 packet 匹配。";
+        if (check.id === "freshness" && check.status === "fail") return "workspace 在 packet 保存后发生了变化，或无法确认新鲜度。";
+        if (check.id === "safety" && check.status === "ok") return "没有明显安全提示。";
+        if (check.id === "safety" && check.status === "fail") return "存在需要检查的安全提示。";
+        if (check.id === "context" && check.status === "ok") return "已记录上下文正文。";
+        if (check.id === "context" && check.status === "warn") return "packet 没有正文，接收方会依赖 summary、notes 和 Git 元数据。";
+        if (check.id === "context" && check.status === "fail") return "packet 缺少可用上下文。";
+        if (check.id === "acknowledgement" && check.status === "ok") return "已有接收确认。";
+        if (check.id === "acknowledgement" && check.status === "warn") return "还没有接收方确认。";
+      }
+      return check.detail;
+    }
+
+    function issueDetail(item) {
+      return labels.readyIssueDetails && labels.readyIssueDetails[item.id] ? labels.readyIssueDetails[item.id] : item.detail;
+    }
+
     function renderTab(packet) {
       if (activeTab === "commands") {
         return '<div class="command-grid">' + [
           ["Brief", packet.next_brief],
           ["Resume", packet.next_resume],
           ["Show prompt", packet.next_show_prompt],
+          ["Ready", packet.next_ready],
           ["MCP full", packet.next_mcp_read],
           ["MCP brief", packet.next_mcp_brief],
         ].map(([label, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">' + escape(labels.copy) + '</button></div>').join("") + '</div>';
@@ -2748,6 +2875,21 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
           '<div>' + escape(labels.fields.reason) + '</div><div>' + escape(fmt(freshness.reason)) + '</div>' +
           '<div>' + escape(labels.fields.checked) + '</div><div>' + escape(fmt(freshness.checked_at)) + '</div>' +
           '</div><div class="command" style="margin-top: 12px;"><code>' + escape(packet.next_freshness) + '</code><button class="btn" data-copy="' + escape(packet.next_freshness) + '">' + escape(labels.copy) + '</button></div>';
+      }
+      if (activeTab === "readiness") {
+        const readiness = packet.readiness || { ready: false, status: "unknown", reason: "unknown" };
+        const checks = packet.ready_checks || [];
+        const blockers = packet.ready_blockers || [];
+        const warnings = packet.ready_warnings || [];
+        const reasonText = blockers.length ? issueDetail(blockers[0]) : warnings.length ? issueDetail(warnings[0]) : readiness.reason;
+        return '<div class="kv">' +
+          '<div>' + escape(labels.fields.status) + '</div><div>' + escape(readiness.status) + '</div>' +
+          '<div>' + escape(labels.fields.reason) + '</div><div>' + escape(fmt(reasonText)) + '</div>' +
+          '<div>' + escape(labels.ready) + '</div><div>' + escape(readiness.ready ? labels.ready : labels.notReady) + '</div>' +
+          '</div><h3>' + escape(labels.checks) + '</h3>' + renderCheckList(checks) +
+          '<h3 style="margin-top: 14px;">' + escape(labels.blockers) + '</h3>' + renderIssueList(blockers, labels.noBlockers) +
+          '<h3 style="margin-top: 14px;">' + escape(labels.warnings) + '</h3>' + renderIssueList(warnings, labels.noReadinessWarnings) +
+          '<div class="command" style="margin-top: 12px;"><code>' + escape(packet.next_ready) + '</code><button class="btn" data-copy="' + escape(packet.next_ready) + '">' + escape(labels.copy) + '</button></div>';
       }
       if (activeTab === "safety") {
         const warnings = packet.safety && packet.safety.warnings ? packet.safety.warnings : [];
@@ -2777,6 +2919,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         '<div>' + escape(labels.fields.acknowledged) + '</div><div>' + escape(packet.acknowledged ? labels.acknowledged : labels.unacknowledged) + '</div>' +
         '<div>' + escape(labels.fields.ackCount) + '</div><div>' + escape(fmt(packet.acknowledgement_count)) + '</div>' +
         '<div>' + escape(labels.fields.freshness) + '</div><div>' + escape(packet.freshness ? packet.freshness.status : "unknown") + '</div>' +
+        '<div>' + escape(labels.readiness) + '</div><div>' + escape(packet.readiness ? packet.readiness.status : "unknown") + '</div>' +
         '<div>' + escape(labels.fields.bodyChars) + '</div><div>' + escape(fmt(packet.body_chars)) + '</div>' +
         '</div><h3>' + escape(labels.safety) + '</h3>' + safetyWarnings + '<h3 style="margin-top: 14px;">' + escape(labels.tags) + '</h3>' + tags + '<h3 style="margin-top: 14px;">' + escape(labels.notes) + '</h3>' + notes;
     }
@@ -3206,6 +3349,7 @@ function renderHtmlView(packets, { workspace = null, limit = DEFAULT_LIMIT } = {
   const dirtyCount = packets.reduce((sum, packet) => sum + (packet.git?.status?.length || 0), 0);
   const bodyChars = packets.reduce((sum, packet) => sum + (packet.body?.length || 0), 0);
   const safetyWarnings = packets.reduce((sum, packet) => sum + packetSafety(packet).warnings.length, 0);
+  const readyCount = packets.filter((packet) => packetReadinessSummary(packet).ready).length;
   const packetCards = packets.length
     ? packets.map(renderHtmlPacketCard).join("\n")
     : `<section class="empty">No handoff packets matched this view.</section>`;
@@ -3321,6 +3465,7 @@ function renderHtmlView(packets, { workspace = null, limit = DEFAULT_LIMIT } = {
       <div class="stat"><strong>${dirtyCount}</strong><span>dirty files captured</span></div>
       <div class="stat"><strong>${bodyChars}</strong><span>context body chars</span></div>
       <div class="stat"><strong>${safetyWarnings}</strong><span>safety warnings</span></div>
+      <div class="stat"><strong>${readyCount}</strong><span>ready packets</span></div>
       <div class="stat"><strong>${limit}</strong><span>limit</span></div>
     </section>
     ${packetCards}
@@ -3337,10 +3482,12 @@ function renderHtmlPacketCard(packet) {
   const safety = packetSafety(packet);
   const acknowledgement = packetAcknowledgementSummary(packet);
   const freshness = packetFreshnessSummary(packet);
+  const readiness = packetReadinessSummary(packet);
   const ackHtml = acknowledgement.acknowledged
     ? `<div class="commands"><span class="pill good">acknowledged by ${escapeHtml(acknowledgement.latest.by)}</span><span class="pill">${escapeHtml(acknowledgement.latest.acknowledged_at)}</span></div>`
     : `<div class="commands"><span class="pill warn">pending acknowledgement</span></div>`;
   const freshnessHtml = `<div class="commands"><span class="pill ${freshness.status === "changed" ? "warn" : freshness.status === "fresh" ? "good" : ""}">freshness ${escapeHtml(freshness.status)}</span></div>`;
+  const readinessHtml = `<div class="commands"><span class="pill ${readiness.ready ? "good" : "warn"}">readiness ${escapeHtml(readiness.status)}</span></div>`;
   const safetyHtml = safety.warnings.length
     ? `<div class="commands">
       <span class="pill warn">${safety.warnings.length} safety warning(s)</span>
@@ -3370,6 +3517,7 @@ function renderHtmlPacketCard(packet) {
       ${tags}
     </div>
     ${notes}
+    ${readinessHtml}
     ${ackHtml}
     ${freshnessHtml}
     ${safetyHtml}
@@ -3379,6 +3527,7 @@ function renderHtmlPacketCard(packet) {
       <span class="pill"><code>${escapeHtml(`acb resume --id ${packet.id}`)}</code></span>
       <span class="pill"><code>${escapeHtml(`acb brief --id ${packet.id}`)}</code></span>
       <span class="pill"><code>${escapeHtml(`acb show ${packet.id} --prompt`)}</code></span>
+      <span class="pill"><code>${escapeHtml(`acb ready ${packet.id}`)}</code></span>
     </div>
   </article>`;
 }
@@ -3399,6 +3548,7 @@ function printTimelinePacket(packet) {
   const acknowledgement = packetAcknowledgementSummary(packet);
   if (acknowledgement.acknowledged) facts.push(`ack:${acknowledgement.count}`);
   facts.push(`freshness:${packetFreshnessSummary(packet).status}`);
+  facts.push(`readiness:${packetReadinessSummary(packet).status}`);
   if (packet.tags?.length) facts.push(`tags:${packet.tags.join(",")}`);
   console.log(`* ${packet.created_at}  ${packet.from}  ${packet.id}`);
   console.log(`  ${summary}`);
@@ -3491,6 +3641,21 @@ function buildFreshnessReport(packet) {
   };
 }
 
+function buildReadyReport(packet) {
+  const readiness = evaluatePacketReadiness(packet);
+  return {
+    ready: readiness.ready,
+    ok: readiness.ready,
+    status: readiness.status,
+    reason: readiness.reason,
+    packet: packetSummary(packet),
+    checks: readiness.checks,
+    blockers: readiness.blockers,
+    warnings: readiness.warnings,
+    next: readiness.next,
+  };
+}
+
 function printSafetyReport(report) {
   console.log("ACB Safety");
   console.log(`packet: ${report.packet.id}`);
@@ -3535,6 +3700,31 @@ function printFreshnessReport(report) {
   console.log(`  ${report.next.refresh_handoff}`);
 }
 
+function printReadyReport(report) {
+  console.log("ACB Ready");
+  console.log(`packet: ${report.packet.id}`);
+  console.log(`workspace: ${report.packet.workspace}`);
+  console.log(`ready: ${report.ready ? "yes" : "no"}`);
+  console.log(`status: ${report.status}`);
+  console.log(`reason: ${report.reason}`);
+  console.log("checks:");
+  for (const check of report.checks) {
+    console.log(`- ${check.id}: ${check.status} (${check.detail})`);
+  }
+  if (report.blockers.length) {
+    console.log("blockers:");
+    for (const blocker of report.blockers) console.log(`- ${blocker.detail}`);
+  }
+  if (report.warnings.length) {
+    console.log("warnings:");
+    for (const warning of report.warnings) console.log(`- ${warning.detail}`);
+  }
+  console.log("next:");
+  for (const [name, command] of Object.entries(report.next)) {
+    console.log(`  ${name}: ${command}`);
+  }
+}
+
 function searchPackets({ query, workspace = null, limit = DEFAULT_LIMIT }) {
   const needle = query.toLowerCase();
   return loadStore().packets
@@ -3554,6 +3744,7 @@ function searchablePacketText(packet) {
     ...(packet.notes || []),
     ...(packet.tags || []),
     packet.body,
+    packetReadinessSummary(packet).status,
     ...packetAcknowledgements(packet).flatMap((ack) => [ack.by, ack.note]),
     packet.git?.branch,
     packet.git?.head,
@@ -5547,6 +5738,7 @@ function packetSummary(packet) {
   const safety = packetSafety(packet);
   const acknowledgement = packetAcknowledgementSummary(packet);
   const freshness = packetFreshnessSummary(packet);
+  const readiness = packetReadinessSummary(packet);
   return {
     id: packet.id,
     created_at: packet.created_at,
@@ -5562,20 +5754,22 @@ function packetSummary(packet) {
     acknowledgement_count: acknowledgement.count,
     latest_acknowledgement: acknowledgement.latest,
     freshness,
+    readiness,
     safety,
-    event: packetTraceEvent(packet, safety, acknowledgement, freshness),
+    event: packetTraceEvent(packet, safety, acknowledgement, freshness, readiness),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_ack: `acb ack ${packet.id} --by <agent>`,
     next_freshness: `acb freshness ${packet.id}`,
+    next_ready: `acb ready ${packet.id}`,
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
     next_mcp_ack: "acknowledge_handoff",
   };
 }
 
-function packetTraceEvent(packet, safety = packetSafety(packet), acknowledgement = packetAcknowledgementSummary(packet), freshness = packetFreshnessSummary(packet)) {
+function packetTraceEvent(packet, safety = packetSafety(packet), acknowledgement = packetAcknowledgementSummary(packet), freshness = packetFreshnessSummary(packet), readiness = packetReadinessSummary(packet)) {
   return {
     event_type: "handoff_packet",
     event_id: `evt_${packet.id}`,
@@ -5588,12 +5782,15 @@ function packetTraceEvent(packet, safety = packetSafety(packet), acknowledgement
     acknowledged: acknowledgement.acknowledged,
     acknowledgement_count: acknowledgement.count,
     freshness_status: freshness.status,
+    readiness_status: readiness.status,
+    ready: readiness.ready,
   };
 }
 
 function packetWithNextSteps(packet) {
   const acknowledgement = packetAcknowledgementSummary(packet);
   const freshness = packetFreshnessSummary(packet);
+  const readiness = packetReadinessSummary(packet);
   return {
     ...packet,
     acknowledgements: packetAcknowledgements(packet),
@@ -5602,12 +5799,14 @@ function packetWithNextSteps(packet) {
     acknowledgement_count: acknowledgement.count,
     latest_acknowledgement: acknowledgement.latest,
     freshness,
+    readiness,
     safety: packetSafety(packet),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_ack: `acb ack ${packet.id} --by <agent>`,
     next_freshness: `acb freshness ${packet.id}`,
+    next_ready: `acb ready ${packet.id}`,
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
     next_mcp_ack: "acknowledge_handoff",
@@ -5840,6 +6039,8 @@ function printPacket(packet) {
   console.log(`next_brief: acb brief --id ${packet.id}`);
   console.log(`next_show_prompt: acb show ${packet.id} --prompt`);
   console.log(`next_ack: acb ack ${packet.id} --by <agent>`);
+  console.log(`next_freshness: acb freshness ${packet.id}`);
+  console.log(`next_ready: acb ready ${packet.id}`);
   console.log("next_mcp_read: read_handoff");
   console.log("next_mcp_brief: read_handoff_brief");
   console.log("next_mcp_ack: acknowledge_handoff");
@@ -5942,6 +6143,99 @@ function packetFreshnessSummary(packet) {
     status: changes.length ? "changed" : "fresh",
     reason: changes.length ? changes.join(",") : "git_snapshot_match",
     checked_at: new Date().toISOString(),
+  };
+}
+
+function packetReadinessSummary(packet) {
+  const readiness = evaluatePacketReadiness(packet);
+  return {
+    ready: readiness.ready,
+    status: readiness.status,
+    reason: readiness.reason,
+    blocker_count: readiness.blockers.length,
+    warning_count: readiness.warnings.length,
+  };
+}
+
+function evaluatePacketReadiness(packet) {
+  const safety = packetSafety(packet);
+  const freshness = packetFreshnessSummary(packet);
+  const acknowledgement = packetAcknowledgementSummary(packet);
+  const bodyChars = packet.body?.length || 0;
+  const hasContext = Boolean(
+    bodyChars
+    || packet.summary
+    || packet.status
+    || packet.notes?.length
+    || packet.git?.status?.length
+  );
+  const blockers = [];
+  const warnings = [];
+  const checks = [];
+
+  const addCheck = (id, status, detail) => checks.push({ id, status, detail });
+  const addBlocker = (id, detail) => blockers.push({ id, detail });
+  const addWarning = (id, detail) => warnings.push({ id, detail });
+
+  if (freshness.status === "fresh") {
+    addCheck("freshness", "ok", "Current Git snapshot matches the packet.");
+  } else if (freshness.status === "changed") {
+    addCheck("freshness", "fail", `Workspace changed since packet save (${freshness.reason}).`);
+    addBlocker("freshness_changed", "Refresh the handoff before passing it to another agent.");
+  } else {
+    addCheck("freshness", "fail", `Freshness is unknown (${freshness.reason}).`);
+    addBlocker("freshness_unknown", "Save the packet with --git or refresh it before handoff.");
+  }
+
+  if (safety.level === "ok") {
+    addCheck("safety", "ok", "No obvious safety warnings.");
+  } else {
+    addCheck("safety", "fail", `${safety.warnings.length} safety warning(s) need review.`);
+    addBlocker("safety_review", "Review safety warnings before copying this packet to another agent.");
+  }
+
+  if (!hasContext) {
+    addCheck("context", "fail", "Packet has no summary, status, notes, body, or Git status.");
+    addBlocker("empty_context", "Add useful handoff context before using this packet.");
+  } else if (!bodyChars) {
+    addCheck("context", "warn", "Packet has no body; receiver will rely on summary, notes, and Git metadata.");
+    addWarning("summary_only", "Consider refreshing with a body or notes if the next agent needs more detail.");
+  } else if (bodyChars > PROMPT_BODY_LIMIT) {
+    addCheck("context", "warn", `Body has ${bodyChars} chars and prompts may truncate it.`);
+    addWarning("body_truncated", "Use full packet reads or MCP if the receiver needs the complete body.");
+  } else {
+    addCheck("context", "ok", `${bodyChars} body chars captured.`);
+  }
+
+  if (acknowledgement.acknowledged) {
+    addCheck("acknowledgement", "ok", `Latest acknowledgement by ${acknowledgement.latest.by}.`);
+  } else {
+    addCheck("acknowledgement", "warn", "No receiving-side acknowledgement yet.");
+    addWarning("pending_ack", "Ask the receiving agent to run acb ack after it reads the packet.");
+  }
+
+  const status = blockers.length
+    ? blockers.some((blocker) => blocker.id.startsWith("freshness")) ? "needs_refresh" : "needs_review"
+    : warnings.length ? "ready_with_notes" : "ready";
+  const reason = blockers[0]?.detail
+    || warnings[0]?.detail
+    || "Packet is ready for handoff.";
+
+  return {
+    ready: blockers.length === 0,
+    status,
+    reason,
+    checks,
+    blockers,
+    warnings,
+    next: {
+      show: `acb show ${packet.id}`,
+      safety: `acb safety ${packet.id}`,
+      freshness: `acb freshness ${packet.id}`,
+      resume: `acb resume --id ${packet.id}`,
+      ack: `acb ack ${packet.id} --by <agent>`,
+      refresh_handoff: formatCommand("acb", ["handoff", "--workspace", packet.workspace, "--summary", "Refresh handoff context", "--git"]),
+    },
   };
 }
 

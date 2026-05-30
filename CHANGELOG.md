@@ -15,6 +15,7 @@ Client setup polish.
 - Added English and Chinese FAQ docs for auto-start, clipboard behavior, client config boundaries, data location, and MCP setup.
 - Added `acb ack`, dashboard `Mark Received`, and MCP `acknowledge_handoff` so receiving agents can explicitly close a handoff loop.
 - Added `acb freshness` and dashboard freshness badges so older packets can be checked against the current Git snapshot before handoff.
+- Added `acb ready` and dashboard readiness badges/tabs to combine freshness, safety, acknowledgement, and context coverage into one pre-handoff decision.
 
 ### Changed
 

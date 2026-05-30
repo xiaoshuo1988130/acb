@@ -64,6 +64,16 @@ acb freshness --latest
 
 ACB compares the packet's saved Git snapshot with the current workspace. It reports `fresh`, `changed`, or `unknown`.
 
+## Is this packet ready to hand off?
+
+Run:
+
+```bash
+acb ready --latest
+```
+
+This is the combined pre-handoff gate. It checks freshness, safety warnings, context-body coverage, and acknowledgement state, then prints `ready: yes` or `ready: no` with the next command to run.
+
 ## Are safety warnings redactions?
 
 No. Safety hints are read-time review aids. ACB does not silently redact, rewrite, or delete packet content.

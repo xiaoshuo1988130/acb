@@ -104,6 +104,14 @@ Before handing off an older packet, check whether the workspace has changed sinc
 acb freshness --latest
 ```
 
+For one combined pre-handoff decision, run:
+
+```bash
+acb ready --latest
+```
+
+`ready` summarizes freshness, safety, acknowledgement, and context-body signals into a clear `ready: yes/no` answer with next commands.
+
 For a shorter first message:
 
 ```bash
@@ -275,6 +283,7 @@ acb resume
 acb brief
 acb ack --latest --by <agent>
 acb freshness --latest
+acb ready --latest
 acb save --from <agent> --summary <text> --file <path> --copy
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git
@@ -343,7 +352,7 @@ acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies plus an explicit `Mark Received` acknowledgement. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a compact setup checklist: save context, review safety, verify the ACB-side workflow, and open the dashboard handoff path. The packet detail also has Safety and acknowledgement tabs so you can see whether a handoff was received before you continue. It does not silently inject prompt text or edit any client configuration.
+It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies plus an explicit `Mark Received` acknowledgement. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a compact setup checklist: save context, review safety, verify the ACB-side workflow, and open the dashboard handoff path. The packet detail also has readiness, Safety, freshness, and acknowledgement tabs so you can see whether a handoff needs refresh or review before you continue. It does not silently inject prompt text or edit any client configuration.
 
 The default host is `127.0.0.1`. Keep it loopback-only unless you trust the network, because the dashboard includes local store metadata, workspace paths, and clipboard-copy controls. A `--workspace` dashboard only shows packets and workspace summaries for that workspace; use `--all` when you intentionally want a global view.
 

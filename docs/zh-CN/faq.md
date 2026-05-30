@@ -64,6 +64,16 @@ acb freshness --latest
 
 ACB 会对比 packet 保存时的 Git 快照和当前 workspace，返回 `fresh`、`changed` 或 `unknown`。
 
+## 怎么确认这个 packet 可以交接了？
+
+运行：
+
+```bash
+acb ready --latest
+```
+
+这是综合的交接前检查。它会检查 freshness、safety warning、上下文正文覆盖情况和接收确认状态，然后输出 `ready: yes` 或 `ready: no`，并给出下一步命令。
+
 ## safety warning 会自动删内容吗？
 
 不会。Safety hints 只是读取时的审阅提示。ACB 不会静默 redact、重写或删除 packet 内容。
