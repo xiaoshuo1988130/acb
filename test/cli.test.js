@@ -111,6 +111,7 @@ test("prints version and help", () => {
   assert.match(help.stdout, /acb dashboard/);
   assert.match(help.stdout, /acb safety/);
   assert.match(help.stdout, /acb brief/);
+  assert.match(help.stdout, /acb receive/);
   assert.match(help.stdout, /acb recipe/);
   assert.match(help.stdout, /acb setup/);
   assert.match(help.stdout, /acb quickstart/);
@@ -1106,6 +1107,62 @@ test("ready reports handoff readiness across freshness and safety gates", () => 
   const unsafe = JSON.parse(run(["ready", unsafePacket.id, "--json"], { env }).stdout);
   assert.equal(unsafe.ready, false);
   assert.ok(unsafe.blockers.some((blocker) => blocker.id === "safety_review"));
+});
+
+test("receive gates receiving-side prompts on handoff readiness", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run(["save", "--workspace", workspace, "--summary", "No git snapshot"], { env });
+  const blockedJsonRun = run(["receive", "--workspace", workspace, "--json"], { env });
+  assert.equal(blockedJsonRun.status, 1);
+  const blockedJson = JSON.parse(blockedJsonRun.stdout);
+  assert.equal(blockedJson.ok, false);
+  assert.equal(blockedJson.received, false);
+  assert.equal(blockedJson.readiness.status, "needs_refresh");
+  assert.equal(blockedJson.prompt, null);
+
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "ACB Test"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  spawnSync("git", ["add", "README.md"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["commit", "-m", "initial"], { cwd: workspace, encoding: "utf8" });
+
+  const bodyPath = path.join(dir, "body.md");
+  fs.writeFileSync(bodyPath, "Ready receive body.\n", "utf8");
+  run(["save", "--workspace", workspace, "--summary", "Ready receive packet", "--file", bodyPath, "--git"], { env });
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+
+  const full = run(["receive", "--workspace", workspace, "--print-prompt"], { env });
+  assert.equal(full.status, 0);
+  assert.match(full.stdout, /You are taking over work/);
+  assert.match(full.stdout, /Ready receive packet/);
+  assert.match(full.stdout, /After you summarize this packet/);
+
+  const brief = run(["receive", packet.id, "--brief", "--print-prompt"], { env });
+  assert.equal(brief.status, 0);
+  assert.match(brief.stdout, /ACB brief/);
+  assert.match(brief.stdout, new RegExp(packet.id));
+
+  const receivedJson = JSON.parse(run(["receive", packet.id, "--json"], { env }).stdout);
+  assert.equal(receivedJson.ok, true);
+  assert.equal(receivedJson.received, true);
+  assert.equal(receivedJson.mode, "full");
+  assert.match(receivedJson.next_ack, new RegExp(`acb ack ${packet.id}`));
+
+  fs.appendFileSync(path.join(workspace, "README.md"), "changed\n", "utf8");
+  const changed = run(["receive", packet.id, "--print-prompt"], { env });
+  assert.equal(changed.status, 1);
+  assert.match(changed.stdout, /ACB Receive/);
+  assert.match(changed.stdout, /received: no/);
+  assert.match(changed.stdout, /status: needs_refresh/);
+
+  const invalid = run(["receive", packet.id, "--latest"], { env });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /Use either a packet id or --latest/);
 });
 
 test("save can attach an explicit git snapshot", () => {

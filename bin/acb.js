@@ -45,6 +45,7 @@ Usage:
   acb latest [--workspace <path>] [--all] [--json]
   acb status [--workspace <path>] [--json]
   acb show <packet-id> [--json | --prompt]
+  acb receive [packet-id|--latest] [--workspace <path>] [--brief] [--no-copy | --print-prompt | --json]
   acb resume [--workspace <path>] [--id <packet-id>] [--no-copy | --print-prompt | --json | --preview] [--out <path>] [--open]
   acb brief [--workspace <path>] [--id <packet-id>] [--no-copy | --print-brief | --json]
   acb prompt [--workspace <path>] [--id <packet-id>] [--no-copy]
@@ -339,6 +340,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "latest") return latestCommand(args);
   if (command === "status") return statusCommand(args);
   if (command === "show") return showCommand(args);
+  if (command === "receive") return receiveCommand(args);
   if (command === "resume") return resumeCommand(args);
   if (command === "brief") return briefCommand(args);
   if (command === "prompt") return promptCommand(args);
@@ -830,6 +832,76 @@ function showCommand(args) {
   return 0;
 }
 
+function receiveCommand(args) {
+  if (receiveOutputModes(args).length > 1) {
+    console.error("Use only one receive output mode: --no-copy, --print-prompt, or --json.");
+    return 2;
+  }
+
+  const scope = resolveReceiveScope(args);
+  if (!scope.ok) {
+    console.error(scope.error);
+    return 2;
+  }
+
+  const packet = findPacket({ workspace: scope.id ? null : scope.workspace, id: scope.id });
+  if (!packet) {
+    console.error(scope.id ? `No handoff packet found for id: ${scope.id}` : "No handoff packet found to receive.");
+    return 1;
+  }
+
+  const readiness = buildReadyReport(packet);
+  const mode = args.includes("--brief") ? "brief" : "full";
+  const prompt = mode === "brief" ? renderBriefPrompt(packet) : renderHandoffPrompt(packet);
+  if (!readiness.ready) {
+    const payload = {
+      ok: false,
+      received: false,
+      mode,
+      packet: packetWithNextSteps(packet),
+      readiness,
+      prompt: null,
+    };
+    if (args.includes("--json")) {
+      process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    } else {
+      printReceiveBlocked(readiness);
+    }
+    return 1;
+  }
+
+  const payload = {
+    ok: true,
+    received: true,
+    mode,
+    packet: packetWithNextSteps(packet),
+    readiness,
+    prompt,
+    next_ack: `acb ack ${packet.id} --by <agent>`,
+  };
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    return 0;
+  }
+  if (args.includes("--no-copy") || args.includes("--print-prompt")) {
+    process.stdout.write(prompt);
+    return 0;
+  }
+
+  const copied = copyToClipboard(prompt);
+  if (copied.ok) {
+    console.log(`[acb] ${mode === "brief" ? "brief" : "receive prompt"} copied to clipboard.`);
+    console.log("[acb] paste it into the receiving agent.");
+    console.log(`[acb] after the receiving agent summarizes the packet, record receipt with: acb ack ${packet.id} --by <agent>`);
+    return 0;
+  }
+
+  console.error(`[acb] clipboard unavailable: ${copied.error}`);
+  console.error("[acb] printing receive prompt instead:\n");
+  process.stdout.write(prompt);
+  return 0;
+}
+
 function resumeCommand(args) {
   const wantsPreview = resumeWantsPreview(args);
   if (resumeOutputModes(args, wantsPreview).length > 1) {
@@ -908,6 +980,22 @@ function briefCommand(args) {
 
 function briefOutputModes(args) {
   return ["--no-copy", "--print-brief", "--json"].filter((flag) => args.includes(flag));
+}
+
+function receiveOutputModes(args) {
+  return ["--no-copy", "--print-prompt", "--json"].filter((flag) => args.includes(flag));
+}
+
+function resolveReceiveScope(args) {
+  const positional = positionalArgs(args, new Set(["--workspace", "--id"]));
+  const positionalId = positional.find(Boolean) || null;
+  const flagId = argValue(args, "--id") || null;
+  const wantsLatest = args.includes("--latest");
+  const id = flagId || positionalId;
+  if (flagId && positionalId) return { ok: false, error: "Use either a packet id or --id, not both." };
+  if (id && wantsLatest) return { ok: false, error: "Use either a packet id or --latest, not both." };
+  const workspace = id ? null : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  return { ok: true, id, workspace };
 }
 
 function resumeWantsPreview(args) {
@@ -3703,6 +3791,23 @@ function printFreshnessReport(report) {
 
 function printReadyReport(report) {
   process.stdout.write(`${formatReadyReport(report)}\n`);
+}
+
+function printReceiveBlocked(report) {
+  console.log("ACB Receive");
+  console.log(`packet: ${report.packet.id}`);
+  console.log(`workspace: ${report.packet.workspace}`);
+  console.log("received: no");
+  console.log(`status: ${report.status}`);
+  console.log(`reason: ${report.reason}`);
+  if (report.blockers.length) {
+    console.log("blockers:");
+    for (const blocker of report.blockers) console.log(`- ${blocker.detail}`);
+  }
+  console.log("next:");
+  console.log(`  show: ${report.next.show}`);
+  console.log(`  refresh_handoff: ${report.next.refresh_handoff}`);
+  console.log(`  inspect_ready: acb ready ${report.packet.id}`);
 }
 
 function formatReadyReport(report) {

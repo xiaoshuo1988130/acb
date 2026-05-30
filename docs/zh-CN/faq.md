@@ -36,6 +36,7 @@ acb setup opencode --workspace . --check
 也可以强制输出到终端：
 
 ```bash
+acb receive --latest --print-prompt
 acb resume --print-prompt
 acb brief --print-brief
 acb show <packet-id> --prompt
@@ -73,6 +74,8 @@ acb ready --latest
 ```
 
 这是综合的交接前检查。它会检查 freshness、safety warning、上下文正文覆盖情况和接收确认状态，然后输出 `ready: yes` 或 `ready: no`，并给出下一步命令。
+
+如果想用接收端的一步式入口，可以运行 `acb receive --latest`。它使用同一套 readiness gate，只有 packet 足够适合接收时才会复制提示词。
 
 ## safety warning 会自动删内容吗？
 

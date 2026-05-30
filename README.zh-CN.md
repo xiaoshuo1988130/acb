@@ -95,10 +95,10 @@ ACB 会保存一个本地上下文包，并把交接提示词复制到剪贴板�
 在下一个 Agent 或终端里运行：
 
 ```bash
-acb resume
+acb receive --latest
 ```
 
-把复制出来的提示词粘贴给下一个编码 Agent。如果系统剪贴板不可用，ACB 会把提示词打印到终端，方便手动复制。
+`receive` 会先检查这个 packet 是否适合交接。通过检查后，它会把接手提示词复制到剪贴板；如果系统剪贴板不可用，ACB 会把提示词打印到终端，方便手动复制。
 
 当接收端 Agent 读完 packet 后，可以显式记录一条本地接收确认：
 
@@ -121,6 +121,15 @@ acb ready --latest
 ```
 
 `ready` 会把 freshness、safety、接收确认和上下文正文情况汇总成明确的 `ready: yes/no`，并给出下一步命令。
+
+如果想把“接收前检查 + 复制接手提示词”合成一步：
+
+```bash
+acb receive --latest
+acb receive --latest --brief
+```
+
+`acb receive` 会在复制前拦住过期或有安全风险的 packet。它不会自动标记接收确认；等接收端 Agent 复述 packet 后，再运行 `acb ack`。
 
 如果想先给下一个 Agent 一个更短的起步消息：
 
@@ -286,6 +295,7 @@ Dashboard 是一个显式启动的本地控制面板：
 acb quickstart --check
 acb demo --lang zh-CN
 acb handoff --from <agent> --summary <text> --git
+acb receive --latest
 acb resume
 acb brief
 acb ack --latest --by <agent>

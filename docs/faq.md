@@ -36,6 +36,7 @@ ACB prints the prompt to the terminal when clipboard access is unavailable.
 You can also force terminal output:
 
 ```bash
+acb receive --latest --print-prompt
 acb resume --print-prompt
 acb brief --print-brief
 acb show <packet-id> --prompt
@@ -73,6 +74,8 @@ acb ready --latest
 ```
 
 This is the combined pre-handoff gate. It checks freshness, safety warnings, context-body coverage, and acknowledgement state, then prints `ready: yes` or `ready: no` with the next command to run.
+
+If you want the receiving-side one-step path, run `acb receive --latest`. It uses the same readiness gate and copies the prompt only when the packet is safe enough to receive.
 
 ## Are safety warnings redactions?
 

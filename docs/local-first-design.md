@@ -79,6 +79,17 @@ acb resume --id pkt_20260527123000_abc123 --preview --open
 
 `acb resume` copies the latest handoff prompt for the current workspace. `--preview` writes the same Markdown review file as `acb preview`, and `--open` opens it. It is a named entrypoint for the receiving side of the handoff; the older `acb prompt` command remains available.
 
+For the guarded receiving-side path, use `receive`:
+
+```bash
+acb receive --latest
+acb receive --workspace /path/to/workspace --brief
+acb receive pkt_20260527123000_abc123 --print-prompt
+acb receive pkt_20260527123000_abc123 --json
+```
+
+`acb receive` combines `ready` with prompt rendering. It refuses packets that fail freshness, safety, or context coverage blockers before copying text. When the packet is ready, it copies the full takeover prompt by default, or a compact brief with `--brief`. It does not mutate the store, start clients, inject prompt text, or mark acknowledgement automatically; the receiving agent should still summarize the packet and then run `acb ack`.
+
 For a shorter receiving-side first message, use `brief`:
 
 ```bash

@@ -85,10 +85,10 @@ ACB saves a local packet and copies a handoff prompt to your clipboard.
 In the next agent or terminal:
 
 ```bash
-acb resume
+acb receive --latest
 ```
 
-Paste the copied prompt into the next coding agent. If clipboard access is unavailable, ACB prints the prompt so you can copy it manually.
+`receive` first checks whether the packet is ready to hand off. If it is ready, it copies the takeover prompt into your clipboard. If clipboard access is unavailable, ACB prints the prompt so you can copy it manually.
 
 After the receiving agent has read the packet, record an explicit local acknowledgement:
 
@@ -111,6 +111,15 @@ acb ready --latest
 ```
 
 `ready` summarizes freshness, safety, acknowledgement, and context-body signals into a clear `ready: yes/no` answer with next commands.
+
+For an explicit receiving-side gate plus prompt copy:
+
+```bash
+acb receive --latest
+acb receive --latest --brief
+```
+
+`acb receive` refuses stale or unsafe packets before copying text. It does not mark acknowledgement automatically; use `acb ack` after the receiving agent summarizes the packet.
 
 For a shorter first message:
 
@@ -283,6 +292,7 @@ acb quickstart
 acb quickstart --check
 acb demo
 acb handoff --from <agent> --summary <text> --status <text> --note <text>
+acb receive --latest
 acb resume
 acb brief
 acb ack --latest --by <agent>
