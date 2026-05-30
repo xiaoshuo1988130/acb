@@ -11,6 +11,7 @@ Client setup polish.
 - Added copyable handoff, safety, setup-check, and dashboard commands to setup JSON output for scripts and UI consumers.
 - Added a first-viewport dashboard flow strip for Save, Safety, Verify, and Copy.
 - Added a five-minute demo walkthrough for first-run evaluation.
+- Added Codex and OpenCode receiving-client handoff walkthroughs with concrete confirmation checklists.
 
 ## 0.13.0
 

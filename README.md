@@ -220,6 +220,8 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 
 - [First run](docs/first-run.md)
 - [Five-minute demo](docs/examples/five-minute-demo.md)
+- [Codex client handoff](docs/examples/codex-client.md)
+- [OpenCode client handoff](docs/examples/opencode-client.md)
 - [Codex to OpenCode handoff](docs/examples/codex-to-opencode.md)
 - [Terminal demo transcript](docs/examples/terminal-demo.md)
 - [SDK and LangChain handoff](docs/examples/sdk-handoff.md)

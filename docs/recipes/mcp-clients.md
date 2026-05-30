@@ -95,6 +95,8 @@ Use ACB in two possible ways:
 acb recipe opencode
 ```
 
+For a complete receiving-side walkthrough and confirmation checklist, see [../examples/opencode-client.md](../examples/opencode-client.md).
+
 Recommended first prompt after connecting MCP:
 
 ```text
@@ -102,6 +104,25 @@ Use acb to read the latest handoff for this workspace, then continue from it.
 ```
 
 If you want a shorter first pass, ask the client to call `read_handoff_brief` first, then pull the full handoff only if the brief is insufficient.
+
+## Codex
+
+Use ACB in two possible ways:
+
+- Copy/paste mode: run `acb handoff` from the current agent and paste the prompt into Codex.
+- Scripted mode: use `acb latest --json` or `acb setup codex --json` when a wrapper should avoid parsing terminal prose.
+
+```bash
+acb recipe codex
+```
+
+For a complete receiving-side walkthrough and confirmation checklist, see [../examples/codex-client.md](../examples/codex-client.md).
+
+Recommended first prompt:
+
+```text
+Continue from this explicit ACB handoff. Summarize the packet id, workspace, safety level, and notes before editing files.
+```
 
 ## Cline And Roo Code
 

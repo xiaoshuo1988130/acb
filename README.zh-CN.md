@@ -104,6 +104,11 @@ acb recipe cline
 acb setup codex --workspace . --check
 ```
 
+更具体的接收端示例见英文文档：
+
+- [Codex client handoff](docs/examples/codex-client.md)
+- [OpenCode client handoff](docs/examples/opencode-client.md)
+
 想用可视化方式检查本地交接历史：
 
 ```bash
