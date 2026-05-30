@@ -83,6 +83,7 @@ Minor releases can add:
 - New readiness metadata such as `readiness`, `next_ready`, `next_mcp_ready`, dashboard ready counts, and non-stored readiness checks.
 - New receiving-side helpers such as `next_receive` and `acb receive --json`.
 - New setup-guide helpers such as `steps`, `handoff_command`, `safety_command`, and `setup_check_command`.
+- New explicit integration helpers such as `acb integrate <client>` and soft readiness statuses such as `warning_dirty_workspace`.
 
 Minor releases should avoid:
 

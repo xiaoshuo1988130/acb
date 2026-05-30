@@ -309,6 +309,7 @@ acb quickstart
 acb quickstart --check
 acb demo
 acb handoff --from <agent> --summary <text> --status <text> --note <text>
+acb handoff --git
 acb receive --latest
 acb resume
 acb brief
@@ -342,6 +343,7 @@ acb delete <packet-id>
 acb clear --workspace .
 acb doctor
 acb config mcp --out ./mcp.json
+acb integrate cline --dry-run
 acb verify mcp --config ./mcp.json
 acb serve
 acb store info

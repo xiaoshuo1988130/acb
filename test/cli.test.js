@@ -1277,6 +1277,31 @@ test("save can attach an explicit git snapshot", () => {
   assert.match(prompt.stdout, /dirty_files: 1/);
 });
 
+test("handoff can auto-generate summary and compact git context", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "ACB Test"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  spawnSync("git", ["add", "README.md"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["commit", "-m", "initial"], { cwd: workspace, encoding: "utf8" });
+  fs.appendFileSync(path.join(workspace, "README.md"), "\nauto handoff detail\n", "utf8");
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  const saved = run(["handoff", "--workspace", workspace, "--git", "--no-copy"], { env });
+  assert.equal(saved.status, 0);
+
+  const packet = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.match(packet.summary, /^\[Auto\] 1 dirty file/);
+  assert.match(packet.body, /## Auto Handoff Context/);
+  assert.match(packet.body, /### Git Status/);
+  assert.match(packet.body, / M README\.md/);
+  assert.match(packet.body, /### Git Diff Stat/);
+  assert.match(packet.body, /README\.md/);
+});
+
 test("save can attach a bounded git diff body", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const workspace = path.join(dir, "repo");
@@ -1907,6 +1932,32 @@ test("config mcp prints a copyable MCP server snippet", () => {
   assert.equal(JSON.parse(fs.readFileSync(outPath, "utf8")).mcpServers["file-acb"].command, "acb");
 });
 
+test("integrate previews and applies MCP client config with backup", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const configPath = path.join(dir, "cline_mcp_settings.json");
+  fs.writeFileSync(configPath, `${JSON.stringify({ mcpServers: { existing: { command: "tool" } } }, null, 2)}\n`);
+
+  const dryRun = run(["integrate", "cline", "--config", configPath, "--dry-run"]);
+  assert.equal(dryRun.status, 0);
+  assert.match(dryRun.stdout, /ACB Integrate: Cline/);
+  assert.match(dryRun.stdout, /MCP server entry/);
+  assert.equal(JSON.parse(fs.readFileSync(configPath, "utf8")).mcpServers.acb, undefined);
+
+  const printed = run(["integrate", "cline", "--config", configPath, "--print"]);
+  assert.equal(printed.status, 0);
+  assert.match(printed.stdout, /Agent instruction patch:/);
+  assert.match(printed.stdout, /check_latest_handoff_ready/);
+
+  const applied = run(["integrate", "cline", "--config", configPath, "--yes"]);
+  assert.equal(applied.status, 0);
+  assert.match(applied.stdout, /integrated ACB MCP server/);
+  const parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  assert.equal(parsed.mcpServers.existing.command, "tool");
+  assert.equal(parsed.mcpServers.acb.command, "acb");
+  assert.deepEqual(parsed.mcpServers.acb.args, ["serve"]);
+  assert.ok(fs.readdirSync(dir).some((entry) => entry.endsWith(".bak")));
+});
+
 test("verify mcp smoke tests a configured stdio server", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const configPath = path.join(dir, "mcp.json");
@@ -2264,6 +2315,29 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.equal(ackMessage.result.structuredContent.packet.id, id);
   assert.equal(ackMessage.result.structuredContent.packet.acknowledgement.count, 1);
   assert.equal(ackMessage.result.structuredContent.acknowledgement.by, "mcp-test");
+});
+
+test("serve returns a soft warning for dirty workspaces without handoff packets", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  const env = { ACB_STORE: storePath };
+
+  const served = run(["serve"], {
+    env,
+    input: rpc("tools/call", { name: "check_latest_handoff_ready", arguments: { workspace } }, 1),
+  });
+  assert.equal(served.status, 0);
+  const [message] = parseJsonLines(served.stdout);
+  assert.equal(message.result.isError, false);
+  assert.equal(message.result.structuredContent.report.ready, true);
+  assert.equal(message.result.structuredContent.report.status, "warning_dirty_workspace");
+  assert.equal(message.result.structuredContent.report.git.dirty_files, 1);
+  assert.match(message.result.content[0].text, /warning_dirty_workspace/);
+  assert.match(message.result.content[0].text, /acb handoff/);
 });
 
 test("serve can save handoff packets over MCP stdio", () => {

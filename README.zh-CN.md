@@ -319,6 +319,7 @@ Dashboard 是一个显式启动的本地控制面板：
 acb quickstart --check
 acb demo --lang zh-CN
 acb handoff --from <agent> --summary <text> --git
+acb handoff --git
 acb save --from <agent> --summary <text> --watch README.md
 acb receive --latest
 acb resume
@@ -332,6 +333,7 @@ acb verify first-run --lang zh-CN
 acb verify workflow --all
 acb doctor
 acb config mcp --out ./mcp.json
+acb integrate cline --dry-run
 acb verify mcp --config ./mcp.json --name acb
 acb store backup --out ./acb-store.backup.json
 ```

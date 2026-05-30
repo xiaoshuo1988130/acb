@@ -153,6 +153,7 @@ Coding-agent handoff often needs one small fact: what files are dirty right now?
 Use `--git` to attach a lightweight snapshot:
 
 ```bash
+acb handoff --git
 acb save --summary "Ready for another agent" --git
 acb save --summary "Review current changes" --diff
 acb diff-preview --out ./handoff-diff.md
@@ -166,6 +167,8 @@ ACB records:
 - `git status --short`
 
 It intentionally does not capture `git diff` by default. Use `--diff` when the next agent needs the tracked staged and unstaged diff relative to `HEAD`. `--diff` is bounded by `--diff-limit` and does not include untracked file contents.
+
+If `--summary` is omitted while saving with `--git`, ACB generates an `[Auto]` summary from the local Git snapshot and adds a compact body with branch, HEAD, `git status --short`, and bounded diff statistics. This keeps the sending side low-friction without forcing the receiving agent to spend extra tool calls just to rediscover the basic workspace shape.
 
 ## Workspace Fingerprint
 
@@ -341,6 +344,8 @@ This keeps both export and ingestion explicit. An upstream agent must call `save
 
 MCP tools still need agent-side instructions to be useful at session start. Copyable client instruction patches live in [agent-instructions.md](agent-instructions.md); they tell receiving agents to check readiness, read the packet, summarize it, and acknowledge it before editing.
 
+If `check_latest_handoff_ready` finds no packet but the workspace is a dirty Git checkout, it returns a soft `warning_dirty_workspace` report instead of a hard error. This is not a handoff substitute; it lets the agent gently remind the user to run `acb handoff --git` while still allowing simple questions to proceed. A saved packet whose freshness signals changed remains a hard `needs_refresh` gate.
+
 Example MCP server config shape:
 
 Generate it:
@@ -351,6 +356,16 @@ acb config mcp --command /absolute/path/to/acb --name local-acb
 acb config mcp --command node --arg /absolute/path/to/bin/acb.js --arg serve --name local-acb
 acb config mcp --out ./mcp.json
 ```
+
+For supported local clients, `acb integrate <client>` is the explicit setup helper:
+
+```bash
+acb integrate cline --dry-run
+acb integrate cline --print
+acb integrate cline --config ./cline_mcp_settings.json --yes
+```
+
+The helper never writes silently. A real write requires `--yes` or an interactive `[y/N]` confirmation, creates a `.bak` backup when the target file already exists, and only updates the `mcpServers.acb` entry. `--print` shows the MCP entry and Agent instruction patch without editing anything.
 
 Example output:
 

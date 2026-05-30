@@ -4,6 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import {
   STORE_VERSION,
@@ -103,6 +104,7 @@ Usage:
   acb doctor [--workspace <path>] [--json]
   acb recipe [target] [--json]
   acb setup [target] [--workspace <path>] [--check] [--keep-artifacts] [--lang en|zh-CN] [--json]
+  acb integrate <client> [--config <path>] [--dry-run | --print | --copy | --yes]
   acb config mcp [--command <path-or-command>] [--name <server-name>] [--arg <value>...] [--out <path>]
   acb verify first-run [--workspace <path>] [--target <target>] [--lang en|zh-CN] [--keep-artifacts] [--json]
   acb verify mcp [--config <path>] [--name <server-name>] [--workspace <path>] [--json]
@@ -203,6 +205,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "doctor") return doctorCommand(args);
   if (command === "recipe" || command === "recipes") return recipeCommand(args);
   if (command === "setup") return setupCommand(args);
+  if (command === "integrate") return integrateCommand(args);
   if (command === "config") return configCommand(args);
   if (command === "verify") return verifyCommand(args);
   if (command === "serve") return serveCommand(args);
@@ -541,14 +544,20 @@ function saveCommand(args) {
     return 2;
   }
 
+  const autoContext = !summary && gitResult.snapshot
+    ? buildAutoGitHandoffContext(workspace, gitResult.snapshot)
+    : null;
+  const packetSummaryText = summary || autoContext?.summary || null;
+  const packetBody = bodyResult.body || autoContext?.body || null;
+
   const packet = createHandoffPacket({
     from,
     workspace,
-    summary: summary || null,
+    summary: packetSummaryText,
     status: status || null,
     notes,
     tags,
-    body: bodyResult.body || null,
+    body: packetBody,
     git: gitResult.snapshot,
     fingerprint: fingerprintResult.fingerprint,
   });
@@ -607,6 +616,35 @@ function createHandoffPacket({ from, workspace, summary = null, status = null, n
     fingerprint,
     acknowledgements: [],
   };
+}
+
+function buildAutoGitHandoffContext(workspace, git) {
+  const dirtyFiles = git.status?.length || 0;
+  const branch = git.branch || "unknown branch";
+  const head = git.head || "unknown HEAD";
+  const summary = `[Auto] ${dirtyFiles} dirty file${dirtyFiles === 1 ? "" : "s"} on ${branch} (HEAD: ${head})`;
+  const sections = [
+    "## Auto Handoff Context",
+    "",
+    "Generated locally because `--summary` was omitted.",
+    "",
+    "### Git Snapshot",
+    "",
+    `- root: ${git.root}`,
+    `- branch: ${branch}`,
+    `- head: ${head}`,
+    `- dirty_files: ${dirtyFiles}`,
+  ];
+  if (git.status?.length) {
+    sections.push("", "### Git Status", "", "```text", ...git.status, "```");
+  }
+  const stat = readGitDiffStat(workspace);
+  if (stat) {
+    sections.push("", "### Git Diff Stat", "", "```text", stat, "```");
+  } else {
+    sections.push("", "### Git Diff Stat", "", "_No tracked diff relative to HEAD. Untracked file contents are not included._");
+  }
+  return { summary, body: `${sections.join("\n")}\n` };
 }
 
 function updateCommand(args) {
@@ -3912,6 +3950,195 @@ function printSetupWorkflowCheck(report, { lang = "en" } = {}) {
   console.log(`  limitation: ${report.limitation}`);
 }
 
+async function integrateCommand(args) {
+  const target = positionalArgs(args, new Set(["--config", "--command", "--name", "--arg"]))[0];
+  if (!target) {
+    console.error("Usage: acb integrate <cline|roo|claude-desktop> [--config <path>] [--dry-run | --print | --copy | --yes]");
+    return 2;
+  }
+  const profile = findIntegrationProfile(target);
+  if (!profile) {
+    console.error(`Unknown integration client: ${target}`);
+    console.error("Available clients: cline, roo, claude-desktop");
+    return 2;
+  }
+
+  const configPath = argValue(args, "--config") || detectIntegrationConfigPath(profile);
+  const command = argValue(args, "--command") || "acb";
+  const name = argValue(args, "--name") || "acb";
+  const commandArgs = argValues(args, "--arg");
+  const server = mcpServerConfig({ name, command, args: commandArgs.length ? commandArgs : ["serve"] });
+  const setupResult = buildSetupGuideForTarget({ target: profile.recipeTarget, workspace: normalizeWorkspace(process.cwd()) });
+  const instructionPatch = setupResult.ok ? setupResult.guide.agent_instruction_patch : "";
+  const plan = buildIntegrationPlan({
+    profile,
+    configPath,
+    server,
+    instructionPatch,
+  });
+
+  if (args.includes("--print")) {
+    printIntegrationPlan(plan, { includePatch: true });
+    return 0;
+  }
+  if (args.includes("--copy")) {
+    const copied = copyToClipboard(instructionPatch);
+    printIntegrationPlan(plan, { includePatch: false });
+    if (copied.ok) {
+      console.log("[acb] copied Agent instruction patch to clipboard.");
+      return 0;
+    }
+    console.error(`[acb] clipboard unavailable: ${copied.error}`);
+    return 1;
+  }
+  if (args.includes("--dry-run")) {
+    printIntegrationPlan(plan, { includePatch: false });
+    return 0;
+  }
+  if (!configPath) {
+    console.error(`[acb] could not detect ${profile.title} config path. Pass --config <path> or use --print.`);
+    return 2;
+  }
+  if (!args.includes("--yes")) {
+    printIntegrationPlan(plan, { includePatch: false });
+    const allowed = await confirmIntegrationApply(profile.title);
+    if (!allowed) {
+      console.log("[acb] integration cancelled.");
+      return 0;
+    }
+  }
+
+  const result = applyMcpServerConfig(configPath, server.mcpServers);
+  if (!result.ok) {
+    console.error(result.error);
+    return 2;
+  }
+  console.log(`[acb] integrated ACB MCP server into ${profile.title}.`);
+  console.log(`[acb] config: ${result.path}`);
+  if (result.backup_path) console.log(`[acb] backup: ${result.backup_path}`);
+  console.log(`[acb] changed: ${result.changed ? "yes" : "no"}`);
+  console.log("[acb] next: paste the Agent instruction patch into the client instructions/rules area.");
+  return 0;
+}
+
+function findIntegrationProfile(target) {
+  const normalized = target.toLowerCase();
+  return integrationProfiles().find((profile) => profile.id === normalized || profile.aliases.includes(normalized)) || null;
+}
+
+function integrationProfiles() {
+  return [
+    {
+      id: "cline",
+      title: "Cline",
+      recipeTarget: "cline",
+      aliases: ["claude-dev"],
+      relativePaths: [
+        "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        ".config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      ],
+    },
+    {
+      id: "roo",
+      title: "Roo Code",
+      recipeTarget: "roo",
+      aliases: ["roo-code", "roocode"],
+      relativePaths: [
+        "Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json",
+        ".config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json",
+      ],
+    },
+    {
+      id: "claude-desktop",
+      title: "Claude Desktop",
+      recipeTarget: "claude-desktop",
+      aliases: ["claude", "claude-code"],
+      relativePaths: [
+        "Library/Application Support/Claude/claude_desktop_config.json",
+        ".config/Claude/claude_desktop_config.json",
+      ],
+    },
+  ];
+}
+
+function detectIntegrationConfigPath(profile) {
+  const candidates = profile.relativePaths.map((relativePath) => path.join(os.homedir(), relativePath));
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0] || null;
+}
+
+function buildIntegrationPlan({ profile, configPath, server, instructionPatch }) {
+  return {
+    client: profile.id,
+    title: profile.title,
+    config_path: configPath,
+    server,
+    instruction_patch: instructionPatch,
+    actions: [
+      "create parent directory if needed",
+      "read existing JSON config or create an empty config",
+      "create a .bak backup when the config file already exists",
+      "append or replace only the mcpServers.acb entry",
+      "leave other client settings untouched",
+    ],
+  };
+}
+
+function printIntegrationPlan(plan, { includePatch = false } = {}) {
+  console.log(`ACB Integrate: ${plan.title}`);
+  console.log(`config: ${plan.config_path || "(not detected)"}`);
+  console.log("actions:");
+  for (const action of plan.actions) console.log(`- ${action}`);
+  console.log("");
+  console.log("MCP server entry:");
+  console.log(JSON.stringify(plan.server, null, 2));
+  if (includePatch) {
+    console.log("");
+    console.log("Agent instruction patch:");
+    console.log(plan.instruction_patch);
+  }
+}
+
+async function confirmIntegrationApply(title) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error("[acb] refusing to write client config without --yes in a non-interactive shell.");
+    return false;
+  }
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await rl.question(`Apply ACB MCP integration to ${title}? [y/N] `);
+    return answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
+function applyMcpServerConfig(configPath, mcpServers) {
+  const resolved = path.resolve(configPath);
+  let parsed = {};
+  let backupPath = null;
+  try {
+    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    if (fs.existsSync(resolved)) {
+      parsed = JSON.parse(fs.readFileSync(resolved, "utf8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { ok: false, error: `[acb] config is not a JSON object: ${resolved}` };
+      }
+      backupPath = `${resolved}.${timestampForFile()}.bak`;
+      fs.copyFileSync(resolved, backupPath);
+    }
+    const before = JSON.stringify(parsed.mcpServers || {});
+    parsed.mcpServers = {
+      ...(parsed.mcpServers || {}),
+      ...mcpServers,
+    };
+    const changed = JSON.stringify(parsed.mcpServers || {}) !== before;
+    fs.writeFileSync(resolved, `${JSON.stringify(parsed, null, 2)}\n`);
+    return { ok: true, path: resolved, backup_path: backupPath, changed };
+  } catch (error) {
+    return { ok: false, error: `[acb] cannot update MCP config ${resolved}: ${error.message}` };
+  }
+}
+
 function configCommand(args) {
   const target = args[0];
   if (target !== "mcp") {
@@ -5332,6 +5559,14 @@ function mcpCheckLatestHandoffReady(args) {
   const workspace = args.workspace ? normalizeWorkspace(args.workspace) : normalizeWorkspace(process.cwd());
   const packet = findPacket({ workspace });
   if (!packet) {
+    const warning = buildMissingHandoffWarningReport(workspace);
+    if (warning) {
+      return {
+        content: [{ type: "text", text: formatMissingHandoffWarningReport(warning) }],
+        structuredContent: { report: warning },
+        isError: false,
+      };
+    }
     return {
       content: [{ type: "text", text: `No handoff packet found for workspace: ${workspace}` }],
       isError: true,
@@ -5365,6 +5600,65 @@ function mcpReadyResult(packet) {
     structuredContent: { report },
     isError: false,
   };
+}
+
+function buildMissingHandoffWarningReport(workspace) {
+  const gitResult = readGitSnapshot(workspace);
+  if (!gitResult.ok || !gitResult.snapshot?.status?.length) return null;
+  const dirtyFiles = gitResult.snapshot.status.length;
+  return {
+    ready: true,
+    ok: true,
+    status: "warning_dirty_workspace",
+    severity: "warning",
+    reason: "Workspace has uncommitted changes but no recent explicit ACB handoff packet.",
+    workspace,
+    packet: null,
+    checks: [
+      {
+        id: "missing_handoff_dirty_workspace",
+        status: "warn",
+        detail: "No explicit ACB handoff was found, but the Git workspace is dirty.",
+      },
+    ],
+    blockers: [],
+    warnings: [
+      {
+        id: "dirty_workspace_without_handoff",
+        detail: "Continue with visible user instructions for simple questions. For implementation handoff, ask the user to run acb handoff --git.",
+      },
+    ],
+    git: {
+      root: gitResult.snapshot.root,
+      branch: gitResult.snapshot.branch || null,
+      head: gitResult.snapshot.head || null,
+      dirty_files: dirtyFiles,
+      status: gitResult.snapshot.status,
+    },
+    next: {
+      handoff: formatCommand("acb", ["handoff", "--workspace", workspace, "--git"]),
+      status: "get_workspace_status",
+      save: "save_handoff",
+    },
+  };
+}
+
+function formatMissingHandoffWarningReport(report) {
+  const lines = [
+    "ACB Ready",
+    `ready: ${report.ready ? "yes" : "no"}`,
+    `status: ${report.status}`,
+    `severity: ${report.severity}`,
+    `reason: ${report.reason}`,
+    `workspace: ${report.workspace}`,
+    `git_dirty_files: ${report.git.dirty_files}`,
+    `next_handoff: ${report.next.handoff}`,
+  ];
+  if (report.git.status.length) {
+    lines.push("git_status:");
+    for (const line of report.git.status.slice(0, 20)) lines.push(`- ${line}`);
+  }
+  return lines.join("\n");
 }
 
 function mcpSaveHandoff(args) {
@@ -5409,14 +5703,20 @@ function mcpSaveHandoff(args) {
     };
   }
 
+  const autoContext = !summary && gitResult.snapshot
+    ? buildAutoGitHandoffContext(workspace, gitResult.snapshot)
+    : null;
+  const packetSummaryText = summary || autoContext?.summary || null;
+  const packetBody = body || autoContext?.body || null;
+
   const packet = createHandoffPacket({
     from: typeof args.from === "string" && args.from.trim() ? args.from : "mcp-client",
     workspace,
-    summary,
+    summary: packetSummaryText,
     status,
     notes,
     tags,
-    body,
+    body: packetBody,
     git: gitResult.snapshot,
     fingerprint: fingerprintResult.fingerprint,
   });
@@ -5813,6 +6113,15 @@ function readGitDiffBody(workspace, limitValue) {
   if (diff.stdout.trim()) sections.push("", "### Diff", "", "```diff", truncateDiff(diff.stdout.trimEnd(), limit), "```");
   if (!stat.stdout.trim() && !diff.stdout.trim()) sections.push("", "_No tracked diff relative to HEAD._");
   return { ok: true, body: `${sections.join("\n")}\n` };
+}
+
+function readGitDiffStat(workspace) {
+  const rootResult = runGit(workspace, ["rev-parse", "--show-toplevel"]);
+  if (rootResult.status !== 0) return "";
+  const root = rootResult.stdout.trim();
+  const stat = runGit(root, ["diff", "--stat", "HEAD", "--"]);
+  if (stat.status !== 0) return "";
+  return stat.stdout.trimEnd();
 }
 
 function truncateDiff(diff, limit) {
