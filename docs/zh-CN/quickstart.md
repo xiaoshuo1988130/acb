@@ -77,6 +77,8 @@ acb setup --check --lang zh-CN
 
 不指定目标时，ACB 会只读检测本地环境，并推荐一个目标客户端。`--check` 会顺手跑 ACB 侧 smoke test，确认 recipe、handoff、brief、MCP 和 dashboard state 都能工作。
 
+`acb setup` 的输出会先给出一条推荐路径：保存当前上下文、检查 safety、验证 ACB 侧 workflow、再打开 dashboard 复制推荐交接文本。`--json` 输出里的 `steps` 数组也是同一条路径，方便脚本或 dashboard 使用。
+
 指定目标也可以：
 
 ```bash
@@ -98,7 +100,7 @@ Dashboard 适合做这些事：
 - 看当前 workspace 最近的 handoff。
 - 搜索 packet。
 - 点击复制 brief、full prompt 或 MCP pull instruction。
-- 查看目标客户端 setup guide。
+- 查看目标客户端 setup checklist。
 - 点击运行 ACB-side check。
 
 Dashboard 默认只监听 `127.0.0.1`。它不会自动启动，不会改第三方客户端配置，也不会隐藏注入 prompt。

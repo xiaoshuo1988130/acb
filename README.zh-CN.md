@@ -101,7 +101,7 @@ acb brief
 ```bash
 acb recipe opencode
 acb recipe cline
-acb setup --check
+acb setup codex --workspace . --check
 ```
 
 想用可视化方式检查本地交接历史：
@@ -201,6 +201,8 @@ acb setup opencode --workspace . --json
 
 不指定目标时，`acb setup` 会使用和 dashboard 相同的只读检测逻辑，选择最合适的本地目标客户端。加上 `--check` 后，它会在展示接入步骤后运行 ACB 侧 workflow smoke test。
 
+`acb setup` 会优先打印一条紧凑的推荐路径：保存当前上下文、检查 safety、验证 ACB 侧 workflow，然后打开 dashboard，把推荐交接文本复制到目标客户端。JSON 输出里也有同样的 `steps` 数组，方便 dashboard 或脚本复用。
+
 ## Workflow 验证
 
 在手动接入客户端之前，可以先验证 ACB 这一侧是否准备好：
@@ -228,7 +230,7 @@ Dashboard 是一个显式启动的本地控制面板：
 - 搜索和检查 packet 细节。
 - 一键复制 brief、full prompt 或 MCP pull instruction。
 - 自动只读检测 OpenCode、Cline、Roo Code、Claude Desktop、Codex 和 generic MCP 等目标。
-- 为目标客户端展示 setup guide 和 ACB-side check。
+- 为目标客户端展示紧凑 setup checklist 和 ACB-side check。
 
 默认监听 `127.0.0.1`。除非你明确知道自己在做什么，否则不要用 `--host 0.0.0.0` 暴露到局域网。
 

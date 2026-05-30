@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0
+
+Client setup polish.
+
+### Added
+
+- Added a guided setup path to `acb setup` with save, safety review, workflow verification, and dashboard handoff steps.
+- Exposed the same setup steps in dashboard target guides so first-run users can follow a compact client-specific checklist.
+- Added copyable handoff, safety, setup-check, and dashboard commands to setup JSON output for scripts and UI consumers.
+
 ## 0.13.0
 
 Packet safety hints.

@@ -1487,6 +1487,28 @@ function buildSetupGuide(recipe, workspace = null) {
   const verifyArgs = workspace
     ? ["verify", "workflow", recipe.id, "--workspace", workspace]
     : ["verify", "workflow", recipe.id];
+  const handoffArgs = [
+    "handoff",
+    "--from",
+    "current-agent",
+    "--summary",
+    `Ready for ${recipe.title} to continue`,
+    "--git",
+  ];
+  if (workspace) handoffArgs.splice(1, 0, "--workspace", workspace);
+  const setupCheckArgs = workspace
+    ? ["setup", recipe.id, "--workspace", workspace, "--check"]
+    : ["setup", recipe.id, "--check"];
+  const dashboardArgs = workspace
+    ? ["dashboard", "--workspace", workspace]
+    : ["dashboard", "--workspace", "."];
+  const handoffCommand = formatCommand("acb", handoffArgs);
+  const safetyCommand = workspace
+    ? formatCommand("acb", ["safety", "--workspace", workspace])
+    : "acb safety";
+  const workflowVerifyCommand = formatCommand("acb", verifyArgs);
+  const dashboardCommand = formatCommand("acb", dashboardArgs);
+  const setupCheckCommand = formatCommand("acb", setupCheckArgs);
   return {
     id: recipe.id,
     title: recipe.title,
@@ -1495,13 +1517,40 @@ function buildSetupGuide(recipe, workspace = null) {
     setup: recipe.setup,
     prompt: recipe.prompt,
     notes: recipe.notes,
+    steps: [
+      {
+        id: "save-context",
+        title: "Save current context",
+        command: handoffCommand,
+        description: "Create an explicit packet from the agent that currently has context.",
+      },
+      {
+        id: "review-safety",
+        title: "Review safety hints",
+        command: safetyCommand,
+        description: "Check for secret-like text, sensitive paths, or large bodies before sharing.",
+      },
+      {
+        id: "verify-workflow",
+        title: "Verify ACB-side workflow",
+        command: workflowVerifyCommand,
+        description: "Smoke test the recipe, prompts, MCP server, and dashboard state without launching the client.",
+      },
+      {
+        id: "handoff",
+        title: `Move context into ${recipe.title}`,
+        command: dashboardCommand,
+        description: "Open the local dashboard, choose the packet, copy the recommended prompt, then paste it into the target client.",
+      },
+    ],
     recipe_command: `acb recipe ${recipe.id}`,
+    handoff_command: handoffCommand,
+    safety_command: safetyCommand,
+    setup_check_command: setupCheckCommand,
     mcp_config_command: "acb config mcp --out ./mcp.json",
     mcp_verify_command: "acb verify mcp --config ./mcp.json --name acb",
-    workflow_verify_command: formatCommand("acb", verifyArgs),
-    dashboard_command: workspace
-      ? formatCommand("acb", ["dashboard", "--workspace", workspace])
-      : "acb dashboard --workspace .",
+    workflow_verify_command: workflowVerifyCommand,
+    dashboard_command: dashboardCommand,
   };
 }
 
@@ -1647,6 +1696,8 @@ function dashboardLabels(lang) {
       safetyReview: "复制给下一个 Agent 前请检查这些提示。",
       moveContextInto: "把这个上下文交给",
       chooseTarget: "在右侧选择目标，然后复制推荐的接管文本。",
+      recommendedPath: "推荐路径",
+      optionalSetup: "可选接入命令",
       copyMcpInstruction: "复制 MCP 拉取指令",
       copyFullPrompt: "复制完整提示词",
       copyBriefPrompt: "复制简短提示词",
@@ -1739,6 +1790,8 @@ function dashboardLabels(lang) {
     safetyReview: "Review these hints before copying context into another agent.",
     moveContextInto: "Move this context into",
     chooseTarget: "Choose a target on the right, then copy the recommended takeover text.",
+    recommendedPath: "Recommended path",
+    optionalSetup: "Optional setup commands",
     copyMcpInstruction: "Copy MCP Pull Instruction",
     copyFullPrompt: "Copy Full Prompt",
     copyBriefPrompt: "Copy Brief Prompt",
@@ -1950,6 +2003,16 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       gap: 8px;
       margin: 10px 0;
     }
+    .setup-steps { display: grid; gap: 8px; margin: 8px 0 12px; }
+    .setup-step {
+      border: 1px solid var(--line);
+      background: #fbfcfd;
+      border-radius: 8px;
+      padding: 8px;
+      display: grid;
+      gap: 7px;
+    }
+    .setup-step p { margin-top: 2px; font-size: 12px; }
     .setup-note-list { margin-top: 8px; }
     .setup-note-list li { display: block; font-size: 12px; color: var(--muted); padding: 6px 0; }
     .verify-result {
@@ -2358,20 +2421,24 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       const packet = selectedPacket();
       const verifyWorkspace = packet?.workspace || state.workspace || "";
       const commands = [
-        [labels.recipe, labels.copyRecipe, guide.recipe_command],
         [labels.mcpConfig, labels.copyMcpConfig, guide.mcp_config_command],
         [labels.mcpVerify, labels.copyMcpVerify, guide.mcp_verify_command],
-        [labels.workflowCheck, labels.copyWorkflowCheck, guide.workflow_verify_command],
+        [labels.recipe, labels.copyRecipe, guide.recipe_command],
       ];
+      const steps = (guide.steps || []).map((step, index) => '<div class="setup-step"><div><strong>' + (index + 1) + '. ' + escape(step.title) + '</strong><p>' + escape(step.description || '') + '</p></div>' +
+        '<div class="command"><code>' + escape(step.command) + '</code><button class="btn" data-copy="' + escape(step.command) + '">' + escape(labels.copy) + '</button></div></div>').join("");
       const notes = (guide.notes || []).slice(0, 3).map((note) => '<li>' + escape(note) + '</li>').join("");
       el("setup-guide").innerHTML =
         '<section class="setup-guide" aria-label="client setup guide">' +
           '<div class="kicker">' + escape(labels.clientSetup) + '</div>' +
           '<h3>' + escape(guide.title) + '</h3>' +
           '<p>' + escape(guide.mode) + '</p>' +
+          '<div class="kicker" style="margin-top: 10px;">' + escape(labels.recommendedPath) + '</div>' +
+          '<div class="setup-steps">' + steps + '</div>' +
           '<div class="setup-actions">' +
             '<button class="btn primary" data-verify-workflow="' + escape(target.id) + '" data-workspace="' + escape(verifyWorkspace) + '">' + escape(labels.runCheck) + '</button>' +
             '<div class="verify-result hidden" id="verify-result"></div>' +
+            '<div class="kicker">' + escape(labels.optionalSetup) + '</div>' +
             commands.map(([label, copyLabel, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">' + escape(copyLabel || (labels.copy + ' ' + label)) + '</button></div>').join("") +
             '<div class="command"><code>' + escape(guide.prompt) + '</code><button class="btn" data-copy="' + escape(guide.prompt) + '">' + escape(labels.copyPrompt) + '</button></div>' +
           '</div>' +
@@ -3333,12 +3400,20 @@ function printSetupGuide(guide, workspace, { lang = "en" } = {}) {
     }
     console.log(`模式：${guide.mode}`);
     console.log("");
-    console.log("可复制命令：");
-    console.log(`  ${guide.recipe_command}`);
+    console.log("推荐路径：");
+    guide.steps.forEach((step, index) => {
+      const command = step.id === "handoff"
+        ? formatCommand("acb", ["dashboard", "--workspace", workspace, "--lang", "zh-CN"])
+        : step.command;
+      console.log(`${index + 1}. ${setupStepTitle(step, lang)}`);
+      console.log(`   ${command}`);
+    });
+    console.log("");
+    console.log("可选接入命令：");
+    console.log(`  ${guide.setup_check_command}`);
     console.log(`  ${guide.mcp_config_command}`);
     console.log(`  ${guide.mcp_verify_command}`);
-    console.log(`  ${guide.workflow_verify_command}`);
-    console.log(`  ${formatCommand("acb", ["dashboard", "--workspace", workspace, "--lang", "zh-CN"])}`);
+    console.log(`  ${guide.recipe_command}`);
     console.log("");
     console.log("给客户端的提示词：");
     console.log(guide.prompt);
@@ -3359,18 +3434,34 @@ function printSetupGuide(guide, workspace, { lang = "en" } = {}) {
   }
   console.log(`mode: ${guide.mode}`);
   console.log("");
-  console.log("Copy commands:");
-  console.log(`  ${guide.recipe_command}`);
+  console.log("Recommended path:");
+  guide.steps.forEach((step, index) => {
+    console.log(`${index + 1}. ${step.title}`);
+    console.log(`   ${step.command}`);
+  });
+  console.log("");
+  console.log("Optional setup commands:");
+  console.log(`  ${guide.setup_check_command}`);
   console.log(`  ${guide.mcp_config_command}`);
   console.log(`  ${guide.mcp_verify_command}`);
-  console.log(`  ${guide.workflow_verify_command}`);
-  console.log(`  ${guide.dashboard_command}`);
+  console.log(`  ${guide.recipe_command}`);
   console.log("");
   console.log("Client prompt:");
   console.log(guide.prompt);
   console.log("");
   console.log("Boundaries:");
   for (const note of guide.notes) console.log(`- ${note}`);
+}
+
+function setupStepTitle(step, lang = "en") {
+  if (!isChinese(lang)) return step.title;
+  const titles = {
+    "save-context": "保存当前上下文",
+    "review-safety": "检查安全提示",
+    "verify-workflow": "验证 ACB 侧流程",
+    handoff: "交接给目标客户端",
+  };
+  return titles[step.id] || step.title;
 }
 
 function printSetupWorkflowCheck(report, { lang = "en" } = {}) {

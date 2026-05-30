@@ -36,7 +36,8 @@ The HTML view is a three-pane local audit workspace:
 - Derived packet safety hints for secret-like content, sensitive-looking paths, and large context bodies.
 - A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard.
 - Detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP clients.
-- A client setup guide with copyable recipe, MCP config, MCP verify, workflow verify, and first-prompt text for the selected target.
+- A client setup guide with a compact checklist for saving context, reviewing safety, verifying the ACB-side workflow, and opening the handoff dashboard path.
+- Copyable recipe, MCP config, MCP verify, setup-check, and first-prompt text for the selected target.
 - Workspace metadata and raw `/api/state` inspection.
 
 ## Boundaries
@@ -83,3 +84,5 @@ acb setup --check
 acb setup codex
 acb setup opencode --workspace . --json
 ```
+
+The setup guide's JSON includes a `steps` array. UI and script consumers can render that as a first-run checklist without parsing human-readable terminal text.

@@ -91,6 +91,7 @@ Need a client-specific path:
 ```bash
 acb recipe opencode
 acb recipe cline
+acb setup codex --workspace . --check
 ```
 
 Want to inspect the local handoff state visually:
@@ -308,7 +309,7 @@ acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a client setup guide with copyable recipe/config/verify commands and an ACB-side workflow check button. The packet detail also has a Safety tab for derived warnings before you copy context into another agent. It does not silently inject prompt text or edit any client configuration.
+It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a compact setup checklist: save context, review safety, verify the ACB-side workflow, and open the dashboard handoff path. The packet detail also has a Safety tab for derived warnings before you copy context into another agent. It does not silently inject prompt text or edit any client configuration.
 
 The default host is `127.0.0.1`. Keep it loopback-only unless you trust the network, because the dashboard includes local store metadata, workspace paths, and clipboard-copy controls. A `--workspace` dashboard only shows packets and workspace summaries for that workspace; use `--all` when you intentionally want a global view.
 

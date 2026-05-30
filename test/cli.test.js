@@ -250,7 +250,12 @@ test("setup renders a client setup guide", () => {
   assert.equal(setup.status, 0);
   assert.match(setup.stdout, /ACB Setup: Codex/);
   assert.match(setup.stdout, new RegExp(realWorkspace(workspace).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(setup.stdout, /Recommended path:/);
+  assert.match(setup.stdout, /Save current context/);
+  assert.match(setup.stdout, /Review safety hints/);
   assert.match(setup.stdout, /acb recipe codex/);
+  assert.match(setup.stdout, /acb safety --workspace/);
+  assert.match(setup.stdout, /acb setup codex --workspace .* --check/);
   assert.match(setup.stdout, /acb verify workflow codex --workspace/);
   assert.match(setup.stdout, /acb dashboard --workspace/);
   assert.match(setup.stdout, /Do not ask ACB to commit/);
@@ -260,6 +265,11 @@ test("setup renders a client setup guide", () => {
   const guide = JSON.parse(setupJson.stdout);
   assert.equal(guide.id, "opencode");
   assert.equal(guide.title, "OpenCode");
+  assert.equal(guide.steps.length, 4);
+  assert.equal(guide.steps[0].id, "save-context");
+  assert.match(guide.handoff_command, /acb handoff --workspace/);
+  assert.match(guide.safety_command, /acb safety --workspace/);
+  assert.match(guide.setup_check_command, /acb setup opencode --workspace/);
   assert.match(guide.workflow_verify_command, /acb verify workflow opencode --workspace/);
   assert.match(guide.dashboard_command, /acb dashboard --workspace/);
   assert.ok(guide.notes.some((note) => note.includes("OpenCode")));
@@ -287,7 +297,9 @@ test("setup renders a client setup guide", () => {
   const checkedChinese = run(["setup", "--lang", "zh-CN", "codex", "--workspace", workspace, "--check"]);
   assert.equal(checkedChinese.status, 0);
   assert.match(checkedChinese.stdout, /ACB 接入指南：Codex/);
-  assert.match(checkedChinese.stdout, /可复制命令：/);
+  assert.match(checkedChinese.stdout, /推荐路径：/);
+  assert.match(checkedChinese.stdout, /检查安全提示/);
+  assert.match(checkedChinese.stdout, /可选接入命令：/);
   assert.match(checkedChinese.stdout, /acb dashboard --workspace .* --lang zh-CN/);
   assert.match(checkedChinese.stdout, /ACB 侧检查：/);
   assert.match(checkedChinese.stdout, /通过：是/);
@@ -1279,6 +1291,8 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Next handoff/);
     assert.match(html, /Target Client/);
     assert.match(html, /Client setup/);
+    assert.match(html, /Recommended path/);
+    assert.match(html, /Save current context/);
     assert.match(html, /safety warnings/);
     assert.match(html, /Run ACB-side Check/);
     assert.match(html, /OpenCode/);
@@ -1310,6 +1324,10 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.ok(state.recommended_target_id);
     assert.ok(state.targets.some((target) => target.id === state.recommended_target_id));
     assert.ok(state.target_guides.codex);
+    assert.equal(state.target_guides.codex.steps.length, 4);
+    assert.equal(state.target_guides.codex.steps[1].id, "review-safety");
+    assert.match(state.target_guides.codex.safety_command, /acb safety --workspace/);
+    assert.match(state.target_guides.codex.setup_check_command, /acb setup codex --workspace/);
     assert.match(state.target_guides.codex.recipe_command, /acb recipe codex/);
     assert.match(state.target_guides.codex.workflow_verify_command, /acb verify workflow codex/);
     assert.deepEqual(state.workspaces.map((item) => item.workspace), [realWorkspace(workspace)]);

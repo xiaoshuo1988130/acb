@@ -1,6 +1,6 @@
 {
   "name": "@xiaoshuo1988/acb",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "AgentContextBus local-first context handoff CLI. Install with @xiaoshuo1988/acb.",
   "type": "module",
   "bin": {

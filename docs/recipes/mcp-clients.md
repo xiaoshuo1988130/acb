@@ -31,13 +31,22 @@ acb setup codex --workspace . --json
 
 Without a target, `acb setup` uses read-only local detection and selects the best available target. This document explains the same boundary in prose.
 
+`acb setup` now prints the shortest recommended path first:
+
+1. Save current context with `acb handoff`.
+2. Review derived safety hints with `acb safety`.
+3. Verify the ACB-side client workflow.
+4. Open the dashboard and copy the recommended handoff text into the selected client.
+
+The JSON form exposes the same checklist as `steps`, plus copyable command fields such as `handoff_command`, `safety_command`, `setup_check_command`, and `dashboard_command`.
+
 The dashboard shows the same client setup information next to the detected target list:
 
 ```bash
 acb dashboard --workspace .
 ```
 
-Use the dashboard when you want copy buttons for recipe/config/verify commands or a click-driven ACB-side workflow check.
+Use the dashboard when you want copy buttons for the setup checklist, recipe/config/verify commands, or a click-driven ACB-side workflow check.
 
 Before a release or larger recipe change, run the whole ACB-side matrix:
 
