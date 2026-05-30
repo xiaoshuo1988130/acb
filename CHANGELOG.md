@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.15.1
+
+Terminal capture and missed handoff recovery.
+
 ### Added
 
 - Added `acb demo freshness` to demonstrate the needs-refresh gate with a temporary Git workspace and a real post-handoff edit.
