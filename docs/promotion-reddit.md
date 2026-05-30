@@ -104,6 +104,23 @@ Looking for feedback from people who use multiple coding agents.
 
 24 小时内尽量回复每一条真实评论。
 
+如果 AutoModerator 提示因为账号 karma 进入人工审核，不要重复发帖，也不要换标题重发。先等一段时间；如果想主动处理，可以点提示里的 `contact the moderators of this subreddit`，给版主发下面这段：
+
+```text
+Hi mods,
+
+My post/comment was removed for manual review due to account karma.
+
+I understand the anti-spam filter. I’m the maintainer of the open-source project I shared, AgentContextBus, and I posted it in the self-promotion thread to ask for feedback from developers who use AI coding tools.
+
+Repo:
+https://github.com/xiaoshuo1988130/acb
+
+If the post does not fit the thread rules, no worries. If it is acceptable, could you please approve it when you have time?
+
+Thanks.
+```
+
 如果有人问 ACB 是否会自动注入 prompt，可以回：
 
 ```text
