@@ -136,6 +136,16 @@ acb verify workflow --all
 
 This checks the ACB-side recipe, handoff packet, brief, full resume prompt, MCP server, and dashboard state for every supported target.
 
+## 7. See The Freshness Gate
+
+To see how ACB stops stale handoffs, run:
+
+```bash
+acb demo freshness
+```
+
+This creates a temporary Git workspace, saves a handoff snapshot, edits the workspace after the handoff, then shows `readiness: needs_refresh`. It is the shortest demo of why a receiving agent should call `check_latest_handoff_ready` before editing.
+
 ## Recommended First Path
 
 ```bash

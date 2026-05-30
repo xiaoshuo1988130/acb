@@ -219,6 +219,8 @@ For safer receiving agents, ask the client to check readiness after reading and 
 
 For copyable client/system prompt patches that make receiving agents check ACB before editing, see [Agent instructions](docs/agent-instructions.md).
 
+`acb setup <target>` also prints a copyable Agent instruction patch. Paste that patch into the target client's custom instructions, project rules, or system-prompt area after you configure MCP.
+
 The MCP server exposes:
 
 - `get_workspace_status`
@@ -261,6 +263,7 @@ acb setup opencode --workspace . --json
 
 Without a target, `acb setup` uses the same read-only detection as the dashboard and picks the best local target. The dashboard surfaces the same setup guide next to the detected target list.
 Add `--check` to run the same ACB-side workflow smoke test inline before you copy setup commands into a client.
+The setup guide also prints an Agent instruction patch so the receiving agent knows to call `check_latest_handoff_ready`, read the packet, summarize it, and acknowledge it before editing.
 
 ## Workflow Verification
 
@@ -279,6 +282,7 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 
 - [First run](docs/first-run.md)
 - [Five-minute demo](docs/examples/five-minute-demo.md)
+- [Freshness gate demo](docs/examples/freshness-gate-demo.md)
 - [Codex client handoff](docs/examples/codex-client.md)
 - [OpenCode client handoff](docs/examples/opencode-client.md)
 - [Codex to OpenCode handoff](docs/examples/codex-to-opencode.md)

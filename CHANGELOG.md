@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added `acb demo freshness` to demonstrate the needs-refresh gate with a temporary Git workspace and a real post-handoff edit.
+- Added setup output fields for a copyable Agent instruction patch so MCP-capable receiving clients can be configured without hunting through docs.
+
+### Changed
+
+- Extracted Git snapshot helpers and packet state/readiness/safety/freshness logic from `bin/acb.js` into `lib/git.js` and `lib/packet-state.js`.
+
 ## 0.15.0
 
 Primary npm scope migration and freshness fingerprints.

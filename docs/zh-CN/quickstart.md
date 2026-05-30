@@ -130,6 +130,16 @@ acb verify workflow --all
 
 它只验证 ACB 自己这一侧，不启动也不修改这些客户端。
 
+## 8. 体验 freshness gate
+
+如果想看 ACB 如何拦住过期 handoff：
+
+```bash
+acb demo freshness --lang zh-CN
+```
+
+它会创建临时 Git workspace，保存 handoff snapshot，然后模拟 handoff 后的人类改动。结果应该显示 `readiness: needs_refresh`。这就是接收端 Agent 为什么应该先调用 `check_latest_handoff_ready`。
+
 ## 推荐首跑顺序
 
 ```bash

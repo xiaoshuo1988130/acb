@@ -210,6 +210,27 @@ test("demo creates first-run onboarding packets", () => {
   assert.match(zhReport.next.dashboard, /--lang zh-CN/);
 });
 
+test("demo freshness shows the needs-refresh gate", () => {
+  const json = run(["demo", "freshness", "--json"]);
+  assert.equal(json.status, 0);
+  const report = JSON.parse(json.stdout);
+  assert.equal(report.ok, true);
+  assert.equal(report.freshness.status, "changed");
+  assert.equal(report.readiness.ready, false);
+  assert.equal(report.readiness.status, "needs_refresh");
+  assert.ok(report.readiness.blockers.some((blocker) => blocker.id === "freshness_changed"));
+  assert.match(report.next.mcp_ready_tool, /check_latest_handoff_ready/);
+  assert.ok(fs.existsSync(path.join(report.workspace, "README.md")));
+  fs.rmSync(report.workspace, { recursive: true, force: true });
+
+  const zh = run(["demo", "freshness", "--lang", "zh-CN"]);
+  assert.equal(zh.status, 0);
+  assert.match(zh.stdout, /ACB freshness gate demo/);
+  assert.match(zh.stdout, /接收端 Agent 应该先调用/);
+  const workspaceMatch = zh.stdout.match(/临时工作区：(.+)/);
+  if (workspaceMatch) fs.rmSync(workspaceMatch[1].trim(), { recursive: true, force: true });
+});
+
 test("recipe lists and renders client handoff paths", () => {
   const list = run(["recipe"]);
   assert.equal(list.status, 0);
@@ -265,6 +286,9 @@ test("setup renders a client setup guide", () => {
   assert.match(setup.stdout, /acb setup codex --workspace .* --check/);
   assert.match(setup.stdout, /acb verify workflow codex --workspace/);
   assert.match(setup.stdout, /acb dashboard --workspace/);
+  assert.match(setup.stdout, /Agent instruction patch:/);
+  assert.match(setup.stdout, /check_latest_handoff_ready/);
+  assert.match(setup.stdout, /acknowledge_handoff/);
   assert.match(setup.stdout, /Do not ask ACB to commit/);
 
   const setupJson = run(["setup", "--workspace", workspace, "opencode", "--json"]);
@@ -279,6 +303,8 @@ test("setup renders a client setup guide", () => {
   assert.match(guide.setup_check_command, /acb setup opencode --workspace/);
   assert.match(guide.workflow_verify_command, /acb verify workflow opencode --workspace/);
   assert.match(guide.dashboard_command, /acb dashboard --workspace/);
+  assert.equal(guide.agent_instructions_doc, "docs/agent-instructions.md");
+  assert.match(guide.agent_instruction_patch, /check_latest_handoff_ready/);
   assert.ok(guide.notes.some((note) => note.includes("OpenCode")));
 
   const autoSetup = run(["setup", "--workspace", workspace, "--json"]);
@@ -307,6 +333,7 @@ test("setup renders a client setup guide", () => {
   assert.match(checkedChinese.stdout, /推荐路径：/);
   assert.match(checkedChinese.stdout, /检查安全提示/);
   assert.match(checkedChinese.stdout, /可选接入命令：/);
+  assert.match(checkedChinese.stdout, /给客户端的长期指令补丁：/);
   assert.match(checkedChinese.stdout, /acb dashboard --workspace .* --lang zh-CN/);
   assert.match(checkedChinese.stdout, /ACB 侧检查：/);
   assert.match(checkedChinese.stdout, /通过：是/);

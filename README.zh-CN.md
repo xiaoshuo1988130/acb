@@ -224,6 +224,8 @@ Use acb to read the latest handoff for this workspace, then continue from it.
 
 如果希望接收端 Agent 在新 session 里主动先查 ACB，可以复制 [Agent 指令补丁](docs/zh-CN/agent-instructions.md)。
 
+`acb setup <target>` 也会直接打印一段可复制的长期指令补丁。把它粘贴到目标客户端的 custom instructions、project rules 或 system prompt 区域，接收端 Agent 就知道要先调用 `check_latest_handoff_ready`、读取 packet、复述确认并调用 `acknowledge_handoff`。
+
 MCP server 暴露这些工具：
 
 - `get_workspace_status`
@@ -267,6 +269,8 @@ acb setup opencode --workspace . --json
 
 `acb setup` 会优先打印一条紧凑的推荐路径：保存当前上下文、检查 safety、验证 ACB 侧 workflow，然后打开 dashboard，把推荐交接文本复制到目标客户端。JSON 输出里也有同样的 `steps` 数组，方便 dashboard 或脚本复用。
 
+它还会输出 `agent_instruction_patch`，用于一次性配置接收端 Agent 的主动检查行为。
+
 ## Workflow 验证
 
 在手动接入客户端之前，可以先验证 ACB 这一侧是否准备好：
@@ -279,6 +283,14 @@ acb setup codex --check
 ```
 
 它会验证 recipe、handoff packet、brief、完整 resume prompt、MCP server 和 dashboard state。`--all` 可以作为发布前的全目标矩阵检查。这个过程不会启动或修改第三方客户端。
+
+要看 “handoff 后人类又改了文件，接收端应该被拦住” 的最短 demo：
+
+```bash
+acb demo freshness --lang zh-CN
+```
+
+这个命令会创建临时 Git workspace，保存 handoff snapshot，然后模拟 handoff 后的 README 改动，最终显示 `readiness: needs_refresh`。
 
 ## 可视化 Dashboard
 

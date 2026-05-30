@@ -40,6 +40,8 @@ Without a target, `acb setup` uses read-only local detection and selects the bes
 
 The JSON form exposes the same checklist as `steps`, plus copyable command fields such as `handoff_command`, `safety_command`, `setup_check_command`, and `dashboard_command`.
 
+It also exposes `agent_instruction_patch`, a copyable block for the target client's custom instructions or project rules. That patch tells the receiving agent to call `check_latest_handoff_ready`, read the latest packet, summarize what it loaded, and call `acknowledge_handoff` before editing.
+
 The dashboard shows the same client setup information next to the detected target list:
 
 ```bash
@@ -64,6 +66,12 @@ acb verify workflow cline
 ```
 
 This checks recipe, handoff, brief, MCP, and dashboard surfaces without launching or editing the client.
+
+To see the receiving-side freshness gate without touching a real project:
+
+```bash
+acb demo freshness
+```
 
 MCP writers can also pass `watch_paths` to `save_handoff` or `update_handoff` when the handoff depends on explicit workspace files that Git does not cover. ACB fingerprints only those provided paths.
 
