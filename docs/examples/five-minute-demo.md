@@ -2,6 +2,10 @@
 
 This is the fastest way to understand ACB without wiring any third-party client.
 
+The core situation is simple:
+
+> You are switching coding agents, and you do not want to explain the same repo state again.
+
 The demo proves four things:
 
 - ACB can save local handoff context.
@@ -63,11 +67,14 @@ Run this inside a real project when an agent has useful context to hand off:
 
 ```bash
 acb handoff --from codex --summary "Ready for the next agent" --git
+acb receive --latest
 acb safety
 acb setup codex --workspace . --check
 ```
 
-Then open the dashboard and copy the recommended handoff text:
+`receive` is the receiving-side entrypoint: it checks whether the packet is ready, then copies the takeover prompt when it is safe enough to hand off.
+
+Then open the dashboard if you want a visual review:
 
 ```bash
 acb dashboard --workspace .
