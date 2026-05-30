@@ -140,6 +140,8 @@ acb brief
 
 ## Visual Demos
 
+![ACB dashboard screenshot](docs/assets/dashboard-screenshot.jpg)
+
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
 
 ![ACB freshness gate demo](docs/assets/freshness-gate-demo.svg)
