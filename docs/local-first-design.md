@@ -107,6 +107,15 @@ acb ack pkt_20260527123000_abc123 --by opencode --note "Read packet and continui
 
 `ack` appends an acknowledgement entry to the packet. It does not infer client behavior, watch third-party apps, or auto-mark packets as received.
 
+Older packets can be checked against the current Git snapshot before handoff:
+
+```bash
+acb freshness pkt_20260527123000_abc123
+acb freshness --workspace .
+```
+
+Freshness is derived at read time. It does not watch files or update the store. Packets without a Git snapshot report `unknown`; packets whose saved branch, HEAD, or dirty status differs from the current workspace report `changed`.
+
 `acb preview` writes the current workspace handoff prompt to a Markdown file:
 
 ```bash
@@ -157,7 +166,7 @@ It reports the current workspace, packet count, latest packet summary, Git state
 
 `acb latest` also defaults to the current workspace. Use `acb latest --all` only when you explicitly want the newest packet across every workspace.
 
-Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, `read_handoff_brief`, and `read_handoff`) return the stored packet plus derived `acknowledgement`, `next_resume`, `next_brief`, `next_ack`, `next_show_prompt`, `next_mcp_read`, `next_mcp_brief`, and `next_mcp_ack` fields. These fields are not written back into the packet store.
+Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, `read_handoff_brief`, and `read_handoff`) return the stored packet plus derived `acknowledgement`, `freshness`, `next_resume`, `next_brief`, `next_ack`, `next_freshness`, `next_show_prompt`, `next_mcp_read`, `next_mcp_brief`, and `next_mcp_ack` fields. These fields are not written back into the packet store.
 
 `acb doctor` is a read-only local environment check.
 
@@ -242,7 +251,7 @@ acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It starts an explicit local HTTP server with an HTML dashboard, `/api/state`, `/api/copy-prompt`, `/api/ack`, `/api/create-demo`, `/api/verify-workflow`, and `/health`. It reads the packet store on each request, so refreshes show recent handoffs. The dashboard can render a brief takeover prompt, full takeover prompt, or MCP pull instruction and copy it to the system clipboard when the user clicks a button. It can also append an explicit acknowledgement when the user clicks `Mark Received`. If the current workspace is empty, the dashboard can create one explicit local demo packet after a click. It also detects likely target clients through read-only PATH, workspace, and common local config-location checks, then uses those signals to preselect the top `Next handoff` copy action and show a target-specific setup guide. The same guide is available from `acb setup [target]` for terminal and script users; without a target, it uses the same read-only local detection. The workflow verification endpoint runs a temporary ACB-side smoke test only; it does not launch or mutate the selected client. It shows derived safety hints, acknowledgement state, and a safety warning count for packet review. It does not sync data, silently inject context into model requests, or edit third-party client config.
+It starts an explicit local HTTP server with an HTML dashboard, `/api/state`, `/api/copy-prompt`, `/api/ack`, `/api/create-demo`, `/api/verify-workflow`, and `/health`. It reads the packet store on each request, so refreshes show recent handoffs. The dashboard can render a brief takeover prompt, full takeover prompt, or MCP pull instruction and copy it to the system clipboard when the user clicks a button. It can also append an explicit acknowledgement when the user clicks `Mark Received`. If the current workspace is empty, the dashboard can create one explicit local demo packet after a click. It also detects likely target clients through read-only PATH, workspace, and common local config-location checks, then uses those signals to preselect the top `Next handoff` copy action and show a target-specific setup guide. The same guide is available from `acb setup [target]` for terminal and script users; without a target, it uses the same read-only local detection. The workflow verification endpoint runs a temporary ACB-side smoke test only; it does not launch or mutate the selected client. It shows derived safety hints, acknowledgement state, freshness state, and a safety warning count for packet review. It does not sync data, silently inject context into model requests, or edit third-party client config.
 
 Dashboard packet summaries include a derived `safety` object. This is the first lightweight safety-panel step from the original ACB plan without adding gateway interception or automatic redaction.
 

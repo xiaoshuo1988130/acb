@@ -1014,6 +1014,45 @@ test("ack records receiving-side handoff confirmation", () => {
   assert.match(invalid.stderr, /Use either a packet id or --latest/);
 });
 
+test("freshness reports unknown, fresh, and changed handoff state", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const workspace = path.join(dir, "repo");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: path.join(dir, "packets.json") };
+
+  run(["save", "--workspace", workspace, "--summary", "No git snapshot"], { env });
+  const unknown = JSON.parse(run(["freshness", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.equal(unknown.status, "unknown");
+  assert.equal(unknown.packet_git, null);
+  assert.match(unknown.reason, /no Git snapshot/i);
+
+  spawnSync("git", ["init"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "ACB Test"], { cwd: workspace, encoding: "utf8" });
+  fs.writeFileSync(path.join(workspace, "README.md"), "# demo\n", "utf8");
+  spawnSync("git", ["add", "README.md"], { cwd: workspace, encoding: "utf8" });
+  spawnSync("git", ["commit", "-m", "initial"], { cwd: workspace, encoding: "utf8" });
+
+  run(["save", "--workspace", workspace, "--summary", "Fresh git snapshot", "--git"], { env });
+  const freshPacket = JSON.parse(run(["latest", "--workspace", workspace, "--json"], { env }).stdout);
+  assert.equal(freshPacket.freshness.status, "fresh");
+  const fresh = JSON.parse(run(["freshness", freshPacket.id, "--json"], { env }).stdout);
+  assert.equal(fresh.ok, true);
+  assert.equal(fresh.status, "fresh");
+  assert.equal(fresh.changes.length, 0);
+
+  fs.appendFileSync(path.join(workspace, "README.md"), "changed\n", "utf8");
+  const changedHuman = run(["freshness", freshPacket.id], { env });
+  assert.equal(changedHuman.status, 0);
+  assert.match(changedHuman.stdout, /status: changed/);
+  assert.match(changedHuman.stdout, /dirty file count changed/);
+  const changed = JSON.parse(run(["freshness", freshPacket.id, "--json"], { env }).stdout);
+  assert.equal(changed.ok, false);
+  assert.equal(changed.status, "changed");
+  assert.ok(changed.changes.some((change) => change.includes("dirty file count changed")));
+  assert.equal(JSON.parse(run(["show", freshPacket.id, "--json"], { env }).stdout).freshness.status, "changed");
+});
+
 test("save can attach an explicit git snapshot", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
   const workspace = path.join(dir, "repo");
@@ -1337,7 +1376,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Copy MCP Pull Instruction/);
     assert.match(html, /Start here/);
     assert.match(html, /Mark Received/);
-    assert.match(html, /"overview", "commands", "ack", "safety", "body", "git"/);
+    assert.match(html, /"overview", "commands", "ack", "freshness", "safety", "body", "git"/);
     assert.match(html, /Next handoff/);
     assert.match(html, /First handoff flow/);
     assert.match(html, /Target Client/);
@@ -1345,6 +1384,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Recommended path/);
     assert.match(html, /Save current context/);
     assert.match(html, /safety warnings/);
+    assert.match(html, /changed packets/);
     assert.match(html, /Run ACB-side Check/);
     assert.match(html, /OpenCode/);
     assert.match(html, /Codex/);
@@ -1373,6 +1413,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.equal(state.workspace_count, 1);
     assert.equal(state.safety_warning_count, 0);
     assert.equal(state.acknowledged_packet_count, 0);
+    assert.equal(state.changed_packet_count, 0);
     assert.ok(state.targets.some((target) => target.id === "auto"));
     assert.ok(state.targets.some((target) => target.id === "opencode"));
     assert.ok(state.targets.some((target) => target.id === "codex"));
@@ -1389,7 +1430,9 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.equal(state.latest_packet.summary, "Dashboard smoke");
     assert.equal(state.latest_packet.safety.level, "ok");
     assert.equal(state.latest_packet.acknowledged, false);
+    assert.equal(state.latest_packet.freshness.status, "unknown");
     assert.match(state.latest_packet.next_brief, /^acb brief --id pkt_/);
+    assert.match(state.latest_packet.next_freshness, /^acb freshness pkt_/);
     assert.doesNotMatch(JSON.stringify(state), /Other workspace packet/);
     assert.doesNotMatch(JSON.stringify(state), new RegExp(otherWorkspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 

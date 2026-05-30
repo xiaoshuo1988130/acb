@@ -108,6 +108,12 @@ acb ack --latest --by opencode --note "已读取 packet，并会从这个上下�
 
 这样 `acb show`、`acb status`、JSON 输出、MCP 读取和 dashboard 都能看到这次 handoff 是否已经闭环。
 
+如果 packet 已经保存了一段时间，可以先检查工作区是否已经变化：
+
+```bash
+acb freshness --latest
+```
+
 如果想先给下一个 Agent 一个更短的起步消息：
 
 ```bash
@@ -270,6 +276,7 @@ acb handoff --from <agent> --summary <text> --git
 acb resume
 acb brief
 acb ack --latest --by <agent>
+acb freshness --latest
 acb dashboard --workspace .
 acb setup --check
 acb verify first-run --lang zh-CN

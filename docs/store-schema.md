@@ -79,7 +79,7 @@ Optional fields may be `null` or absent in older exports. Import normalizes miss
 
 `acknowledgements` is optional in older stores. Newer ACB versions write it as an array of explicit receiving-side confirmations created by `acb ack`, the dashboard `Mark Received` action, or the MCP `acknowledge_handoff` tool.
 
-Derived fields such as `safety`, `event`, `acknowledgement`, `next_resume`, `next_brief`, `next_ack`, and `next_mcp_read` are read-time output helpers. They are not stored in `packets.json`.
+Derived fields such as `safety`, `event`, `acknowledgement`, `freshness`, `next_resume`, `next_brief`, `next_ack`, `next_freshness`, and `next_mcp_read` are read-time output helpers. They are not stored in `packets.json`.
 
 ## Write Safety
 

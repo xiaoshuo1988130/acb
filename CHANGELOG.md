@@ -14,6 +14,7 @@ Client setup polish.
 - Added Codex and OpenCode receiving-client handoff walkthroughs with concrete confirmation checklists.
 - Added English and Chinese FAQ docs for auto-start, clipboard behavior, client config boundaries, data location, and MCP setup.
 - Added `acb ack`, dashboard `Mark Received`, and MCP `acknowledge_handoff` so receiving agents can explicitly close a handoff loop.
+- Added `acb freshness` and dashboard freshness badges so older packets can be checked against the current Git snapshot before handoff.
 
 ### Changed
 

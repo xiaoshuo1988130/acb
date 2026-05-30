@@ -98,6 +98,12 @@ acb ack --latest --by opencode --note "Read packet and continuing from it."
 
 This keeps the handoff visible as a closed loop in `acb show`, `acb status`, JSON output, MCP reads, and the dashboard.
 
+Before handing off an older packet, check whether the workspace has changed since it was saved:
+
+```bash
+acb freshness --latest
+```
+
 For a shorter first message:
 
 ```bash
@@ -268,6 +274,7 @@ acb handoff --from <agent> --summary <text> --status <text> --note <text>
 acb resume
 acb brief
 acb ack --latest --by <agent>
+acb freshness --latest
 acb save --from <agent> --summary <text> --file <path> --copy
 acb save --from <agent> --summary <text> --stdin
 acb save --from <agent> --summary <text> --git

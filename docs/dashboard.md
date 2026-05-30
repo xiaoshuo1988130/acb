@@ -34,7 +34,7 @@ The HTML view is a three-pane local audit workspace:
 - An empty-state onboarding panel that can create a safe local demo packet, copy a real handoff command, or copy setup verification.
 - A top-level `Next handoff` strip that auto-selects the best detected target client and keeps the recommended copy action in the first viewport.
 - A first-viewport `First handoff flow` strip with copyable `Save`, `Safety`, `Verify`, and `Copy` steps.
-- Packet detail tabs for overview, copyable commands, acknowledgement history, safety review, body preview, and Git snapshot.
+- Packet detail tabs for overview, copyable commands, acknowledgement history, freshness, safety review, body preview, and Git snapshot.
 - Derived packet safety hints for secret-like content, sensitive-looking paths, and large context bodies.
 - A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard, plus an explicit `Mark Received` acknowledgement.
 - Detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP clients.
@@ -73,6 +73,7 @@ Use the dashboard when you want to inspect:
 - Which setup commands and first prompt apply to a target client.
 - Whether the ACB side of a target workflow passes before touching the client.
 - Whether the selected packet has been acknowledged by a receiving agent.
+- Whether the selected packet still matches the current Git snapshot.
 - Whether the selected packet has secret-like text, sensitive-looking paths, or a large body that will be truncated in prompts.
 - Whether recent packets carry Git state or long body context.
 - The JSON shape a script or client could consume from `/api/state`.

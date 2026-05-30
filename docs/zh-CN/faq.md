@@ -54,6 +54,16 @@ acb show <packet-id> --prompt
 
 如果它说不出 packet id，就让它停下，然后重新粘贴 `acb resume --id <packet-id>` 的完整输出。
 
+## 怎么确认 handoff 还是最新的？
+
+如果 packet 是用 `--git` 保存的，可以运行：
+
+```bash
+acb freshness --latest
+```
+
+ACB 会对比 packet 保存时的 Git 快照和当前 workspace，返回 `fresh`、`changed` 或 `unknown`。
+
 ## safety warning 会自动删内容吗？
 
 不会。Safety hints 只是读取时的审阅提示。ACB 不会静默 redact、重写或删除 packet 内容。

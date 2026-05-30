@@ -54,6 +54,16 @@ Ask it to summarize concrete packet fields before it edits files:
 
 If it cannot name the packet id, paste the full `acb resume --id <packet-id>` output again.
 
+## How do I know the handoff is still current?
+
+If the packet was saved with `--git`, run:
+
+```bash
+acb freshness --latest
+```
+
+ACB compares the packet's saved Git snapshot with the current workspace. It reports `fresh`, `changed`, or `unknown`.
+
 ## Are safety warnings redactions?
 
 No. Safety hints are read-time review aids. ACB does not silently redact, rewrite, or delete packet content.

@@ -54,6 +54,7 @@ Usage:
   acb search <query> [--workspace <path>] [--all] [--limit <n>] [--json]
   acb timeline [--workspace <path>] [--all] [--limit <n>] [--json]
   acb safety [packet-id] [--workspace <path>] [--json]
+  acb freshness [packet-id] [--workspace <path>] [--json]
   acb view [--workspace <path>] [--all] [--limit <n>] [--out <path>] [--open]
   acb dashboard [--workspace <path>] [--all] [--limit <n>] [--host <host>] [--port <port>] [--lang en|zh-CN] [--open]
   acb export [--workspace <path>] [--all] [--limit <n>] [--format markdown|json] [--out <path>]
@@ -346,6 +347,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "search") return searchCommand(args);
   if (command === "timeline") return timelineCommand(args);
   if (command === "safety") return safetyCommand(args);
+  if (command === "freshness" || command === "fresh") return freshnessCommand(args);
   if (command === "view") return viewCommand(args);
   if (command === "dashboard") return dashboardCommand(args);
   if (command === "export") return exportCommand(args);
@@ -1142,6 +1144,27 @@ function safetyCommand(args) {
   return report.safety.level === "ok" ? 0 : 1;
 }
 
+function freshnessCommand(args) {
+  const id = positionalArgs(args, new Set(["--workspace"])).find(Boolean);
+  const workspace = id
+    ? null
+    : normalizeWorkspace(argValue(args, "--workspace") || process.cwd());
+  const packet = findPacket({ id, workspace });
+  if (!packet) {
+    console.error(id ? `No handoff packet found for id: ${id}` : `No handoff packet found for workspace: ${workspace}`);
+    return 1;
+  }
+
+  const report = buildFreshnessReport(packet);
+  if (args.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+
+  printFreshnessReport(report);
+  return 0;
+}
+
 function viewCommand(args) {
   const scope = resolveHistoryScope(args);
   if (!scope.ok) {
@@ -1514,6 +1537,7 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     body_chars: packets.reduce((sum, packet) => sum + (packet.body?.length || 0), 0),
     safety_warning_count: packets.reduce((sum, packet) => sum + packetSafety(packet).warnings.length, 0),
     acknowledged_packet_count: packets.filter((packet) => packetAcknowledgementSummary(packet).acknowledged).length,
+    changed_packet_count: packets.filter((packet) => packetFreshnessSummary(packet).status === "changed").length,
     latest_packet: packets[0] ? dashboardPacketSummary(packets[0]) : null,
     packets: packets.map(dashboardPacketSummary),
     workspaces,
@@ -1725,6 +1749,7 @@ function dashboardLabels(lang) {
       bodyCharsShown: "正文字符",
       safetyWarnings: "安全提示",
       acknowledgedPackets: "已确认交接",
+      changedPackets: "已变化上下文",
       packets: "上下文包",
       searchPlaceholder: "搜索 summary、status、tags、notes",
       targetClient: "目标客户端",
@@ -1738,6 +1763,10 @@ function dashboardLabels(lang) {
       promptCopied: "提示词已复制",
       acknowledged: "已确认",
       unacknowledged: "待确认",
+      fresh: "新鲜",
+      changed: "已变化",
+      unknownFreshness: "未知新鲜度",
+      freshness: "新鲜度",
       markReceived: "标记已接收",
       acknowledging: "确认中...",
       ackRecorded: "已记录接收确认",
@@ -1805,12 +1834,29 @@ function dashboardLabels(lang) {
       copyFullPrompt: "复制完整提示词",
       copyBriefPrompt: "复制简短提示词",
       forTarget: "给",
-      tabs: { overview: "概览", commands: "命令", ack: "确认", safety: "安全", body: "正文", git: "Git" },
+      fields: {
+        from: "来源",
+        workspace: "工作区",
+        created: "创建时间",
+        updated: "更新时间",
+        status: "状态",
+        reason: "原因",
+        checked: "检查时间",
+        acknowledged: "接收确认",
+        ackCount: "确认次数",
+        freshness: "新鲜度",
+        bodyChars: "正文字符",
+        branch: "分支",
+        head: "HEAD",
+      },
+      tabs: { overview: "概览", commands: "命令", ack: "确认", freshness: "新鲜度", safety: "安全", body: "正文", git: "Git" },
       noBody: "这个上下文包没有正文预览。",
       noGit: "没有记录 Git 快照。",
       noDirtyFiles: "没有记录改动文件。",
       noNotes: "没有 notes。",
       noTags: "没有 tags。",
+      tags: "标签",
+      notes: "备注",
       noWorkspaces: "还没有工作区",
       checking: "检查中...",
       runningCheck: "正在运行 ACB 侧 workflow 检查...",
@@ -1834,6 +1880,7 @@ function dashboardLabels(lang) {
     bodyCharsShown: "body chars shown",
     safetyWarnings: "safety warnings",
     acknowledgedPackets: "acknowledged",
+    changedPackets: "changed packets",
     packets: "Packets",
     searchPlaceholder: "Search summary, status, tags, notes",
     targetClient: "Target Client",
@@ -1847,6 +1894,10 @@ function dashboardLabels(lang) {
     promptCopied: "Prompt copied",
     acknowledged: "acknowledged",
     unacknowledged: "pending ack",
+    fresh: "fresh",
+    changed: "changed",
+    unknownFreshness: "freshness unknown",
+    freshness: "freshness",
     markReceived: "Mark Received",
     acknowledging: "Acknowledging...",
     ackRecorded: "Acknowledgement recorded",
@@ -1914,12 +1965,29 @@ function dashboardLabels(lang) {
     copyFullPrompt: "Copy Full Prompt",
     copyBriefPrompt: "Copy Brief Prompt",
     forTarget: "for",
-    tabs: { overview: "overview", commands: "commands", ack: "ack", safety: "safety", body: "body", git: "git" },
+    fields: {
+      from: "from",
+      workspace: "workspace",
+      created: "created",
+      updated: "updated",
+      status: "status",
+      reason: "reason",
+      checked: "checked",
+      acknowledged: "acknowledged",
+      ackCount: "ack count",
+      freshness: "freshness",
+      bodyChars: "body chars",
+      branch: "branch",
+      head: "head",
+    },
+    tabs: { overview: "overview", commands: "commands", ack: "ack", freshness: "freshness", safety: "safety", body: "body", git: "git" },
     noBody: "No body preview captured for this packet.",
     noGit: "No Git snapshot captured.",
     noDirtyFiles: "No dirty files captured.",
     noNotes: "No notes.",
     noTags: "No tags.",
+    tags: "Tags",
+    notes: "Notes",
     noWorkspaces: "No workspaces yet",
     checking: "Checking...",
     runningCheck: "Running ACB-side workflow check...",
@@ -2314,6 +2382,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       <div class="stat"><strong>${state.body_chars}</strong><span>${escapeHtml(labels.bodyCharsShown)}</span></div>
       <div class="stat"><strong>${state.safety_warning_count}</strong><span>${escapeHtml(labels.safetyWarnings)}</span></div>
       <div class="stat"><strong>${state.acknowledged_packet_count}</strong><span>${escapeHtml(labels.acknowledgedPackets)}</span></div>
+      <div class="stat"><strong>${state.changed_packet_count}</strong><span>${escapeHtml(labels.changedPackets)}</span></div>
     </section>
     <section class="grid">
       <aside class="panel">
@@ -2422,10 +2491,11 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         const ack = packet.acknowledged
           ? '<span class="badge good">' + escape(labels.acknowledged) + '</span>'
           : '<span class="badge warn">' + escape(labels.unacknowledged) + '</span>';
+        const freshness = freshnessBadge(packet);
         return '<button class="packet-row ' + (packet.id === selectedId ? 'active' : '') + '" data-id="' + escape(packet.id) + '">' +
           '<div class="packet-title">' + escape(packetTitle(packet)) + '</div>' +
           '<div class="packet-sub">' + escape(packet.from) + ' · ' + escape(packet.created_at) + '</div>' +
-          '<div class="badge-row">' + dirty + safety + ack + tags + '</div>' +
+          '<div class="badge-row">' + dirty + safety + ack + freshness + tags + '</div>' +
         '</button>';
       }).join("");
       for (const row of document.querySelectorAll(".packet-row")) {
@@ -2454,6 +2524,13 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
 
     function selectedPacket() {
       return state.packets.find((item) => item.id === selectedId) || state.packets[0] || null;
+    }
+
+    function freshnessBadge(packet) {
+      const status = packet.freshness ? packet.freshness.status : "unknown";
+      if (status === "fresh") return '<span class="badge good">' + escape(labels.fresh) + '</span>';
+      if (status === "changed") return '<span class="badge warn">' + escape(labels.changed) + '</span>';
+      return '<span class="badge">' + escape(labels.unknownFreshness) + '</span>';
     }
 
     function targetStatusLabel(target) {
@@ -2519,6 +2596,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
               '<span class="badge">' + escape(packet.from || labels.unknown) + '</span>' +
               '<span class="badge ' + (packet.git_dirty_files ? 'warn' : 'good') + '">' + escape(dirty) + '</span>' +
               '<span class="badge ' + (packet.acknowledged ? 'good' : 'warn') + '">' + escape(packet.acknowledged ? labels.acknowledged : labels.unacknowledged) + '</span>' +
+              freshnessBadge(packet) +
             '</div>' +
           '</div>' +
           '<div class="next-actions">' +
@@ -2547,7 +2625,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         wireCreateDemoButtons();
         return;
       }
-      const tabs = ["overview", "commands", "ack", "safety", "body", "git"];
+      const tabs = ["overview", "commands", "ack", "freshness", "safety", "body", "git"];
       const tabButtons = tabs.map((tab) => '<button class="tab ' + (tab === activeTab ? 'active' : '') + '" data-tab="' + tab + '">' + escape(labels.tabs[tab] || tab) + '</button>').join("");
       const target = selectedTarget();
       const targetMode = copyModeForTarget(target);
@@ -2663,6 +2741,14 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
           '<li><span><strong>' + escape(ack.by) + '</strong> · ' + escape(ack.acknowledged_at) + (ack.note ? '<br>' + escape(ack.note) : '') + '</span></li>'
         ).join("") + '</ul>';
       }
+      if (activeTab === "freshness") {
+        const freshness = packet.freshness || { status: "unknown", reason: "unknown" };
+        return '<div class="kv">' +
+          '<div>' + escape(labels.fields.status) + '</div><div>' + escape(freshness.status) + '</div>' +
+          '<div>' + escape(labels.fields.reason) + '</div><div>' + escape(fmt(freshness.reason)) + '</div>' +
+          '<div>' + escape(labels.fields.checked) + '</div><div>' + escape(fmt(freshness.checked_at)) + '</div>' +
+          '</div><div class="command" style="margin-top: 12px;"><code>' + escape(packet.next_freshness) + '</code><button class="btn" data-copy="' + escape(packet.next_freshness) + '">' + escape(labels.copy) + '</button></div>';
+      }
       if (activeTab === "safety") {
         const warnings = packet.safety && packet.safety.warnings ? packet.safety.warnings : [];
         if (!warnings.length) return '<div class="empty">' + escape(labels.noSafetyWarnings) + '</div>';
@@ -2671,7 +2757,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       if (activeTab === "git") {
         if (!packet.git) return '<div class="empty">' + escape(labels.noGit) + '</div>';
         const status = packet.git.status && packet.git.status.length ? packet.git.status.join("\\n") : labels.noDirtyFiles;
-        return '<div class="kv"><div>branch</div><div>' + escape(fmt(packet.git.branch)) + '</div><div>head</div><div>' + escape(fmt(packet.git.head)) + '</div></div><pre>' + escape(status) + '</pre>';
+        return '<div class="kv"><div>' + escape(labels.fields.branch) + '</div><div>' + escape(fmt(packet.git.branch)) + '</div><div>' + escape(labels.fields.head) + '</div><div>' + escape(fmt(packet.git.head)) + '</div></div><pre>' + escape(status) + '</pre>';
       }
       const notes = packet.notes && packet.notes.length
         ? '<ul>' + packet.notes.map((note) => '<li><span>' + escape(note) + '</span></li>').join("") + '</ul>'
@@ -2683,15 +2769,16 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         ? '<p>' + escape(labels.safetyReview) + '</p><ul>' + packet.safety.warnings.map((warning) => '<li><span>' + escape(warning.title + ": " + warning.detail) + '</span></li>').join("") + '</ul>'
         : '<div class="empty">' + escape(labels.noSafetyWarnings) + '</div>';
       return '<div class="kv">' +
-        '<div>from</div><div>' + escape(fmt(packet.from)) + '</div>' +
-        '<div>workspace</div><div>' + escape(fmt(packet.workspace)) + '</div>' +
-        '<div>created</div><div>' + escape(fmt(packet.created_at)) + '</div>' +
-        '<div>updated</div><div>' + escape(fmt(packet.updated_at)) + '</div>' +
-        '<div>status</div><div>' + escape(fmt(packet.status)) + '</div>' +
-        '<div>acknowledged</div><div>' + escape(packet.acknowledged ? labels.acknowledged : labels.unacknowledged) + '</div>' +
-        '<div>ack count</div><div>' + escape(fmt(packet.acknowledgement_count)) + '</div>' +
-        '<div>body chars</div><div>' + escape(fmt(packet.body_chars)) + '</div>' +
-        '</div><h3>' + escape(labels.safety) + '</h3>' + safetyWarnings + '<h3 style="margin-top: 14px;">Tags</h3>' + tags + '<h3 style="margin-top: 14px;">Notes</h3>' + notes;
+        '<div>' + escape(labels.fields.from) + '</div><div>' + escape(fmt(packet.from)) + '</div>' +
+        '<div>' + escape(labels.fields.workspace) + '</div><div>' + escape(fmt(packet.workspace)) + '</div>' +
+        '<div>' + escape(labels.fields.created) + '</div><div>' + escape(fmt(packet.created_at)) + '</div>' +
+        '<div>' + escape(labels.fields.updated) + '</div><div>' + escape(fmt(packet.updated_at)) + '</div>' +
+        '<div>' + escape(labels.fields.status) + '</div><div>' + escape(fmt(packet.status)) + '</div>' +
+        '<div>' + escape(labels.fields.acknowledged) + '</div><div>' + escape(packet.acknowledged ? labels.acknowledged : labels.unacknowledged) + '</div>' +
+        '<div>' + escape(labels.fields.ackCount) + '</div><div>' + escape(fmt(packet.acknowledgement_count)) + '</div>' +
+        '<div>' + escape(labels.fields.freshness) + '</div><div>' + escape(packet.freshness ? packet.freshness.status : "unknown") + '</div>' +
+        '<div>' + escape(labels.fields.bodyChars) + '</div><div>' + escape(fmt(packet.body_chars)) + '</div>' +
+        '</div><h3>' + escape(labels.safety) + '</h3>' + safetyWarnings + '<h3 style="margin-top: 14px;">' + escape(labels.tags) + '</h3>' + tags + '<h3 style="margin-top: 14px;">' + escape(labels.notes) + '</h3>' + notes;
     }
 
     function renderWorkspaces() {
@@ -3249,9 +3336,11 @@ function renderHtmlPacketCard(packet) {
   const gitDirty = packet.git?.status?.length || 0;
   const safety = packetSafety(packet);
   const acknowledgement = packetAcknowledgementSummary(packet);
+  const freshness = packetFreshnessSummary(packet);
   const ackHtml = acknowledgement.acknowledged
     ? `<div class="commands"><span class="pill good">acknowledged by ${escapeHtml(acknowledgement.latest.by)}</span><span class="pill">${escapeHtml(acknowledgement.latest.acknowledged_at)}</span></div>`
     : `<div class="commands"><span class="pill warn">pending acknowledgement</span></div>`;
+  const freshnessHtml = `<div class="commands"><span class="pill ${freshness.status === "changed" ? "warn" : freshness.status === "fresh" ? "good" : ""}">freshness ${escapeHtml(freshness.status)}</span></div>`;
   const safetyHtml = safety.warnings.length
     ? `<div class="commands">
       <span class="pill warn">${safety.warnings.length} safety warning(s)</span>
@@ -3282,6 +3371,7 @@ function renderHtmlPacketCard(packet) {
     </div>
     ${notes}
     ${ackHtml}
+    ${freshnessHtml}
     ${safetyHtml}
     ${git}
     ${body}
@@ -3308,6 +3398,7 @@ function printTimelinePacket(packet) {
   if (safety.warnings.length) facts.push(`safety:${safety.warnings.length}`);
   const acknowledgement = packetAcknowledgementSummary(packet);
   if (acknowledgement.acknowledged) facts.push(`ack:${acknowledgement.count}`);
+  facts.push(`freshness:${packetFreshnessSummary(packet).status}`);
   if (packet.tags?.length) facts.push(`tags:${packet.tags.join(",")}`);
   console.log(`* ${packet.created_at}  ${packet.from}  ${packet.id}`);
   console.log(`  ${summary}`);
@@ -3322,6 +3413,81 @@ function buildSafetyReport(packet, { workspace = null } = {}) {
     packet: packetSummary(packet),
     safety: packetSafety(packet),
     limitation: "Safety hints are local review aids only; ACB does not silently redact, rewrite, or delete packet content.",
+  };
+}
+
+function buildFreshnessReport(packet) {
+  const acknowledgement = packetAcknowledgementSummary(packet);
+  const packetGit = packet.git ? {
+    root: packet.git.root || null,
+    branch: packet.git.branch || null,
+    head: packet.git.head || null,
+    dirty_files: packet.git.status?.length || 0,
+    status: packet.git.status || [],
+  } : null;
+  const next = {
+    show: `acb show ${packet.id}`,
+    refresh_handoff: formatCommand("acb", ["handoff", "--workspace", packet.workspace, "--summary", "Refresh handoff context", "--git"]),
+  };
+  if (!packetGit) {
+    return {
+      ok: false,
+      status: "unknown",
+      reason: "Packet has no Git snapshot. Save with --git to enable freshness checks.",
+      packet: packetSummary(packet),
+      acknowledged: acknowledgement.acknowledged,
+      packet_git: null,
+      current_git: null,
+      changes: [],
+      next,
+    };
+  }
+
+  const current = readGitSnapshot(packet.workspace);
+  if (!current.ok) {
+    return {
+      ok: false,
+      status: "unknown",
+      reason: current.error,
+      packet: packetSummary(packet),
+      acknowledged: acknowledgement.acknowledged,
+      packet_git: packetGit,
+      current_git: null,
+      changes: [],
+      next,
+    };
+  }
+
+  const currentGit = {
+    root: current.snapshot.root || null,
+    branch: current.snapshot.branch || null,
+    head: current.snapshot.head || null,
+    dirty_files: current.snapshot.status?.length || 0,
+    status: current.snapshot.status || [],
+  };
+  const changes = [];
+  if (packetGit.root && currentGit.root && packetGit.root !== currentGit.root) changes.push(`git root changed: ${packetGit.root} -> ${currentGit.root}`);
+  if (packetGit.branch !== currentGit.branch) changes.push(`branch changed: ${packetGit.branch || "unknown"} -> ${currentGit.branch || "unknown"}`);
+  if (packetGit.head !== currentGit.head) changes.push(`HEAD changed: ${packetGit.head || "unknown"} -> ${currentGit.head || "unknown"}`);
+  if (packetGit.dirty_files !== currentGit.dirty_files) changes.push(`dirty file count changed: ${packetGit.dirty_files} -> ${currentGit.dirty_files}`);
+  const packetStatus = new Set(packetGit.status);
+  const currentStatus = new Set(currentGit.status);
+  const added = currentGit.status.filter((line) => !packetStatus.has(line));
+  const removed = packetGit.status.filter((line) => !currentStatus.has(line));
+  if (added.length) changes.push(`new dirty status: ${added.slice(0, 5).join("; ")}`);
+  if (removed.length) changes.push(`resolved dirty status: ${removed.slice(0, 5).join("; ")}`);
+
+  const status = changes.length ? "changed" : "fresh";
+  return {
+    ok: status === "fresh",
+    status,
+    reason: status === "fresh" ? "Current Git snapshot matches the packet snapshot." : "Current Git snapshot differs from the packet snapshot.",
+    packet: packetSummary(packet),
+    acknowledged: acknowledgement.acknowledged,
+    packet_git: packetGit,
+    current_git: currentGit,
+    changes,
+    next,
   };
 }
 
@@ -3342,6 +3508,31 @@ function printSafetyReport(report) {
   console.log(`  acb show ${report.packet.id}`);
   console.log(`  acb resume --id ${report.packet.id}`);
   console.log(`limitation: ${report.limitation}`);
+}
+
+function printFreshnessReport(report) {
+  console.log("ACB Freshness");
+  console.log(`packet: ${report.packet.id}`);
+  console.log(`workspace: ${report.packet.workspace}`);
+  console.log(`status: ${report.status}`);
+  console.log(`acknowledged: ${report.acknowledged ? "yes" : "no"}`);
+  if (report.reason) console.log(`reason: ${report.reason}`);
+  console.log(`ok: ${report.ok ? "yes" : "no"}`);
+  if (report.packet_git) {
+    console.log(`packet_head: ${report.packet_git.head || "unknown"}`);
+    console.log(`packet_dirty_files: ${report.packet_git.dirty_files}`);
+  }
+  if (report.current_git) {
+    console.log(`current_head: ${report.current_git.head || "unknown"}`);
+    console.log(`current_dirty_files: ${report.current_git.dirty_files}`);
+  }
+  if (report.changes.length) {
+    console.log("changes:");
+    for (const change of report.changes) console.log(`- ${change}`);
+  }
+  console.log("next:");
+  console.log(`  ${report.next.show}`);
+  console.log(`  ${report.next.refresh_handoff}`);
 }
 
 function searchPackets({ query, workspace = null, limit = DEFAULT_LIMIT }) {
@@ -5355,6 +5546,7 @@ function mcpListWorkspaces(args) {
 function packetSummary(packet) {
   const safety = packetSafety(packet);
   const acknowledgement = packetAcknowledgementSummary(packet);
+  const freshness = packetFreshnessSummary(packet);
   return {
     id: packet.id,
     created_at: packet.created_at,
@@ -5369,19 +5561,21 @@ function packetSummary(packet) {
     acknowledged: acknowledgement.acknowledged,
     acknowledgement_count: acknowledgement.count,
     latest_acknowledgement: acknowledgement.latest,
+    freshness,
     safety,
-    event: packetTraceEvent(packet, safety, acknowledgement),
+    event: packetTraceEvent(packet, safety, acknowledgement, freshness),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_ack: `acb ack ${packet.id} --by <agent>`,
+    next_freshness: `acb freshness ${packet.id}`,
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
     next_mcp_ack: "acknowledge_handoff",
   };
 }
 
-function packetTraceEvent(packet, safety = packetSafety(packet), acknowledgement = packetAcknowledgementSummary(packet)) {
+function packetTraceEvent(packet, safety = packetSafety(packet), acknowledgement = packetAcknowledgementSummary(packet), freshness = packetFreshnessSummary(packet)) {
   return {
     event_type: "handoff_packet",
     event_id: `evt_${packet.id}`,
@@ -5393,11 +5587,13 @@ function packetTraceEvent(packet, safety = packetSafety(packet), acknowledgement
     safety_level: safety.level,
     acknowledged: acknowledgement.acknowledged,
     acknowledgement_count: acknowledgement.count,
+    freshness_status: freshness.status,
   };
 }
 
 function packetWithNextSteps(packet) {
   const acknowledgement = packetAcknowledgementSummary(packet);
+  const freshness = packetFreshnessSummary(packet);
   return {
     ...packet,
     acknowledgements: packetAcknowledgements(packet),
@@ -5405,11 +5601,13 @@ function packetWithNextSteps(packet) {
     acknowledged: acknowledgement.acknowledged,
     acknowledgement_count: acknowledgement.count,
     latest_acknowledgement: acknowledgement.latest,
+    freshness,
     safety: packetSafety(packet),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_ack: `acb ack ${packet.id} --by <agent>`,
+    next_freshness: `acb freshness ${packet.id}`,
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
     next_mcp_ack: "acknowledge_handoff",
@@ -5711,6 +5909,39 @@ function packetAcknowledgementSummary(packet) {
     acknowledged: acknowledgements.length > 0,
     count: acknowledgements.length,
     latest,
+  };
+}
+
+function packetFreshnessSummary(packet) {
+  if (!packet?.git) {
+    return {
+      status: "unknown",
+      reason: "no_git_snapshot",
+      checked_at: null,
+    };
+  }
+  const current = readGitSnapshot(packet.workspace);
+  if (!current.ok) {
+    return {
+      status: "unknown",
+      reason: "git_unavailable",
+      checked_at: new Date().toISOString(),
+    };
+  }
+  const changes = [];
+  const packetStatus = packet.git.status || [];
+  const currentStatus = current.snapshot.status || [];
+  if ((packet.git.branch || null) !== (current.snapshot.branch || null)) changes.push("branch");
+  if ((packet.git.head || null) !== (current.snapshot.head || null)) changes.push("head");
+  if (packetStatus.length !== currentStatus.length) changes.push("dirty_count");
+  else {
+    const currentSet = new Set(currentStatus);
+    if (packetStatus.some((line) => !currentSet.has(line))) changes.push("dirty_status");
+  }
+  return {
+    status: changes.length ? "changed" : "fresh",
+    reason: changes.length ? changes.join(",") : "git_snapshot_match",
+    checked_at: new Date().toISOString(),
   };
 }
 
