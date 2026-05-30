@@ -18,14 +18,15 @@ ACB 的边界很明确：
 - 不做后台跨 Agent 自动化。
 - 不做云同步或托管 dashboard。
 
-最快试用：
+npm 包名是 `@xiaoshuo1988/acb`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。
+
+## 30 秒试用
 
 ```bash
-npx @xiaoshuo1988/acb quickstart --check
 npx @xiaoshuo1988/acb verify first-run --lang zh-CN
 ```
 
-npm 包名是 `@xiaoshuo1988/acb`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。
+`verify first-run` 会用临时本地 store 检查 quickstart、demo packet、brief/resume、dashboard state 和 setup workflow。除非你自己传入 `ACB_STORE`，否则不会写入真实 ACB store。
 
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
 
@@ -254,3 +255,4 @@ acb store backup --out ./acb-store.backup.json
 更短的中文上手说明见 [docs/zh-CN/quickstart.md](docs/zh-CN/quickstart.md)。
 英文首次运行完整路径见 [docs/first-run.md](docs/first-run.md)。
 CLI 输出稳定性说明见 [docs/cli-contract.md](docs/cli-contract.md)，store schema 见 [docs/store-schema.md](docs/store-schema.md)。
+推广文案、社区发布草稿和反馈计划见 [docs/promotion.md](docs/promotion.md)。

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0
+
+Promotion prep.
+
+### Added
+
+- Added `docs/promotion.md` with English and Chinese launch copy, community post drafts, direct feedback messages, reply templates, and a seven-day feedback plan.
+- Added a clearer 30-second first-run path to the English and Chinese READMEs.
+- Linked the promotion kit from the README examples and Chinese quickstart resources.
+
 ## 0.11.0
 
 First-run verification.

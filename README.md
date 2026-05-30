@@ -22,12 +22,13 @@ It is intentionally explicit:
 
 The package is published as `@xiaoshuo1988/acb` and installs the short `acb` command. Use the scoped package name; the unscoped `acb` npm package name is already taken.
 
-Fastest path:
+## Try In 30 Seconds
 
 ```bash
-npx @xiaoshuo1988/acb quickstart --check
 npx @xiaoshuo1988/acb verify first-run
 ```
+
+`verify first-run` uses a temporary local store to check quickstart readiness, demo packet creation, brief/resume rendering, dashboard state, and setup workflow checks. It does not write to your real ACB store unless you pass `ACB_STORE` yourself.
 
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
 
@@ -218,6 +219,7 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 - [Local HTML viewer](docs/viewer.md)
 - [Local-first design notes](docs/local-first-design.md)
 - [Product direction](docs/product-direction.md)
+- [Promotion kit](docs/promotion.md)
 
 ## Commands
 
