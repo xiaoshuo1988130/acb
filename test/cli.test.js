@@ -429,6 +429,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(packet.next_mcp_read, "read_handoff");
   assert.equal(packet.next_mcp_brief, "read_handoff_brief");
   assert.equal(packet.next_mcp_ack, "acknowledge_handoff");
+  assert.equal(packet.next_mcp_ready, "check_handoff_ready");
   assert.equal(packet.acknowledged, false);
   assert.equal(packet.acknowledgement_count, 0);
   assert.equal(packet.safety.level, "ok");
@@ -454,6 +455,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(statusReport.next.mcp_status, "get_workspace_status");
   assert.equal(statusReport.next.mcp_read_latest, "read_latest_handoff");
   assert.equal(statusReport.next.mcp_read_brief, "read_handoff_brief");
+  assert.equal(statusReport.next.mcp_check_latest_ready, "check_latest_handoff_ready");
 
   const listed = run(["list", "--workspace", workspace], { env });
   assert.equal(listed.status, 0);
@@ -504,6 +506,7 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(timelineSummary.next_mcp_read, "read_handoff");
   assert.equal(timelineSummary.next_mcp_brief, "read_handoff_brief");
   assert.equal(timelineSummary.next_mcp_ack, "acknowledge_handoff");
+  assert.equal(timelineSummary.next_mcp_ready, "check_handoff_ready");
   assert.equal(timelineSummary.event.event_type, "handoff_packet");
   assert.equal(timelineSummary.event.packet_id, packet.id);
   assert.equal(timelineSummary.event.safety_level, "ok");
@@ -1781,6 +1784,7 @@ test("verify mcp smoke tests a configured stdio server", () => {
   assert.match(verified.stdout, /initialize: ok/);
   assert.match(verified.stdout, /get_workspace_status: ok/);
   assert.match(verified.stdout, /read_latest_handoff/);
+  assert.doesNotMatch(verified.stdout, /check_latest_handoff_ready: failed/);
   assert.match(verified.stdout, /read_handoff_brief/);
 
   const json = run(["verify", "mcp", "--config", configPath, "--name", "local-acb", "--json"]);
@@ -1791,6 +1795,8 @@ test("verify mcp smoke tests a configured stdio server", () => {
   assert.equal(report.workspace, realWorkspace(process.cwd()));
   assert.equal(report.checks.required_tools, true);
   assert.equal(report.checks.workspace_status, true);
+  assert.ok(report.tools.includes("check_latest_handoff_ready"));
+  assert.ok(report.tools.includes("check_handoff_ready"));
 });
 
 test("verify workflow smoke tests client handoff surfaces", () => {
@@ -1804,6 +1810,7 @@ test("verify workflow smoke tests client handoff surfaces", () => {
   assert.match(verified.stdout, /target: opencode/);
   assert.match(verified.stdout, /brief: ok/);
   assert.match(verified.stdout, /mcp_latest_handoff: ok/);
+  assert.match(verified.stdout, /mcp_latest_ready: ok/);
   assert.match(verified.stdout, /dashboard_html: ok/);
   assert.match(verified.stdout, /mcp_verify: ok/);
 
@@ -1819,9 +1826,11 @@ test("verify workflow smoke tests client handoff surfaces", () => {
   assert.equal(report.checks.resume_prompt, true);
   assert.equal(report.checks.brief, true);
   assert.equal(report.checks.mcp_latest_handoff, true);
+  assert.equal(report.checks.mcp_latest_ready, true);
   assert.equal(report.checks.dashboard_state, true);
   assert.equal(report.mcp.checks.required_tools, true);
   assert.equal(report.mcp.checks.latest_handoff, true);
+  assert.equal(report.mcp.checks.latest_ready, true);
   assert.equal(report.mcp.workspace, realWorkspace(workspace));
   assert.match(report.commands.dashboard, /acb dashboard --workspace/);
 
@@ -2030,18 +2039,21 @@ test("serve exposes handoff tools over MCP stdio", () => {
     rpc("tools/call", { name: "search_handoffs", arguments: { workspace, query: "pull", limit: 5 } }, 6),
     rpc("tools/call", { name: "list_workspaces", arguments: { limit: 5 } }, 7),
     rpc("tools/call", { name: "read_handoff_brief", arguments: { workspace } }, 8),
+    rpc("tools/call", { name: "check_latest_handoff_ready", arguments: { workspace } }, 9),
   ].join("");
 
   const served = run(["serve"], { env, input });
   assert.equal(served.status, 0);
   assert.equal(served.stderr, "");
   const messages = parseJsonLines(served.stdout);
-  assert.equal(messages.length, 8);
+  assert.equal(messages.length, 9);
   assert.equal(messages[0].result.protocolVersion, "2025-06-18");
   assert.deepEqual(messages[0].result.capabilities, { tools: { listChanged: false } });
   assert.equal(messages[1].result.tools[0].name, "get_workspace_status");
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "read_latest_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "read_handoff_brief"));
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "check_latest_handoff_ready"));
+  assert.ok(messages[1].result.tools.some((tool) => tool.name === "check_handoff_ready"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "search_handoffs"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "update_handoff"));
   assert.ok(messages[1].result.tools.some((tool) => tool.name === "acknowledge_handoff"));
@@ -2053,11 +2065,13 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.match(messages[2].result.structuredContent.report.next.ack, /^acb ack pkt_/);
   assert.equal(messages[2].result.structuredContent.report.next.mcp_read_latest, "read_latest_handoff");
   assert.equal(messages[2].result.structuredContent.report.next.mcp_read_brief, "read_handoff_brief");
+  assert.equal(messages[2].result.structuredContent.report.next.mcp_check_latest_ready, "check_latest_handoff_ready");
   assert.match(messages[3].result.content[0].text, /MCP handoff/);
   assert.equal(messages[3].result.structuredContent.packet.summary, "MCP handoff");
   assert.equal(messages[3].result.structuredContent.packet.next_mcp_read, "read_handoff");
   assert.equal(messages[3].result.structuredContent.packet.next_mcp_brief, "read_handoff_brief");
   assert.equal(messages[3].result.structuredContent.packet.next_mcp_ack, "acknowledge_handoff");
+  assert.equal(messages[3].result.structuredContent.packet.next_mcp_ready, "check_handoff_ready");
   assert.equal(messages[4].result.structuredContent.packets.length, 1);
   assert.equal(messages[4].result.structuredContent.packets[0].next_mcp_read, "read_handoff");
   assert.equal(messages[5].result.structuredContent.packets[0].summary, "MCP handoff");
@@ -2067,6 +2081,10 @@ test("serve exposes handoff tools over MCP stdio", () => {
   assert.match(messages[7].result.content[0].text, /ACB brief/);
   assert.equal(messages[7].result.structuredContent.packet.summary, "MCP handoff");
   assert.match(messages[7].result.structuredContent.brief, /Full Context Commands/);
+  assert.match(messages[8].result.content[0].text, /ACB Ready/);
+  assert.equal(messages[8].result.structuredContent.report.packet.summary, "MCP handoff");
+  assert.equal(messages[8].result.structuredContent.report.status, "needs_refresh");
+  assert.ok(messages[8].result.structuredContent.report.blockers.some((blocker) => blocker.id === "freshness_unknown"));
 
   const id = messages[4].result.structuredContent.packets[0].id;
   const readById = run(["serve"], {
@@ -2077,7 +2095,18 @@ test("serve exposes handoff tools over MCP stdio", () => {
   const [readMessage] = parseJsonLines(readById.stdout);
   assert.equal(readMessage.result.structuredContent.packet.id, id);
   assert.equal(readMessage.result.structuredContent.packet.next_show_prompt, `acb show ${id} --prompt`);
+  assert.equal(readMessage.result.structuredContent.packet.next_mcp_ready, "check_handoff_ready");
   assert.match(readMessage.result.content[0].text, /MCP handoff/);
+
+  const readyById = run(["serve"], {
+    env,
+    input: rpc("tools/call", { name: "check_handoff_ready", arguments: { id } }, 1),
+  });
+  assert.equal(readyById.status, 0);
+  const [readyMessage] = parseJsonLines(readyById.stdout);
+  assert.equal(readyMessage.result.structuredContent.report.packet.id, id);
+  assert.equal(readyMessage.result.structuredContent.report.ready, false);
+  assert.match(readyMessage.result.content[0].text, /ready: no/);
 
   const ackById = run(["serve"], {
     env,

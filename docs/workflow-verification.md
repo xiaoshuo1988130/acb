@@ -39,6 +39,7 @@ The command uses a temporary local store and checks:
 - A compact brief can be rendered.
 - An MCP config can be generated.
 - The MCP server exposes the required tools and can read the smoke packet from the target workspace.
+- The MCP server exposes readiness-check tools so a receiving client can stop on stale or unsafe handoffs.
 - The MCP server exposes `acknowledge_handoff` for explicit receiving-side confirmation.
 - Dashboard state and dashboard HTML can render the packet.
 
@@ -68,19 +69,19 @@ It also does not edit client config files. The command verifies that ACB's side 
 
 ## Current Local Verification Snapshot
 
-Last checked: 2026-05-28, workspace `/Users/xiaoshuo/CodeProject/acb`.
+Last checked: 2026-05-30, workspace `/Users/xiaoshuo/CodeProject/acb`.
 
 All recipe targets passed ACB-side smoke verification:
 
-| Target | Recipe | Handoff save | Resume prompt | Brief | MCP tools | MCP latest handoff | Dashboard |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `opencode` | pass | pass | pass | pass | pass | pass | pass |
-| `cline` | pass | pass | pass | pass | pass | pass | pass |
-| `roo` | pass | pass | pass | pass | pass | pass | pass |
-| `claude-desktop` | pass | pass | pass | pass | pass | pass | pass |
-| `codex` | pass | pass | pass | pass | pass | pass | pass |
-| `generic-mcp` | pass | pass | pass | pass | pass | pass | pass |
+| Target | Recipe | Handoff save | Resume prompt | Brief | MCP tools | MCP latest handoff | MCP readiness | Dashboard |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `opencode` | pass | pass | pass | pass | pass | pass | pass | pass |
+| `cline` | pass | pass | pass | pass | pass | pass | pass | pass |
+| `roo` | pass | pass | pass | pass | pass | pass | pass | pass |
+| `claude-desktop` | pass | pass | pass | pass | pass | pass | pass | pass |
+| `codex` | pass | pass | pass | pass | pass | pass | pass | pass |
+| `generic-mcp` | pass | pass | pass | pass | pass | pass | pass | pass |
 
-This confirms ACB can create a handoff packet, render both receiving prompts, start its MCP stdio server, expose the required tools, read the smoke packet through MCP for the selected workspace, render dashboard state, and clean temporary smoke-test artifacts.
+This confirms ACB can create a handoff packet, render both receiving prompts, start its MCP stdio server, expose the required tools, read and readiness-check the smoke packet through MCP for the selected workspace, render dashboard state, and clean temporary smoke-test artifacts.
 
 This does not claim that the third-party clients themselves were launched or configured. Client setup remains an explicit manual step through each client's supported configuration path.

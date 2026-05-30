@@ -198,11 +198,15 @@ Expose that config to your client. Then tell the downstream agent:
 Use acb to read the latest handoff for this workspace, then continue from it.
 ```
 
+For safer receiving agents, ask the client to check readiness after reading and stop if ACB reports `needs_refresh` or `needs_review`.
+
 The MCP server exposes:
 
 - `get_workspace_status`
 - `read_latest_handoff`
 - `read_handoff_brief`
+- `check_latest_handoff_ready`
+- `check_handoff_ready`
 - `read_handoff`
 - `save_handoff`
 - `update_handoff`

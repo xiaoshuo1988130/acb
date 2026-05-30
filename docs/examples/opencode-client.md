@@ -102,7 +102,9 @@ Then ask OpenCode:
 
 ```text
 Use the ACB MCP tool read_latest_handoff for this workspace.
-Summarize the packet id, workspace, summary, safety level, and notes before acting.
+Then call check_latest_handoff_ready.
+If readiness is not ready, stop and explain the blocker before editing files.
+If ready, summarize the packet id, workspace, summary, safety level, and notes before acting.
 ```
 
 ACB does not patch OpenCode config or private state. Keep MCP setup explicit and reviewable.

@@ -175,7 +175,7 @@ It reports the current workspace, packet count, latest packet summary, Git state
 
 `acb latest` also defaults to the current workspace. Use `acb latest --all` only when you explicitly want the newest packet across every workspace.
 
-Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, `read_handoff_brief`, and `read_handoff`) return the stored packet plus derived `acknowledgement`, `freshness`, `readiness`, `next_resume`, `next_brief`, `next_ack`, `next_freshness`, `next_ready`, `next_show_prompt`, `next_mcp_read`, `next_mcp_brief`, and `next_mcp_ack` fields. These fields are not written back into the packet store.
+Single-packet reads (`acb latest --json`, `acb show --json`, `read_latest_handoff`, `read_handoff_brief`, and `read_handoff`) return the stored packet plus derived `acknowledgement`, `freshness`, `readiness`, `next_resume`, `next_brief`, `next_ack`, `next_freshness`, `next_ready`, `next_show_prompt`, `next_mcp_read`, `next_mcp_brief`, `next_mcp_ack`, and `next_mcp_ready` fields. These fields are not written back into the packet store.
 
 `acb doctor` is a read-only local environment check.
 
@@ -298,6 +298,8 @@ Initial tools:
 - `get_workspace_status`: reports current packet count, latest handoff, Git state, and next CLI/MCP commands for a workspace.
 - `read_latest_handoff`: returns the newest handoff prompt for a workspace.
 - `read_handoff_brief`: returns a compact brief by id or latest workspace packet.
+- `check_latest_handoff_ready`: returns the combined readiness report for the newest workspace packet.
+- `check_handoff_ready`: returns the combined readiness report for a specific packet id.
 - `save_handoff`: saves an explicit local handoff packet from an MCP-capable agent.
 - `update_handoff`: corrects an existing handoff packet while preserving its original creation time.
 - `acknowledge_handoff`: records that a receiving MCP-capable agent explicitly read a packet.

@@ -2852,6 +2852,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
           ["Ready", packet.next_ready],
           ["MCP full", packet.next_mcp_read],
           ["MCP brief", packet.next_mcp_brief],
+          ["MCP ready", packet.next_mcp_ready],
         ].map(([label, command]) => '<div class="command"><code>' + escape(command) + '</code><button class="btn" data-copy="' + escape(command) + '">' + escape(labels.copy) + '</button></div>').join("") + '</div>';
       }
       if (activeTab === "body") {
@@ -3701,28 +3702,31 @@ function printFreshnessReport(report) {
 }
 
 function printReadyReport(report) {
-  console.log("ACB Ready");
-  console.log(`packet: ${report.packet.id}`);
-  console.log(`workspace: ${report.packet.workspace}`);
-  console.log(`ready: ${report.ready ? "yes" : "no"}`);
-  console.log(`status: ${report.status}`);
-  console.log(`reason: ${report.reason}`);
-  console.log("checks:");
-  for (const check of report.checks) {
-    console.log(`- ${check.id}: ${check.status} (${check.detail})`);
-  }
+  process.stdout.write(`${formatReadyReport(report)}\n`);
+}
+
+function formatReadyReport(report) {
+  const lines = [
+    "ACB Ready",
+    `packet: ${report.packet.id}`,
+    `workspace: ${report.packet.workspace}`,
+    `ready: ${report.ready ? "yes" : "no"}`,
+    `status: ${report.status}`,
+    `reason: ${report.reason}`,
+    "checks:",
+  ];
+  for (const check of report.checks) lines.push(`- ${check.id}: ${check.status} (${check.detail})`);
   if (report.blockers.length) {
-    console.log("blockers:");
-    for (const blocker of report.blockers) console.log(`- ${blocker.detail}`);
+    lines.push("blockers:");
+    for (const blocker of report.blockers) lines.push(`- ${blocker.detail}`);
   }
   if (report.warnings.length) {
-    console.log("warnings:");
-    for (const warning of report.warnings) console.log(`- ${warning.detail}`);
+    lines.push("warnings:");
+    for (const warning of report.warnings) lines.push(`- ${warning.detail}`);
   }
-  console.log("next:");
-  for (const [name, command] of Object.entries(report.next)) {
-    console.log(`  ${name}: ${command}`);
-  }
+  lines.push("next:");
+  for (const [name, command] of Object.entries(report.next)) lines.push(`  ${name}: ${command}`);
+  return lines.join("\n");
 }
 
 function searchPackets({ query, workspace = null, limit = DEFAULT_LIMIT }) {
@@ -3815,6 +3819,7 @@ function buildStatusReport(workspace) {
       mcp_status: "get_workspace_status",
       mcp_read_latest: "read_latest_handoff",
       mcp_read_brief: "read_handoff_brief",
+      mcp_check_latest_ready: "check_latest_handoff_ready",
     } : {
       handoff: "acb handoff --summary \"...\" --git",
       save: "acb save --summary \"...\" --git",
@@ -3864,6 +3869,7 @@ function formatStatusReport(report) {
   lines.push(`next_show_prompt: ${report.next.show_prompt}`);
   lines.push(`next_mcp_read_latest: ${report.next.mcp_read_latest}`);
   lines.push(`next_mcp_read_brief: ${report.next.mcp_read_brief}`);
+  lines.push(`next_mcp_check_latest_ready: ${report.next.mcp_check_latest_ready}`);
   return lines.join("\n");
 }
 
@@ -4465,6 +4471,7 @@ function buildWorkflowVerifyReport(recipe, workspace, { keepArtifacts = false } 
       mcp_config: Boolean(mcpConfig.mcpServers.acb.command),
       mcp_verify: mcpReport.ok,
       mcp_latest_handoff: mcpReport.checks.latest_handoff === true,
+      mcp_latest_ready: mcpReport.checks.latest_ready === true,
       dashboard_state: dashboardState.latest_packet?.id === packet.id,
       dashboard_html: dashboardHtml.includes("ACB Dashboard") && dashboardHtml.includes(packet.id),
     };
@@ -4710,6 +4717,7 @@ function verifyMcpServer(name, server, { workspace = process.cwd(), expectLatest
   ];
   if (expectLatestPacketId) {
     requests.push(jsonRpcLine("tools/call", { name: "read_latest_handoff", arguments: { workspace: resolvedWorkspace } }, 4));
+    requests.push(jsonRpcLine("tools/call", { name: "check_latest_handoff_ready", arguments: { workspace: resolvedWorkspace } }, 5));
   }
   const input = [
     ...requests,
@@ -4749,7 +4757,10 @@ function verifyMcpServer(name, server, { workspace = process.cwd(), expectLatest
     report.error = `server exited with status ${result.status}`;
     return report;
   }
-  if (expectLatestPacketId) report.checks.latest_handoff = false;
+  if (expectLatestPacketId) {
+    report.checks.latest_handoff = false;
+    report.checks.latest_ready = false;
+  }
 
   report.checks.launch = true;
   const messages = parseJsonRpcLines(result.stdout || "");
@@ -4757,6 +4768,7 @@ function verifyMcpServer(name, server, { workspace = process.cwd(), expectLatest
   const toolsList = messages.find((message) => message.id === 2);
   const workspaceStatus = messages.find((message) => message.id === 3);
   const latestHandoff = messages.find((message) => message.id === 4);
+  const latestReady = messages.find((message) => message.id === 5);
 
   if (initialize?.result?.serverInfo?.name) report.checks.initialize = true;
   else if (initialize?.error) report.error = initialize.error.message || "initialize failed";
@@ -4768,7 +4780,7 @@ function verifyMcpServer(name, server, { workspace = process.cwd(), expectLatest
     report.error = toolsList.error.message || "tools/list failed";
   }
 
-  const requiredTools = ["get_workspace_status", "read_latest_handoff", "read_handoff_brief", "save_handoff", "update_handoff", "acknowledge_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
+  const requiredTools = ["get_workspace_status", "read_latest_handoff", "read_handoff_brief", "check_latest_handoff_ready", "check_handoff_ready", "save_handoff", "update_handoff", "acknowledge_handoff", "read_handoff", "search_handoffs", "list_workspaces", "list_handoffs"];
   report.checks.required_tools = requiredTools.every((toolName) => report.tools.includes(toolName));
   if (workspaceStatus?.result?.isError === false && workspaceStatus.result.content?.[0]?.text?.includes("ACB Status")) {
     report.checks.workspace_status = true;
@@ -4783,6 +4795,14 @@ function verifyMcpServer(name, server, { workspace = process.cwd(), expectLatest
       report.error = latestHandoff.error.message || "read_latest_handoff failed";
     } else if (!report.error) {
       report.error = `read_latest_handoff did not return expected packet: ${expectLatestPacketId}`;
+    }
+    const readyPacketId = latestReady?.result?.structuredContent?.report?.packet?.id;
+    if (latestReady?.result?.isError === false && readyPacketId === expectLatestPacketId) {
+      report.checks.latest_ready = true;
+    } else if (latestReady?.error) {
+      report.error = latestReady.error.message || "check_latest_handoff_ready failed";
+    } else if (!report.error) {
+      report.error = `check_latest_handoff_ready did not return expected packet: ${expectLatestPacketId}`;
     }
   }
   report.ok = Object.values(report.checks).every(Boolean);
@@ -4801,6 +4821,9 @@ function printMcpVerifyReport(report) {
   console.log(`get_workspace_status: ${report.checks.workspace_status ? "ok" : "failed"}`);
   if (Object.prototype.hasOwnProperty.call(report.checks, "latest_handoff")) {
     console.log(`read_latest_handoff: ${report.checks.latest_handoff ? "ok" : "failed"}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(report.checks, "latest_ready")) {
+    console.log(`check_latest_handoff_ready: ${report.checks.latest_ready ? "ok" : "failed"}`);
   }
   console.log(`tools: ${report.tools.length ? report.tools.join(", ") : "none"}`);
   if (report.error) console.log(`error: ${report.error}`);
@@ -5195,6 +5218,37 @@ function mcpTools() {
       },
     },
     {
+      name: "check_latest_handoff_ready",
+      title: "Check Latest Handoff Ready",
+      description: "Check whether the newest local ACB handoff packet is ready to hand off before a receiving agent continues.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspace: {
+            type: "string",
+            description: "Optional workspace path. Defaults to the MCP server process current working directory.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "check_handoff_ready",
+      title: "Check Handoff Ready",
+      description: "Check whether a specific local ACB handoff packet is ready to hand off before a receiving agent continues.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "Handoff packet id.",
+          },
+        },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    {
       name: "save_handoff",
       title: "Save Handoff",
       description: "Save an explicit local ACB handoff packet for another agent to read later.",
@@ -5420,6 +5474,8 @@ function mcpCallTool(params) {
   if (name === "get_workspace_status") return mcpGetWorkspaceStatus(args);
   if (name === "read_latest_handoff") return mcpReadLatestHandoff(args);
   if (name === "read_handoff_brief") return mcpReadHandoffBrief(args);
+  if (name === "check_latest_handoff_ready") return mcpCheckLatestHandoffReady(args);
+  if (name === "check_handoff_ready") return mcpCheckHandoffReady(args);
   if (name === "save_handoff") return mcpSaveHandoff(args);
   if (name === "update_handoff") return mcpUpdateHandoff(args);
   if (name === "acknowledge_handoff") return mcpAcknowledgeHandoff(args);
@@ -5473,6 +5529,45 @@ function mcpReadHandoffBrief(args) {
   return {
     content: [{ type: "text", text: brief }],
     structuredContent: { packet: packetWithNextSteps(packet), brief },
+    isError: false,
+  };
+}
+
+function mcpCheckLatestHandoffReady(args) {
+  const workspace = args.workspace ? normalizeWorkspace(args.workspace) : normalizeWorkspace(process.cwd());
+  const packet = findPacket({ workspace });
+  if (!packet) {
+    return {
+      content: [{ type: "text", text: `No handoff packet found for workspace: ${workspace}` }],
+      isError: true,
+    };
+  }
+  return mcpReadyResult(packet);
+}
+
+function mcpCheckHandoffReady(args) {
+  const id = typeof args.id === "string" ? args.id : "";
+  if (!id) {
+    return {
+      content: [{ type: "text", text: "id is required." }],
+      isError: true,
+    };
+  }
+  const packet = findPacket({ id });
+  if (!packet) {
+    return {
+      content: [{ type: "text", text: `No handoff packet found for id: ${id}` }],
+      isError: true,
+    };
+  }
+  return mcpReadyResult(packet);
+}
+
+function mcpReadyResult(packet) {
+  const report = buildReadyReport(packet);
+  return {
+    content: [{ type: "text", text: formatReadyReport(report) }],
+    structuredContent: { report },
     isError: false,
   };
 }
@@ -5766,6 +5861,7 @@ function packetSummary(packet) {
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
     next_mcp_ack: "acknowledge_handoff",
+    next_mcp_ready: "check_handoff_ready",
   };
 }
 
@@ -5810,6 +5906,7 @@ function packetWithNextSteps(packet) {
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
     next_mcp_ack: "acknowledge_handoff",
+    next_mcp_ready: "check_handoff_ready",
   };
 }
 
@@ -6044,6 +6141,7 @@ function printPacket(packet) {
   console.log("next_mcp_read: read_handoff");
   console.log("next_mcp_brief: read_handoff_brief");
   console.log("next_mcp_ack: acknowledge_handoff");
+  console.log("next_mcp_ready: check_handoff_ready");
   if (packet.notes?.length) {
     console.log("notes:");
     for (const note of packet.notes) console.log(`- ${note}`);

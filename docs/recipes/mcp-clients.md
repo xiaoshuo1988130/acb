@@ -100,7 +100,9 @@ For a complete receiving-side walkthrough and confirmation checklist, see [../ex
 Recommended first prompt after connecting MCP:
 
 ```text
-Use acb to read the latest handoff for this workspace, then continue from it.
+Use acb to read the latest handoff for this workspace, then call check_latest_handoff_ready.
+If readiness is not ready, stop and explain the blocker before editing files.
+If ready, summarize the packet id, workspace, summary, safety level, and notes before acting.
 ```
 
 If you want a shorter first pass, ask the client to call `read_handoff_brief` first, then pull the full handoff only if the brief is insufficient.
@@ -121,7 +123,9 @@ For a complete receiving-side walkthrough and confirmation checklist, see [../ex
 Recommended first prompt:
 
 ```text
-Continue from this explicit ACB handoff. Summarize the packet id, workspace, safety level, and notes before editing files.
+Continue from this explicit ACB handoff. Read the packet, then call check_handoff_ready or check_latest_handoff_ready.
+If readiness is not ready, stop and explain the blocker before editing files.
+If ready, summarize the packet id, workspace, safety level, and notes.
 ```
 
 ## Cline And Roo Code
@@ -141,7 +145,7 @@ acb recipe roo
 Recommended first prompt:
 
 ```text
-Use acb to inspect this workspace status. If a latest handoff exists, read it before making changes.
+Use acb to inspect this workspace status. If a latest handoff exists, read it and check readiness before making changes.
 ```
 
 For small chat boxes, run `acb brief` and paste that compact summary first.
@@ -157,7 +161,7 @@ acb recipe claude-desktop
 Recommended first prompt:
 
 ```text
-Use acb to read the latest handoff for this workspace. Summarize what you loaded before acting.
+Use acb to read the latest handoff for this workspace, then check readiness. Summarize what you loaded before acting.
 ```
 
 Claude can also call `read_handoff_brief` before `read_handoff` when you want a compact takeover summary.

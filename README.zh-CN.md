@@ -203,11 +203,15 @@ acb verify mcp --config ./mcp.json --name acb
 Use acb to read the latest handoff for this workspace, then continue from it.
 ```
 
+更稳妥的接收端流程是：读取 handoff 后先检查 readiness；如果 ACB 返回 `needs_refresh` 或 `needs_review`，就先停下并请用户刷新或检查。
+
 MCP server 暴露这些工具：
 
 - `get_workspace_status`
 - `read_latest_handoff`
 - `read_handoff_brief`
+- `check_latest_handoff_ready`
+- `check_handoff_ready`
 - `read_handoff`
 - `save_handoff`
 - `update_handoff`

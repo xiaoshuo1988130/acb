@@ -103,7 +103,9 @@ Then ask Codex:
 
 ```text
 Use the ACB MCP tool read_latest_handoff for this workspace.
-Before editing files, summarize the packet id, workspace, safety level, and notes you loaded.
+Then call check_latest_handoff_ready.
+If readiness is not ready, stop and explain the blocker before editing files.
+If ready, summarize the packet id, workspace, safety level, and notes you loaded.
 ```
 
 ACB does not edit Codex settings or inject hidden prompt text. You decide where to paste the prompt or how to configure MCP.
