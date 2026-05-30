@@ -12,6 +12,11 @@ Client setup polish.
 - Added a first-viewport dashboard flow strip for Save, Safety, Verify, and Copy.
 - Added a five-minute demo walkthrough for first-run evaluation.
 - Added Codex and OpenCode receiving-client handoff walkthroughs with concrete confirmation checklists.
+- Added English and Chinese FAQ docs for auto-start, clipboard behavior, client config boundaries, data location, and MCP setup.
+
+### Changed
+
+- Tightened the English and Chinese README first-run path around `quickstart --check`, `demo`, and `dashboard`.
 
 ## 0.13.0
 

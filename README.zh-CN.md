@@ -23,10 +23,22 @@ npm 包名是 `@xiaoshuo1988/acb`，安装后提供短命令 `acb`。请使用 s
 ## 30 秒试用
 
 ```bash
-npx @xiaoshuo1988/acb verify first-run --lang zh-CN
+npx @xiaoshuo1988/acb@latest quickstart --check --lang zh-CN
+npx @xiaoshuo1988/acb@latest demo --lang zh-CN
+npx @xiaoshuo1988/acb@latest dashboard --workspace . --lang zh-CN
+```
+
+这会创建一条本地 demo packet，并打开 dashboard。进入页面后，先看首屏的 `第一次交接流程`：保存上下文、检查安全、验证流程、复制交接。
+
+如果你想先做完全不写真实 store 的 smoke test：
+
+```bash
+npx @xiaoshuo1988/acb@latest verify first-run --lang zh-CN
 ```
 
 `verify first-run` 会用临时本地 store 检查 quickstart、demo packet、brief/resume、dashboard state 和 setup workflow。除非你自己传入 `ACB_STORE`，否则不会写入真实 ACB store。
+
+关于自动启动、剪贴板、客户端配置、数据位置等常见疑问，见 [常见问题](docs/zh-CN/faq.md)。
 
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
 
@@ -260,5 +272,6 @@ acb store backup --out ./acb-store.backup.json
 ## 中文快速上手
 
 更短的中文上手说明见 [docs/zh-CN/quickstart.md](docs/zh-CN/quickstart.md)。
+常见问题见 [docs/zh-CN/faq.md](docs/zh-CN/faq.md)。
 英文首次运行完整路径见 [docs/first-run.md](docs/first-run.md)。
 CLI 输出稳定性说明见 [docs/cli-contract.md](docs/cli-contract.md)，store schema 见 [docs/store-schema.md](docs/store-schema.md)。

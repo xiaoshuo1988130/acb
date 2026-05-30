@@ -156,3 +156,5 @@ ACB_LANG=zh-CN
 ```
 
 The Chinese quickstart is available at [docs/zh-CN/quickstart.md](zh-CN/quickstart.md).
+
+For common questions about auto-start, clipboard behavior, client config edits, data location, and MCP setup, see the [FAQ](faq.md).

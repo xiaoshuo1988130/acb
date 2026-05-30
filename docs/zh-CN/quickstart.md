@@ -146,3 +146,5 @@ acb dashboard --workspace . --lang zh-CN
 ```bash
 npm install -g @xiaoshuo1988/acb
 ```
+
+关于自动启动、剪贴板、客户端配置、数据位置和 MCP 接入等常见疑问，见 [常见问题](faq.md)。

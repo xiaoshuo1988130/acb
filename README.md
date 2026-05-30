@@ -25,10 +25,22 @@ The package is published as `@xiaoshuo1988/acb` and installs the short `acb` com
 ## Try In 30 Seconds
 
 ```bash
-npx @xiaoshuo1988/acb verify first-run
+npx @xiaoshuo1988/acb@latest quickstart --check
+npx @xiaoshuo1988/acb@latest demo
+npx @xiaoshuo1988/acb@latest dashboard --workspace .
+```
+
+This creates a local demo packet and opens the dashboard. In the first viewport, use `First handoff flow` to try `Save`, `Safety`, `Verify`, and `Copy`.
+
+Prefer a no-store smoke test first:
+
+```bash
+npx @xiaoshuo1988/acb@latest verify first-run
 ```
 
 `verify first-run` uses a temporary local store to check quickstart readiness, demo packet creation, brief/resume rendering, dashboard state, and setup workflow checks. It does not write to your real ACB store unless you pass `ACB_STORE` yourself.
+
+Questions about auto-start, clipboard, client config, or data location? See the [FAQ](docs/faq.md).
 
 ![ACB terminal demo](docs/assets/terminal-demo.svg)
 
@@ -226,6 +238,7 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 - [Terminal demo transcript](docs/examples/terminal-demo.md)
 - [SDK and LangChain handoff](docs/examples/sdk-handoff.md)
 - [MCP client recipes](docs/recipes/mcp-clients.md)
+- [FAQ](docs/faq.md)
 - [Brief mode](docs/brief.md)
 - [Dashboard](docs/dashboard.md)
 - [CLI output contract](docs/cli-contract.md)
