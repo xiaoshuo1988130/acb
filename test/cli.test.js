@@ -179,6 +179,9 @@ test("prints version and help", () => {
   assert.equal(quickstartReport.next.receive, "acb receive --latest");
   assert.equal(quickstartReport.next.resume, "acb resume");
   assert.equal(quickstartReport.next.brief, "acb brief");
+
+  assert.ok(pkg.main);
+  assert.ok(fs.existsSync(path.resolve(pkg.main)));
 });
 
 test("demo creates first-run onboarding packets", () => {
