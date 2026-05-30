@@ -48,6 +48,10 @@ Start with people who already feel the pain:
 
 Avoid broad AI/productivity audiences at first. They will ask for automation that ACB intentionally does not do.
 
+## Channel Playbooks
+
+- [Reddit first post](promotion-reddit.md)
+
 ## Message Pillars
 
 Use these consistently:
