@@ -219,7 +219,6 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 - [Local HTML viewer](docs/viewer.md)
 - [Local-first design notes](docs/local-first-design.md)
 - [Product direction](docs/product-direction.md)
-- [Promotion kit](docs/promotion.md)
 
 ## Commands
 

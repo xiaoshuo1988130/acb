@@ -255,4 +255,3 @@ acb store backup --out ./acb-store.backup.json
 更短的中文上手说明见 [docs/zh-CN/quickstart.md](docs/zh-CN/quickstart.md)。
 英文首次运行完整路径见 [docs/first-run.md](docs/first-run.md)。
 CLI 输出稳定性说明见 [docs/cli-contract.md](docs/cli-contract.md)，store schema 见 [docs/store-schema.md](docs/store-schema.md)。
-推广文案、社区发布草稿和反馈计划见 [docs/promotion.md](docs/promotion.md)。

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.1
+
+Public docs cleanup.
+
+### Removed
+
+- Removed internal promotion planning notes from the public docs and npm package.
+- Removed promotion links from the English and Chinese READMEs.
+
 ## 0.12.0
 
 Promotion prep.
