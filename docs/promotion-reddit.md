@@ -1,46 +1,48 @@
-# Reddit Promotion Playbook
+# Reddit 推广操作稿
 
-This page is the practical posting checklist for the first Reddit promotion step.
+这份文档只负责第一步 Reddit 推广：先在一个最匹配的社区里发一次，观察真实开发者反馈。
 
-Start with one place only:
+第一站：
 
 ```text
 r/ChatGPTCoding Self Promotion Thread
 ```
 
-Do not post the same message across multiple subreddits on the same day. The goal of the first post is feedback, not traffic.
+不要同一天把同一段内容发到多个 subreddit。第一帖的目标不是流量，而是确认 ACB 的首次体验、定位和边界是否容易理解。
 
-## Why This Channel First
+## 为什么先发这里
 
-`r/ChatGPTCoding` is close to ACB's target audience: people who use AI coding tools and run into workflow friction.
+`r/ChatGPTCoding` 的用户更接近 ACB 的目标人群：他们本来就在使用 AI coding 工具，也更容易理解“多个编码 Agent 之间切换”的痛点。
 
-Its self-promotion threads are explicitly intended for project sharing. The thread rules commonly include:
+它的 self-promotion thread 通常允许项目分享，但要注意这些常见规则：
 
-- No selling access to models.
-- Only promote once per project.
-- Upvote the thread and fellow coders.
-- Keep it community-friendly.
+- 不卖模型访问。
+- 同一个项目只推广一次。
+- 给 thread 和其他开发者一些正常互动。
+- 保持社区友好，不要刷屏。
 
-ACB fits this better than a general startup or side-project subreddit because it is open source, local-first, and specifically for coding-agent workflows.
+ACB 比较适合先发这里，因为它是开源、本地优先、面向 coding-agent workflow 的开发工具，比泛泛的创业/产品社区更精准。
 
-## Where To Post
+## 具体发在哪里
 
-Open:
+打开：
 
 ```text
 https://www.reddit.com/r/ChatGPTCoding/
 ```
 
-Then:
+然后这样做：
 
-1. Search within the subreddit for `Self Promotion Thread`.
-2. Sort by `New`.
-3. Open the newest active self-promotion thread.
-4. Post the text below as a comment.
+1. 在这个 subreddit 内搜索 `Self Promotion Thread`。
+2. 排序选择 `New`。
+3. 打开最新仍然活跃的 self-promotion thread。
+4. 把下面的英文正文作为评论发出去。
 
-If you cannot find a recent self-promotion thread, do not create a standalone post yet. Wait, or use the next channel in the promotion plan later.
+如果找不到近期的 self-promotion thread，先不要单独开新帖。等下一期 thread，或者再转到推广计划里的下一个渠道。
 
-## Exact Comment To Post
+## 直接复制发布的正文
+
+下面这段直接复制到 Reddit 评论框里即可：
 
 ````text
 I’m building AgentContextBus (acb), an open-source local-first CLI for handing workspace context between coding agents.
@@ -74,9 +76,9 @@ https://github.com/xiaoshuo1988130/acb
 Main question: does this feel useful for your coding workflow, or is the handoff concept still unclear?
 ````
 
-## Optional Shorter Version
+## 更短版本
 
-Use this if the thread already has many long comments:
+如果那个 thread 里已经有很多长评论，或者你想更克制一点，就发这个短版：
 
 ````text
 I’m building AgentContextBus (acb), an open-source local-first CLI for handing workspace context between coding agents.
@@ -98,43 +100,43 @@ https://github.com/xiaoshuo1988130/acb
 Looking for feedback from people who use multiple coding agents.
 ````
 
-## After Posting
+## 发完之后怎么处理
 
-Reply to every real comment within 24 hours.
+24 小时内尽量回复每一条真实评论。
 
-If someone asks whether ACB automatically injects prompts:
+如果有人问 ACB 是否会自动注入 prompt，可以回：
 
 ```text
 No. ACB is intentionally explicit. It saves local packets and renders copyable prompts or MCP-readable context, but it does not intercept traffic or inject prompts into model requests.
 ```
 
-If someone asks whether it edits Cline/OpenCode/Claude config:
+如果有人问它是否会修改 Cline / OpenCode / Claude 配置，可以回：
 
 ```text
 No. ACB shows setup guidance and copyable snippets, but it does not patch third-party app config or private storage.
 ```
 
-If someone asks why not just paste manually:
+如果有人问“为什么不直接手动复制粘贴”，可以回：
 
 ```text
 Manual paste works for one switch. ACB is useful when you want reusable handoff packets, brief/full prompts, local history, dashboard inspection, and an MCP-readable path without relying on hidden state.
 ```
 
-If someone reports confusion:
+如果有人说不理解，可以回：
 
 ```text
 Thanks, that is exactly the kind of feedback I’m looking for. Which part was unclear first: the install command, the idea of a handoff packet, or where the next agent reads the context?
 ```
 
-## What To Track
+## 需要记录什么
 
-Record these manually after the post:
+发完后手动记录这些反馈：
 
-- Did anyone run `verify first-run`?
-- Did they understand "handoff packet"?
-- Did they ask for a specific client integration?
-- Did anyone worry about prompt injection?
-- Did anyone ask for a video or screenshot?
-- What exact phrase confused people?
+- 有没有人真的运行 `verify first-run`？
+- 他们是否理解 `handoff packet`？
+- 有没有人问某个具体客户端怎么接入？
+- 有没有人担心 prompt injection？
+- 有没有人要求视频、截图或 demo？
+- 哪个词、哪句话最让人困惑？
 
-Do not argue with skeptical replies. Clarify the boundary once, ask for concrete feedback, then move on.
+遇到怀疑或反对时不要争论。解释一次边界，追问具体哪里不清楚，然后把反馈带回产品和文档里。
