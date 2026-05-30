@@ -4,6 +4,19 @@ ACB works best when the receiving coding agent knows it should check the local h
 
 This page gives you copyable instruction patches for MCP-capable clients. They do not modify client files automatically. Paste them into the client area where you normally keep custom instructions, system prompts, project rules, or agent profile instructions.
 
+## What Changes After Setup
+
+Without MCP-aware instructions, the receiving side is mostly manual: the user runs `acb receive`, copies the rendered prompt, pastes it into the next agent, and later records acknowledgement.
+
+With MCP configured once and these instructions in place, the receiving agent can proactively check ACB at the start of a workspace session:
+
+```text
+old path: human runs handoff -> human switches tools -> human runs receive -> human pastes context -> agent continues
+new path: human runs handoff -> human switches tools -> agent checks ACB -> agent reads the handoff -> agent summarizes it -> agent continues
+```
+
+This is not hidden automation. The setup is explicit, and the agent should not silently start editing. It should first report the packet id, workspace, freshness, safety status, and intended next action.
+
 ## Generic MCP Instruction
 
 Use this with any client that can call the ACB MCP tools:
@@ -107,7 +120,7 @@ Without instructions, an MCP tool can sit idle: the client may know that the too
 The safest ACB pattern is:
 
 ```text
-explicit setup -> readiness check -> explicit read -> summarize -> acknowledge
+explicit setup -> proactive readiness check -> explicit read -> summarize -> acknowledge
 ```
 
 This lowers friction without hidden prompt injection, client config mutation, or a background gateway.

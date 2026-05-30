@@ -4,6 +4,19 @@ ACB 最适合的用法是：接收端 coding agent 在改文件前，先主动�
 
 这份文档提供可复制的指令补丁，适合粘贴到 MCP 客户端的 custom instructions、system prompt、project rules 或 agent profile instructions 中。ACB 不会自动修改第三方客户端配置。
 
+## 配置后体验会变成什么
+
+没有 MCP-aware instructions 时，接收端大多还是手动流程：用户运行 `acb receive`，复制接手提示词，粘贴给下一个 Agent，之后再记录 acknowledgement。
+
+当用户显式配置一次 MCP，并把下面的指令放进接收端 Agent 后，接收端可以在新 workspace session 开始时主动检查 ACB：
+
+```text
+旧路径：人类 handoff -> 人类切工具 -> 人类 receive -> 人类粘贴上下文 -> Agent 继续
+新路径：人类 handoff -> 人类切工具 -> Agent 检查 ACB -> Agent 读取 handoff -> Agent 复述确认 -> Agent 继续
+```
+
+这不是隐藏自动化。配置是显式的，Agent 也不应该静默开干；它应该先报告 packet id、workspace、freshness、safety 状态和准备执行的下一步。
+
 ## 通用 MCP 指令
 
 适用于任何可以调用 ACB MCP tools 的客户端：
@@ -107,7 +120,7 @@ acb latest --json
 ACB 当前推荐的安全模式是：
 
 ```text
-显式配置 -> readiness 检查 -> 显式读取 -> 复述摘要 -> acknowledgement
+显式配置 -> 主动 readiness 检查 -> 显式读取 -> 复述摘要 -> acknowledgement
 ```
 
 这样可以降低摩擦，同时避免隐藏 prompt 注入、自动修改客户端配置或后台 gateway。
