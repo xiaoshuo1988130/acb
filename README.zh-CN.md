@@ -8,32 +8,52 @@ AgentContextBus 是一个 local-first 的编码 Agent 交接层。当前工具�
 
 当你在 Codex、OpenCode、Cline、Roo Code、Claude Desktop、脚本和终端之间切换时，用它避免一遍遍重讲当前项目状态。
 
-这张图表达的是：
+## 它给你什么
 
-- `acb handoff --git` 把当前 repo 状态保存成本地 packet。
-- `acb panic -- npm test` 在终端报错时捕获命令、退出码、stdout 和 stderr。
-- MCP 客户端可以调用 `check_latest_handoff_ready`，读取 packet，复述摘要，并确认接收。
-- packet 始终保存在本地，可检查、可复制、可审计。
+<table>
+<tr>
+<td width="25%"><strong>保存交接</strong><br><code>acb handoff --git</code><br>记录 summary、workspace、Git 快照、watch 文件和可选 diff。</td>
+<td width="25%"><strong>带走终端失败现场</strong><br><code>acb panic -- npm test</code><br>保存命令、退出码、stdout、stderr、耗时和 repo 状态。</td>
+<td width="25%"><strong>让 Agent 主动拉取</strong><br><code>check_latest_handoff_ready</code><br>MCP 客户端可以检查 readiness、读取 packet，并确认接收。</td>
+<td width="25%"><strong>保持可检查</strong><br><code>acb dashboard</code><br>本地查看 packet、安全提示、freshness、ack 和客户端接入路径。</td>
+</tr>
+</table>
 
-## 30 秒试用
+## 从这里开始
 
-```bash
-npx @agentcontextbus/cli@latest quickstart --check --lang zh-CN
-npx @agentcontextbus/cli@latest demo --lang zh-CN
-npx @agentcontextbus/cli@latest dashboard --workspace . --lang zh-CN
-```
+<table>
+<tr>
+<th width="33%">最快 smoke test</th>
+<th width="33%">可视化 demo</th>
+<th width="33%">日常 CLI</th>
+</tr>
+<tr>
+<td>
+<pre><code>npx @agentcontextbus/cli@latest verify first-run --lang zh-CN</code></pre>
+使用临时本地 store。除非你自己设置 <code>ACB_STORE</code>，否则不会写入真实 ACB store。
 
-这会创建一条本地 demo packet，并打开 dashboard。进入页面后，先看首屏的 `第一次交接流程`：保存上下文、检查安全、验证流程、复制交接。
+</td>
+<td>
+<pre><code>npx @agentcontextbus/cli@latest demo --lang zh-CN
+npx @agentcontextbus/cli@latest dashboard --workspace . --lang zh-CN</code></pre>
+创建一条 demo packet，并打开本地 dashboard。进入首屏后，先试 <code>保存上下文</code>、<code>检查安全</code>、<code>验证流程</code>、<code>复制交接</code>。
 
-如果你想先做完全不写真实 store 的 smoke test：
+</td>
+<td>
+<pre><code>npm install -g @agentcontextbus/cli
+acb quickstart --check --lang zh-CN</code></pre>
+安装短命令 <code>acb</code>，并打印适合当前 workspace 的下一步命令。
 
-```bash
-npx @agentcontextbus/cli@latest verify first-run --lang zh-CN
-```
+</td>
+</tr>
+</table>
 
-`verify first-run` 会用临时本地 store 检查 quickstart、demo packet、brief/resume、dashboard state 和 setup workflow。除非你自己传入 `ACB_STORE`，否则不会写入真实 ACB store。
+<details>
+<summary>包名说明</summary>
 
 npm 主包名是 `@agentcontextbus/cli`，安装后提供短命令 `acb`。请使用 scoped 包名；未加 scope 的 `acb` npm 包名已经被占用。早期的 `@xiaoshuo1988/acb` 会继续作为兼容路径保留。
+
+</details>
 
 ## 安装
 
@@ -77,47 +97,51 @@ acb verify first-run --lang zh-CN
 
 ## 信任边界
 
-ACB 不会把上下文隐藏注入到模型请求里，不拦截流量，不同步到云端 dashboard，也不会静默修改客户端私有存储。每一次保存、读取、恢复、复制和确认接收，都是显式动作。
+<table>
+<tr>
+<td width="50%"><strong>ACB 会做什么</strong><br>保存本地 packet、生成可复制提示词、暴露显式 MCP 工具、检查 freshness 和 safety hints，并记录 acknowledgement。</td>
+<td width="50%"><strong>ACB 不会做什么</strong><br>不隐藏注入 prompt、不拦截流量、不同步到云端、不静默修改客户端私有存储。</td>
+</tr>
+</table>
+
+每一次保存、读取、恢复、复制和确认接收，都是显式本地动作。
 
 ## 60 秒流程
 
-在掌握当前上下文的 Agent 里运行：
+<table>
+<tr>
+<th>步骤</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+<tr>
+<td>1. 保存上下文</td>
+<td><code>acb handoff --from codex --summary "Ready for OpenCode to continue" --git</code></td>
+<td>创建本地 packet，并复制交接提示词。</td>
+</tr>
+<tr>
+<td>2. 捕获失败现场</td>
+<td><code>acb panic -- npm test</code></td>
+<td>保存终端命令、退出码、stdout、stderr、耗时和可选 Git 状态。</td>
+</tr>
+<tr>
+<td>3. 接收</td>
+<td><code>acb receive --latest</code><br><code>acb receive --latest --brief</code></td>
+<td>复制前先检查 readiness，然后复制完整或精简接手提示词。</td>
+</tr>
+<tr>
+<td>4. 闭环确认</td>
+<td><code>acb ack --latest --by opencode --note "已读取 packet，并会从这个上下文继续。"</code></td>
+<td>在 CLI、JSON、MCP 和 dashboard 中记录显式接收确认。</td>
+</tr>
+<tr>
+<td>5. 检查新鲜度</td>
+<td><code>acb freshness --latest</code><br><code>acb ready --latest</code></td>
+<td>发现过期 packet，并汇总 freshness、safety、ack 和上下文正文信号。</td>
+</tr>
+</table>
 
-```bash
-acb handoff --from codex --summary "Ready for OpenCode to continue" --git
-```
-
-ACB 会保存一个本地上下文包，并把交接提示词复制到剪贴板。
-
-如果要交接的是刚刚失败的终端命令，可以直接捕获现场：
-
-```bash
-acb panic -- npm test
-```
-
-在下一个 Agent 或终端里运行：
-
-```bash
-acb receive --latest
-```
-
-`receive` 会先检查这个 packet 是否适合交接。通过检查后，它会把接手提示词复制到剪贴板；如果系统剪贴板不可用，ACB 会把提示词打印到终端，方便手动复制。
-
-当接收端 Agent 读完 packet 后，可以显式记录一条本地接收确认：
-
-```bash
-acb ack --latest --by opencode --note "已读取 packet，并会从这个上下文继续。"
-```
-
-这样 `acb show`、`acb status`、JSON 输出、MCP 读取和 dashboard 都能看到这次 handoff 是否已经闭环。
-
-如果 packet 已经保存了一段时间，可以先检查工作区是否已经变化：
-
-```bash
-acb freshness --latest
-```
-
-默认情况下，freshness 使用 `--git` 保存的 Git 快照。如果有非 Git 文件、被 ignore 但确实影响交接的关键文件，可以显式 watch：
+如果有非 Git 文件、被 ignore 但确实影响交接的关键文件，可以显式 watch：
 
 ```bash
 acb handoff --summary "Ready for next agent" --watch README.md --watch package.json
@@ -125,30 +149,7 @@ acb handoff --summary "Ready for next agent" --watch README.md --watch package.j
 
 也可以创建 `.acb/watch`，每行写一个 workspace 相对路径。ACB 只会 fingerprint 这些显式路径，不会默认扫描整个项目。
 
-如果想要一个综合的交接前判断：
-
-```bash
-acb ready --latest
-```
-
-`ready` 会把 freshness、safety、接收确认和上下文正文情况汇总成明确的 `ready: yes/no`，并给出下一步命令。
-
-如果想把“接收前检查 + 复制接手提示词”合成一步：
-
-```bash
-acb receive --latest
-acb receive --latest --brief
-```
-
-`acb receive` 会在复制前拦住过期或有安全风险的 packet。它不会自动标记接收确认；等接收端 Agent 复述 packet 后，再运行 `acb ack`。
-
-如果想先给下一个 Agent 一个更短的起步消息：
-
-```bash
-acb brief
-```
-
-`acb brief` 会复制一个精简接管摘要，并告诉接收方需要完整上下文时如何读取完整 packet。
+如果想先给下一个 Agent 一个更短的起步消息，运行 `acb brief`。它会复制一个精简接管摘要，并告诉接收方需要完整上下文时如何读取完整 packet。
 
 ## 可视化示例
 

@@ -8,32 +8,52 @@ AgentContextBus is a local-first handoff layer for coding agents. It saves a com
 
 Use it when switching between Codex, OpenCode, Cline, Roo Code, Claude Desktop, scripts, and terminals without re-explaining the same workspace state.
 
-What the picture is showing:
+## What You Get
 
-- `acb handoff --git` saves the repo state as a local packet.
-- `acb panic -- npm test` captures the command, exit code, stdout, and stderr when terminal context matters.
-- MCP clients can call `check_latest_handoff_ready`, read the packet, summarize it, and acknowledge receipt.
-- The packet stays local and inspectable.
+<table>
+<tr>
+<td width="25%"><strong>Save the handoff</strong><br><code>acb handoff --git</code><br>Capture summary, workspace, Git snapshot, watched files, and optional diff.</td>
+<td width="25%"><strong>Carry terminal failures</strong><br><code>acb panic -- npm test</code><br>Preserve the command, exit code, stdout, stderr, duration, and repo state.</td>
+<td width="25%"><strong>Let agents pull context</strong><br><code>check_latest_handoff_ready</code><br>MCP clients can check readiness, read the packet, and acknowledge receipt.</td>
+<td width="25%"><strong>Keep it inspectable</strong><br><code>acb dashboard</code><br>Review packets, safety hints, freshness, acknowledgements, and client setup locally.</td>
+</tr>
+</table>
 
-## Try In 30 Seconds
+## Start Here
 
-```bash
-npx @agentcontextbus/cli@latest quickstart --check
-npx @agentcontextbus/cli@latest demo
-npx @agentcontextbus/cli@latest dashboard --workspace .
-```
+<table>
+<tr>
+<th width="33%">Fast smoke test</th>
+<th width="33%">Visual demo</th>
+<th width="33%">Daily CLI</th>
+</tr>
+<tr>
+<td>
+<pre><code>npx @agentcontextbus/cli@latest verify first-run</code></pre>
+Uses a temporary local store. Nothing is written to your real ACB store unless you set <code>ACB_STORE</code>.
 
-This creates a local demo packet and opens the dashboard. In the first viewport, use `First handoff flow` to try `Save`, `Safety`, `Verify`, and `Copy`.
+</td>
+<td>
+<pre><code>npx @agentcontextbus/cli@latest demo
+npx @agentcontextbus/cli@latest dashboard --workspace .</code></pre>
+Creates a demo packet and opens the local dashboard. Try <code>Save</code>, <code>Safety</code>, <code>Verify</code>, and <code>Copy</code> in the first viewport.
 
-Prefer a no-store smoke test first:
+</td>
+<td>
+<pre><code>npm install -g @agentcontextbus/cli
+acb quickstart --check</code></pre>
+Installs the short <code>acb</code> command and prints the next commands for your workspace.
 
-```bash
-npx @agentcontextbus/cli@latest verify first-run
-```
+</td>
+</tr>
+</table>
 
-`verify first-run` uses a temporary local store to check quickstart readiness, demo packet creation, brief/resume rendering, dashboard state, and setup workflow checks. It does not write to your real ACB store unless you pass `ACB_STORE` yourself.
+<details>
+<summary>Package name note</summary>
 
 The package is published as `@agentcontextbus/cli` and installs the short `acb` command. Use the scoped package name; the unscoped `acb` npm package name is already taken. The earlier `@xiaoshuo1988/acb` package remains available as a legacy compatibility path.
+
+</details>
 
 ## Install
 
@@ -65,47 +85,51 @@ acb verify first-run
 
 ## Trust Boundary
 
-ACB does not hide context in model requests, intercept traffic, sync to a cloud dashboard, or silently edit client private storage. You explicitly save, read, recover, copy, or acknowledge each handoff.
+<table>
+<tr>
+<td width="50%"><strong>What ACB does</strong><br>Saves local packets, renders copyable prompts, exposes explicit MCP tools, checks freshness and safety hints, and records acknowledgements.</td>
+<td width="50%"><strong>What ACB does not do</strong><br>No hidden prompt injection, no traffic interception, no cloud sync, and no silent client-private-storage edits.</td>
+</tr>
+</table>
+
+Every save, read, recover, copy, and acknowledgement is an explicit local action.
 
 ## 60 Second Flow
 
-From the agent that has the context:
+<table>
+<tr>
+<th>Step</th>
+<th>Command</th>
+<th>Result</th>
+</tr>
+<tr>
+<td>1. Save context</td>
+<td><code>acb handoff --from codex --summary "Ready for OpenCode to continue" --git</code></td>
+<td>Creates a local packet and copies a handoff prompt.</td>
+</tr>
+<tr>
+<td>2. Capture a failure</td>
+<td><code>acb panic -- npm test</code></td>
+<td>Stores the terminal command, exit code, stdout, stderr, duration, and optional Git state.</td>
+</tr>
+<tr>
+<td>3. Receive</td>
+<td><code>acb receive --latest</code><br><code>acb receive --latest --brief</code></td>
+<td>Checks readiness before copying a full or brief takeover prompt.</td>
+</tr>
+<tr>
+<td>4. Close the loop</td>
+<td><code>acb ack --latest --by opencode --note "Read packet and continuing from it."</code></td>
+<td>Records an explicit acknowledgement visible in CLI, JSON, MCP, and dashboard views.</td>
+</tr>
+<tr>
+<td>5. Check freshness</td>
+<td><code>acb freshness --latest</code><br><code>acb ready --latest</code></td>
+<td>Detects stale packets and summarizes freshness, safety, acknowledgement, and context-body signals.</td>
+</tr>
+</table>
 
-```bash
-acb handoff --from codex --summary "Ready for OpenCode to continue" --git
-```
-
-ACB saves a local packet and copies a handoff prompt to your clipboard.
-
-If the thing you want to hand off is a failing command, capture the terminal moment:
-
-```bash
-acb panic -- npm test
-```
-
-In the next agent or terminal:
-
-```bash
-acb receive --latest
-```
-
-`receive` first checks whether the packet is ready to hand off. If it is ready, it copies the takeover prompt into your clipboard. If clipboard access is unavailable, ACB prints the prompt so you can copy it manually.
-
-After the receiving agent has read the packet, record an explicit local acknowledgement:
-
-```bash
-acb ack --latest --by opencode --note "Read packet and continuing from it."
-```
-
-This keeps the handoff visible as a closed loop in `acb show`, `acb status`, JSON output, MCP reads, and the dashboard.
-
-Before handing off an older packet, check whether the workspace has changed since it was saved:
-
-```bash
-acb freshness --latest
-```
-
-By default freshness uses the Git snapshot you saved with `--git`. For non-Git or ignored-but-important files, opt in explicitly with watched paths:
+For non-Git or ignored-but-important files, opt in explicitly with watched paths:
 
 ```bash
 acb handoff --summary "Ready for next agent" --watch README.md --watch package.json
@@ -113,30 +137,7 @@ acb handoff --summary "Ready for next agent" --watch README.md --watch package.j
 
 You can also create `.acb/watch` with one workspace-relative path per line. ACB fingerprints only those explicit paths; it does not scan your whole workspace by default.
 
-For one combined pre-handoff decision, run:
-
-```bash
-acb ready --latest
-```
-
-`ready` summarizes freshness, safety, acknowledgement, and context-body signals into a clear `ready: yes/no` answer with next commands.
-
-For an explicit receiving-side gate plus prompt copy:
-
-```bash
-acb receive --latest
-acb receive --latest --brief
-```
-
-`acb receive` refuses stale or unsafe packets before copying text. It does not mark acknowledgement automatically; use `acb ack` after the receiving agent summarizes the packet.
-
-For a shorter first message:
-
-```bash
-acb brief
-```
-
-`acb brief` copies a compact takeover summary and points the receiving agent to the full packet when needed.
+For a shorter first message, run `acb brief`. It copies a compact takeover summary and points the receiving agent to the full packet when needed.
 
 ## Visual Demos
 
