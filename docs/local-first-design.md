@@ -55,6 +55,8 @@ cat ./agent-output.txt | acb save --summary "Prior agent output" --stdin
 
 Prompt rendering caps the body section so a very large log does not accidentally flood the next agent context. The local packet still keeps the original body.
 
+ACB derives safety hints when packets are read, exported, or shown in the dashboard. The current hints flag secret-like text, sensitive-looking paths such as `.env`, `.npmrc`, private-key files, and large bodies that will be truncated in prompts. These hints are not stored in the packet and do not redact content; they are local review aids before the user copies context into another agent.
+
 When the user is ready to move immediately, `save` can render the prompt in the same step:
 
 ```bash
@@ -230,7 +232,9 @@ acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It starts an explicit local HTTP server with an HTML dashboard, `/api/state`, `/api/copy-prompt`, `/api/create-demo`, `/api/verify-workflow`, and `/health`. It reads the packet store on each request, so refreshes show recent handoffs. The dashboard can render a brief takeover prompt, full takeover prompt, or MCP pull instruction and copy it to the system clipboard when the user clicks a button. If the current workspace is empty, the dashboard can create one explicit local demo packet after a click. It also detects likely target clients through read-only PATH, workspace, and common local config-location checks, then uses those signals to preselect the top `Next handoff` copy action and show a target-specific setup guide. The same guide is available from `acb setup [target]` for terminal and script users; without a target, it uses the same read-only local detection. The workflow verification endpoint runs a temporary ACB-side smoke test only; it does not launch or mutate the selected client. It does not sync data, silently inject context into model requests, or edit third-party client config.
+It starts an explicit local HTTP server with an HTML dashboard, `/api/state`, `/api/copy-prompt`, `/api/create-demo`, `/api/verify-workflow`, and `/health`. It reads the packet store on each request, so refreshes show recent handoffs. The dashboard can render a brief takeover prompt, full takeover prompt, or MCP pull instruction and copy it to the system clipboard when the user clicks a button. If the current workspace is empty, the dashboard can create one explicit local demo packet after a click. It also detects likely target clients through read-only PATH, workspace, and common local config-location checks, then uses those signals to preselect the top `Next handoff` copy action and show a target-specific setup guide. The same guide is available from `acb setup [target]` for terminal and script users; without a target, it uses the same read-only local detection. The workflow verification endpoint runs a temporary ACB-side smoke test only; it does not launch or mutate the selected client. It shows derived safety hints and a safety warning count for packet review. It does not sync data, silently inject context into model requests, or edit third-party client config.
+
+Dashboard packet summaries include a derived `safety` object. This is the first lightweight safety-panel step from the original ACB plan without adding gateway interception or automatic redaction.
 
 `acb list`, `acb timeline`, and `acb export` also default to the current workspace. Use `--all` when you intentionally want to inspect or export cross-workspace history.
 

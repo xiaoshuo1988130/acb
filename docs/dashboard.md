@@ -33,6 +33,7 @@ The HTML view is a three-pane local audit workspace:
 - An empty-state onboarding panel that can create a safe local demo packet, copy a real handoff command, or copy setup verification.
 - A top-level `Next handoff` strip that auto-selects the best detected target client and keeps the recommended copy action in the first viewport.
 - Packet detail tabs for overview, copyable commands, body preview, and Git snapshot.
+- Derived packet safety hints for secret-like content, sensitive-looking paths, and large context bodies.
 - A `Start here` takeover panel for copying a brief prompt, full prompt, or MCP pull instruction directly to the system clipboard.
 - Detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP clients.
 - A client setup guide with copyable recipe, MCP config, MCP verify, workflow verify, and first-prompt text for the selected target.
@@ -51,6 +52,8 @@ The dashboard is intentionally local and explicit:
 The only state-changing controls are explicit local actions: clipboard copy, demo packet creation, and temporary local workflow verification. Clicking `Create demo packet` writes one sample packet to the local ACB store for the selected workspace. Clicking `Copy Brief Prompt`, `Copy Full Prompt`, or `Copy MCP Pull Instruction` asks the local ACB process to render the selected packet and write that text to your system clipboard. Clicking `Run ACB-side Check` creates a temporary smoke-test store, verifies ACB recipe/handoff/brief/MCP/dashboard surfaces, and cleans the temporary artifacts. You still decide where to paste or configure the result.
 
 Target detection is read-only. ACB checks the current workspace, PATH, and a small set of common local client locations. The dashboard uses those signals to choose the initial `Next handoff` target, but you can still switch targets manually. It does not patch client settings, edit extension storage, or open private client databases.
+
+Safety hints are also read-only. They are derived from packet text and Git metadata when the dashboard renders; they do not redact, rewrite, or delete stored packet content.
 
 It still exposes local ACB metadata to anyone who can reach the server. The default host is `127.0.0.1`; avoid `--host 0.0.0.0` unless you are on a trusted network. In `--workspace` mode, the dashboard scopes packet data and workspace summaries to that workspace. Use `--all` only when you intentionally want to inspect every workspace in the local store.
 

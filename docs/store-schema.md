@@ -69,6 +69,8 @@ Required for valid imports:
 
 Optional fields may be `null` or absent in older exports. Import normalizes missing optional fields.
 
+Derived fields such as `safety`, `next_resume`, `next_brief`, and `next_mcp_read` are read-time output helpers. They are not stored in `packets.json`.
+
 ## Write Safety
 
 ACB writes stores with these safeguards:

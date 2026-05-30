@@ -73,6 +73,7 @@ Minor releases can add:
 - New dashboard endpoints.
 - New MCP tools.
 - New target client recipes.
+- New derived packet metadata such as safety hints.
 
 Minor releases should avoid:
 

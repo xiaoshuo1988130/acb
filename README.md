@@ -114,6 +114,8 @@ Each packet can include:
 - Lightweight Git snapshot with repo root, branch, short HEAD, and `git status --short`.
 - Optional bounded tracked diff when you explicitly pass `--diff`.
 
+ACB also derives safety hints when packets are read or displayed. These hints flag secret-like text, sensitive-looking paths such as `.env` or key files, and large bodies that will be truncated in prompts. They are review aids only; ACB does not silently redact or mutate your packet contents.
+
 Override the store for experiments:
 
 ```bash
@@ -295,7 +297,7 @@ acb dashboard --workspace .
 acb dashboard --all --limit 50 --port 8765
 ```
 
-It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a client setup guide with copyable recipe/config/verify commands and an ACB-side workflow check button. It does not silently inject prompt text or edit any client configuration.
+It serves a lightweight HTML dashboard, `/api/state`, and local-only takeover buttons. If the workspace is empty, the dashboard can create one explicit local demo packet so the first screen becomes inspectable immediately. The top `Next handoff` strip auto-selects the best detected target client and keeps the recommended copy action visible, while the packet detail `Start here` panel still offers brief, full, and MCP pull instruction copies. The side panel lists detected target clients such as OpenCode, Cline, Roo Code, Claude Desktop, Codex, and generic MCP, then shows a client setup guide with copyable recipe/config/verify commands and an ACB-side workflow check button. It also shows derived safety hints before you copy context into another agent. It does not silently inject prompt text or edit any client configuration.
 
 The default host is `127.0.0.1`. Keep it loopback-only unless you trust the network, because the dashboard includes local store metadata, workspace paths, and clipboard-copy controls. A `--workspace` dashboard only shows packets and workspace summaries for that workspace; use `--all` when you intentionally want a global view.
 

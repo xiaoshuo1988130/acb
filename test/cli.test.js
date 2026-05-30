@@ -413,6 +413,8 @@ test("save, latest, list, and prompt use local store", () => {
   assert.equal(packet.next_brief, `acb brief --id ${packet.id}`);
   assert.equal(packet.next_mcp_read, "read_handoff");
   assert.equal(packet.next_mcp_brief, "read_handoff_brief");
+  assert.equal(packet.safety.level, "ok");
+  assert.deepEqual(packet.safety.warnings, []);
 
   const status = run(["status", "--workspace", workspace], { env });
   assert.equal(status.status, 0);
@@ -537,6 +539,51 @@ test("save, latest, list, and prompt use local store", () => {
   const shownPrompt = run(["show", packet.id, "--prompt"], { env });
   assert.equal(shownPrompt.status, 0);
   assert.match(shownPrompt.stdout, /You are taking over work/);
+});
+
+test("packet summaries include derived safety hints", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acb-"));
+  const storePath = path.join(dir, "packets.json");
+  const workspace = path.join(dir, "workspace");
+  fs.mkdirSync(workspace);
+  const env = { ACB_STORE: storePath };
+
+  const body = [
+    "Review before sharing.",
+    "NPM_TOKEN=npm_fakeSafetyTokenForAcbTests123456",
+    "Touched files: .env.local and keys/demo-private.pem",
+  ].join("\n");
+  const saved = run([
+    "save",
+    "--from",
+    "codex",
+    "--workspace",
+    workspace,
+    "--summary",
+    "Safety audit sample",
+    "--stdin",
+    "--json",
+  ], { env, input: body });
+  assert.equal(saved.status, 0);
+  const rawPacket = JSON.parse(saved.stdout);
+  assert.equal(rawPacket.safety, undefined);
+
+  const latest = run(["latest", "--workspace", workspace, "--json"], { env });
+  assert.equal(latest.status, 0);
+  const packet = JSON.parse(latest.stdout);
+  assert.equal(packet.safety.level, "warn");
+  assert.ok(packet.safety.warnings.some((warning) => warning.id === "secret_like_content"));
+  assert.ok(packet.safety.warnings.some((warning) => warning.id === "sensitive_path"));
+
+  const shown = run(["show", packet.id], { env });
+  assert.equal(shown.status, 0);
+  assert.match(shown.stdout, /safety: warn/);
+  assert.match(shown.stdout, /possible secret-like content/);
+
+  const exported = run(["export", "--workspace", workspace], { env });
+  assert.equal(exported.status, 0);
+  assert.match(exported.stdout, /### Safety Hints/);
+  assert.match(exported.stdout, /sensitive-looking path/);
 });
 
 test("save reads handoff body from file", () => {
@@ -1212,6 +1259,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(html, /Next handoff/);
     assert.match(html, /Target Client/);
     assert.match(html, /Client setup/);
+    assert.match(html, /safety warnings/);
     assert.match(html, /Run ACB-side Check/);
     assert.match(html, /OpenCode/);
     assert.match(html, /Codex/);
@@ -1235,6 +1283,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.equal(state.shown_packets, 1);
     assert.equal(state.total_packets, 1);
     assert.equal(state.workspace_count, 1);
+    assert.equal(state.safety_warning_count, 0);
     assert.ok(state.targets.some((target) => target.id === "auto"));
     assert.ok(state.targets.some((target) => target.id === "opencode"));
     assert.ok(state.targets.some((target) => target.id === "codex"));
@@ -1245,6 +1294,7 @@ test("dashboard serves local state and explicit takeover prompt controls", async
     assert.match(state.target_guides.codex.workflow_verify_command, /acb verify workflow codex/);
     assert.deepEqual(state.workspaces.map((item) => item.workspace), [realWorkspace(workspace)]);
     assert.equal(state.latest_packet.summary, "Dashboard smoke");
+    assert.equal(state.latest_packet.safety.level, "ok");
     assert.match(state.latest_packet.next_brief, /^acb brief --id pkt_/);
     assert.doesNotMatch(JSON.stringify(state), /Other workspace packet/);
     assert.doesNotMatch(JSON.stringify(state), new RegExp(otherWorkspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

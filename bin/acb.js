@@ -29,6 +29,7 @@ const DEFAULT_LIMIT = 10;
 const PROMPT_BODY_LIMIT = 12000;
 const BRIEF_BODY_LIMIT = 1800;
 const DIFF_BODY_LIMIT = 20000;
+const SAFETY_LARGE_BODY_LIMIT = PROMPT_BODY_LIMIT;
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const LANGUAGE_VALUE_FLAGS = new Set(["--workspace", "--lang"]);
 
@@ -1401,6 +1402,7 @@ function buildDashboardState({ workspace = null, limit = DEFAULT_LIMIT } = {}) {
     workspace_count: new Set(scopedPackets.map((packet) => packet.workspace)).size,
     dirty_file_count: packets.reduce((sum, packet) => sum + (packet.git?.status?.length || 0), 0),
     body_chars: packets.reduce((sum, packet) => sum + (packet.body?.length || 0), 0),
+    safety_warning_count: packets.reduce((sum, packet) => sum + packetSafety(packet).warnings.length, 0),
     latest_packet: packets[0] ? dashboardPacketSummary(packets[0]) : null,
     packets: packets.map(dashboardPacketSummary),
     workspaces,
@@ -1560,6 +1562,7 @@ function dashboardLabels(lang) {
       workspaces: "工作区",
       dirtyFilesCaptured: "已记录改动文件",
       bodyCharsShown: "正文字符",
+      safetyWarnings: "安全提示",
       packets: "上下文包",
       searchPlaceholder: "搜索 summary、status、tags、notes",
       targetClient: "目标客户端",
@@ -1615,6 +1618,9 @@ function dashboardLabels(lang) {
       available: "可选",
       bestFit: "最佳匹配",
       startHere: "从这里开始",
+      safety: "安全",
+      noSafetyWarnings: "没有明显安全提示。",
+      safetyReview: "复制给下一个 Agent 前请检查这些提示。",
       moveContextInto: "把这个上下文交给",
       chooseTarget: "在右侧选择目标，然后复制推荐的接管文本。",
       copyMcpInstruction: "复制 MCP 拉取指令",
@@ -1648,6 +1654,7 @@ function dashboardLabels(lang) {
     workspaces: "workspaces",
     dirtyFilesCaptured: "dirty files captured",
     bodyCharsShown: "body chars shown",
+    safetyWarnings: "safety warnings",
     packets: "Packets",
     searchPlaceholder: "Search summary, status, tags, notes",
     targetClient: "Target Client",
@@ -1703,6 +1710,9 @@ function dashboardLabels(lang) {
     available: "available",
     bestFit: "Best Fit",
     startHere: "Start here",
+    safety: "safety",
+    noSafetyWarnings: "No obvious safety warnings.",
+    safetyReview: "Review these hints before copying context into another agent.",
     moveContextInto: "Move this context into",
     chooseTarget: "Choose a target on the right, then copy the recommended takeover text.",
     copyMcpInstruction: "Copy MCP Pull Instruction",
@@ -2064,6 +2074,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       <div class="stat"><strong>${state.workspace_count}</strong><span>${escapeHtml(labels.workspaces)}</span></div>
       <div class="stat"><strong>${state.dirty_file_count}</strong><span>${escapeHtml(labels.dirtyFilesCaptured)}</span></div>
       <div class="stat"><strong>${state.body_chars}</strong><span>${escapeHtml(labels.bodyCharsShown)}</span></div>
+      <div class="stat"><strong>${state.safety_warning_count}</strong><span>${escapeHtml(labels.safetyWarnings)}</span></div>
     </section>
     <section class="grid">
       <aside class="panel">
@@ -2165,10 +2176,13 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       el("packet-list").innerHTML = packets.map((packet) => {
         const tags = (packet.tags || []).slice(0, 3).map((tag) => '<span class="badge">' + escape(tag) + '</span>').join("");
         const dirty = packet.git_dirty_files ? '<span class="badge warn">' + packet.git_dirty_files + ' ' + escape(labels.dirty) + '</span>' : '<span class="badge good">' + escape(labels.clean) + '</span>';
+        const safety = packet.safety && packet.safety.warnings && packet.safety.warnings.length
+          ? '<span class="badge warn">' + packet.safety.warnings.length + ' ' + escape(labels.safety) + '</span>'
+          : '<span class="badge good">' + escape(labels.safety) + '</span>';
         return '<button class="packet-row ' + (packet.id === selectedId ? 'active' : '') + '" data-id="' + escape(packet.id) + '">' +
           '<div class="packet-title">' + escape(packetTitle(packet)) + '</div>' +
           '<div class="packet-sub">' + escape(packet.from) + ' · ' + escape(packet.created_at) + '</div>' +
-          '<div class="badge-row">' + dirty + tags + '</div>' +
+          '<div class="badge-row">' + dirty + safety + tags + '</div>' +
         '</button>';
       }).join("");
       for (const row of document.querySelectorAll(".packet-row")) {
@@ -2369,6 +2383,9 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
       const tags = packet.tags && packet.tags.length
         ? '<div class="badge-row">' + packet.tags.map((tag) => '<span class="badge">' + escape(tag) + '</span>').join("") + '</div>'
         : '<div class="empty">' + escape(labels.noTags) + '</div>';
+      const safetyWarnings = packet.safety && packet.safety.warnings && packet.safety.warnings.length
+        ? '<p>' + escape(labels.safetyReview) + '</p><ul>' + packet.safety.warnings.map((warning) => '<li><span>' + escape(warning.title + ": " + warning.detail) + '</span></li>').join("") + '</ul>'
+        : '<div class="empty">' + escape(labels.noSafetyWarnings) + '</div>';
       return '<div class="kv">' +
         '<div>from</div><div>' + escape(fmt(packet.from)) + '</div>' +
         '<div>workspace</div><div>' + escape(fmt(packet.workspace)) + '</div>' +
@@ -2376,7 +2393,7 @@ function renderDashboardHtml(state, { lang = "en" } = {}) {
         '<div>updated</div><div>' + escape(fmt(packet.updated_at)) + '</div>' +
         '<div>status</div><div>' + escape(fmt(packet.status)) + '</div>' +
         '<div>body chars</div><div>' + escape(fmt(packet.body_chars)) + '</div>' +
-        '</div><h3>Tags</h3>' + tags + '<h3 style="margin-top: 14px;">Notes</h3>' + notes;
+        '</div><h3>' + escape(labels.safety) + '</h3>' + safetyWarnings + '<h3 style="margin-top: 14px;">Tags</h3>' + tags + '<h3 style="margin-top: 14px;">Notes</h3>' + notes;
     }
 
     function renderWorkspaces() {
@@ -2716,6 +2733,12 @@ function renderMarkdownExport(packets, { workspace = null } = {}) {
     if (packet.updated_at) lines.push(`- updated_at: ${packet.updated_at}`);
     if (packet.status) lines.push(`- status: ${packet.status}`);
     if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
+    const safety = packetSafety(packet);
+    lines.push(`- safety: ${safety.level}`);
+    if (safety.warnings.length) {
+      lines.push("", "### Safety Hints");
+      for (const warning of safety.warnings) lines.push(`- ${warning.title}: ${warning.detail}`);
+    }
     if (packet.git) {
       lines.push("", "### Git", "", renderGitSnapshot(packet.git));
     }
@@ -2764,6 +2787,7 @@ function renderHtmlView(packets, { workspace = null, limit = DEFAULT_LIMIT } = {
   const workspaceCount = new Set(packets.map((packet) => packet.workspace)).size;
   const dirtyCount = packets.reduce((sum, packet) => sum + (packet.git?.status?.length || 0), 0);
   const bodyChars = packets.reduce((sum, packet) => sum + (packet.body?.length || 0), 0);
+  const safetyWarnings = packets.reduce((sum, packet) => sum + packetSafety(packet).warnings.length, 0);
   const packetCards = packets.length
     ? packets.map(renderHtmlPacketCard).join("\n")
     : `<section class="empty">No handoff packets matched this view.</section>`;
@@ -2878,6 +2902,7 @@ function renderHtmlView(packets, { workspace = null, limit = DEFAULT_LIMIT } = {
       <div class="stat"><strong>${workspaceCount}</strong><span>workspaces</span></div>
       <div class="stat"><strong>${dirtyCount}</strong><span>dirty files captured</span></div>
       <div class="stat"><strong>${bodyChars}</strong><span>context body chars</span></div>
+      <div class="stat"><strong>${safetyWarnings}</strong><span>safety warnings</span></div>
       <div class="stat"><strong>${limit}</strong><span>limit</span></div>
     </section>
     ${packetCards}
@@ -2891,6 +2916,13 @@ function renderHtmlPacketCard(packet) {
   const title = packet.summary || packet.status || packet.id;
   const tags = (packet.tags || []).map((tag) => `<span class="pill">${escapeHtml(tag)}</span>`).join("");
   const gitDirty = packet.git?.status?.length || 0;
+  const safety = packetSafety(packet);
+  const safetyHtml = safety.warnings.length
+    ? `<div class="commands">
+      <span class="pill warn">${safety.warnings.length} safety warning(s)</span>
+      <ul>${safety.warnings.map((warning) => `<li>${escapeHtml(`${warning.title}: ${warning.detail}`)}</li>`).join("")}</ul>
+    </div>`
+    : `<div class="commands"><span class="pill good">safety ok</span></div>`;
   const notes = packet.notes?.length
     ? `<ul>${packet.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>`
     : "";
@@ -2914,6 +2946,7 @@ function renderHtmlPacketCard(packet) {
       ${tags}
     </div>
     ${notes}
+    ${safetyHtml}
     ${git}
     ${body}
     <div class="commands">
@@ -2934,6 +2967,8 @@ function printTimelinePacket(packet) {
   if (packet.body) facts.push(`body:${packet.body.length}`);
   if (packet.notes?.length) facts.push(`notes:${packet.notes.length}`);
   if (packet.git?.status?.length) facts.push(`dirty:${packet.git.status.length}`);
+  const safety = packetSafety(packet);
+  if (safety.warnings.length) facts.push(`safety:${safety.warnings.length}`);
   if (packet.tags?.length) facts.push(`tags:${packet.tags.join(",")}`);
   console.log(`* ${packet.created_at}  ${packet.from}  ${packet.id}`);
   console.log(`  ${summary}`);
@@ -4771,6 +4806,7 @@ function packetSummary(packet) {
     tags: packet.tags || [],
     body_chars: packet.body?.length || 0,
     git_dirty_files: packet.git?.status?.length || 0,
+    safety: packetSafety(packet),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
@@ -4782,12 +4818,90 @@ function packetSummary(packet) {
 function packetWithNextSteps(packet) {
   return {
     ...packet,
+    safety: packetSafety(packet),
     next_resume: `acb resume --id ${packet.id}`,
     next_brief: `acb brief --id ${packet.id}`,
     next_show_prompt: `acb show ${packet.id} --prompt`,
     next_mcp_read: "read_handoff",
     next_mcp_brief: "read_handoff_brief",
   };
+}
+
+function packetSafety(packet) {
+  const warnings = [];
+  const textParts = [
+    packet.summary,
+    packet.status,
+    ...(packet.notes || []),
+    ...(packet.tags || []),
+    packet.body,
+    ...(packet.git?.status || []),
+  ].filter(Boolean);
+  const searchable = textParts.join("\n");
+  const sensitivePaths = findSensitivePathHints(packet);
+
+  if (looksSecretLike(searchable)) {
+    warnings.push({
+      id: "secret_like_content",
+      title: "possible secret-like content",
+      detail: "Packet text contains token, key, password, or private-key shaped content. Review before sharing outside your local workflow.",
+    });
+  }
+
+  if (sensitivePaths.length) {
+    warnings.push({
+      id: "sensitive_path",
+      title: "sensitive-looking path",
+      detail: `Found ${sensitivePaths.length} path hint(s), including ${sensitivePaths.slice(0, 3).join(", ")}.`,
+    });
+  }
+
+  if ((packet.body?.length || 0) > SAFETY_LARGE_BODY_LIMIT) {
+    warnings.push({
+      id: "large_body",
+      title: "large context body",
+      detail: `Body has ${packet.body.length} chars; prompts truncate body text at ${PROMPT_BODY_LIMIT} chars.`,
+    });
+  }
+
+  return {
+    level: warnings.length ? "warn" : "ok",
+    warnings,
+  };
+}
+
+function looksSecretLike(text) {
+  if (!text) return false;
+  const patterns = [
+    /\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|secret|password|passwd|private[_-]?key)\b\s*[:=]/i,
+    /\b(?:npm|gh[pousr]|sk|pk|rk)_[A-Za-z0-9_=-]{16,}\b/,
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  ];
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function findSensitivePathHints(packet) {
+  const values = [
+    packet.body,
+    ...(packet.notes || []),
+    ...(packet.git?.status || []),
+  ].filter(Boolean);
+  const matches = new Set();
+  const patterns = [
+    /(?:^|[/\\])\.env(?:\.[A-Za-z0-9_-]+)?\b/g,
+    /(?:^|[/\\])\.npmrc\b/g,
+    /(?:^|[/\\])\.netrc\b/g,
+    /(?:^|[/\\])id_rsa\b/g,
+    /(?:^|[/\\])[^/\s\\]+\.(?:pem|p8|key)\b/g,
+  ];
+  for (const value of values) {
+    for (const pattern of patterns) {
+      for (const match of String(value).matchAll(pattern)) {
+        matches.add(match[0].replace(/^[\\/]/, ""));
+      }
+    }
+  }
+  return [...matches];
 }
 
 function jsonRpcError(code, message) {
@@ -4911,6 +5025,12 @@ function printPacket(packet) {
     console.log(`git_branch: ${packet.git.branch || "unknown"}`);
     console.log(`git_head: ${packet.git.head || "unknown"}`);
     console.log(`git_dirty_files: ${packet.git.status?.length || 0}`);
+  }
+  const safety = packetSafety(packet);
+  console.log(`safety: ${safety.level}`);
+  if (safety.warnings.length) {
+    console.log("safety_warnings:");
+    for (const warning of safety.warnings) console.log(`- ${warning.title}: ${warning.detail}`);
   }
   if (packet.body) console.log(`body: ${packet.body.length} chars`);
   console.log(`next_resume: acb resume --id ${packet.id}`);

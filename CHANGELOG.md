@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0
+
+Packet safety hints.
+
+### Added
+
+- Added derived packet safety hints for secret-like content, sensitive-looking paths, and large context bodies.
+- Exposed safety hints in packet JSON summaries, dashboard state, static HTML viewer cards, Markdown exports, and human `show` output.
+- Added dashboard safety warning counts so local handoff packets are easier to audit before copying into another agent.
+
 ## 0.12.1
 
 Public docs cleanup.
