@@ -21,13 +21,19 @@ import {
   storePath,
   writeStore,
 } from "../lib/runtime.js";
+import {
+  PROMPT_BODY_LIMIT,
+  packetAcknowledgements,
+  packetAcknowledgementSummary,
+  renderBriefPrompt,
+  renderHandoffPrompt,
+  renderMcpTakeoverInstruction,
+} from "../lib/prompts.js";
 
 const PACKAGE_META = readPackageMeta();
 const VERSION = PACKAGE_META.version;
 const PACKAGE_NAME = PACKAGE_META.name;
 const DEFAULT_LIMIT = 10;
-const PROMPT_BODY_LIMIT = 12000;
-const BRIEF_BODY_LIMIT = 1800;
 const DIFF_BODY_LIMIT = 20000;
 const SAFETY_LARGE_BODY_LIMIT = PROMPT_BODY_LIMIT;
 const MCP_PROTOCOL_VERSION = "2025-06-18";
@@ -6107,116 +6113,6 @@ function jsonRpcError(code, message) {
   return error;
 }
 
-function renderHandoffPrompt(packet) {
-  const acknowledgement = packetAcknowledgementSummary(packet);
-  const lines = [
-    "You are taking over work from another local coding agent.",
-    "",
-    "Read this handoff context before acting. Do not assume hidden state beyond this packet.",
-    "",
-    "## Handoff Packet",
-    "",
-    `- id: ${packet.id}`,
-    `- from: ${packet.from}`,
-    `- created_at: ${packet.created_at}`,
-    `- workspace: ${packet.workspace}`,
-  ];
-  if (packet.updated_at) lines.push(`- updated_at: ${packet.updated_at}`);
-  if (packet.summary) lines.push(`- summary: ${packet.summary}`);
-  if (packet.status) lines.push(`- status: ${packet.status}`);
-  if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
-  lines.push(`- acknowledged: ${acknowledgement.acknowledged ? "yes" : "no"}`);
-  if (acknowledgement.latest) lines.push(`- latest_acknowledgement: ${acknowledgement.latest.by} at ${acknowledgement.latest.acknowledged_at}`);
-  if (packet.git) {
-    lines.push("", "## Git Snapshot", "", renderGitSnapshot(packet.git));
-  }
-  if (packet.notes?.length) {
-    lines.push("", "## Notes");
-    for (const note of packet.notes) lines.push(`- ${note}`);
-  }
-  if (packet.body) {
-    lines.push("", "## Context Body", "", truncatePromptBody(packet.body));
-  }
-  lines.push(
-    "",
-    "## Requested Behavior",
-    "",
-    "- Continue from this context instead of asking the user to repeat it.",
-    `- After you summarize this packet, record receipt with: acb ack ${packet.id} --by <agent>`,
-    "- If anything is ambiguous or risky, ask one concise question before making changes.",
-    "- Preserve user edits and verify before proposing any release or publish step.",
-    "",
-  );
-  return `${lines.join("\n")}\n`;
-}
-
-function renderBriefPrompt(packet) {
-  const acknowledgement = packetAcknowledgementSummary(packet);
-  const lines = [
-    "You are taking over local coding work from an ACB brief.",
-    "",
-    "Use this as a compact starting point. If you need the full packet, ask the user to run the full resume command below or call the MCP read_handoff tool.",
-    "",
-    "## Brief",
-    "",
-    `- id: ${packet.id}`,
-    `- from: ${packet.from}`,
-    `- created_at: ${packet.created_at}`,
-    `- workspace: ${packet.workspace}`,
-  ];
-  if (packet.updated_at) lines.push(`- updated_at: ${packet.updated_at}`);
-  if (packet.summary) lines.push(`- summary: ${packet.summary}`);
-  if (packet.status) lines.push(`- status: ${packet.status}`);
-  if (packet.tags?.length) lines.push(`- tags: ${packet.tags.join(", ")}`);
-  lines.push(`- acknowledged: ${acknowledgement.acknowledged ? "yes" : "no"}`);
-  if (acknowledgement.latest) lines.push(`- latest_acknowledgement: ${acknowledgement.latest.by} at ${acknowledgement.latest.acknowledged_at}`);
-  if (packet.git) {
-    lines.push(
-      `- git_branch: ${packet.git.branch || "unknown"}`,
-      `- git_head: ${packet.git.head || "unknown"}`,
-      `- git_dirty_files: ${packet.git.status?.length || 0}`,
-    );
-  }
-  if (packet.notes?.length) {
-    lines.push("", "## Notes");
-    for (const note of packet.notes.slice(0, 8)) lines.push(`- ${note}`);
-    if (packet.notes.length > 8) lines.push(`- ... ${packet.notes.length - 8} more note(s) omitted from brief`);
-  }
-  if (packet.body) {
-    lines.push("", "## Context Excerpt", "", truncateText(packet.body, BRIEF_BODY_LIMIT));
-  }
-  lines.push(
-    "",
-    "## Full Context Commands",
-    "",
-    `- Full prompt: acb resume --id ${packet.id}`,
-    `- Inspect packet: acb show ${packet.id}`,
-    "- MCP full read: read_handoff",
-    "",
-    "## Requested Behavior",
-    "",
-    "- Continue from this brief without assuming hidden state.",
-    `- After you summarize this packet, record receipt with: acb ack ${packet.id} --by <agent>`,
-    "- Inspect the workspace before editing files.",
-    "- Ask one concise question if the brief is insufficient.",
-    "",
-  );
-  return `${lines.join("\n")}\n`;
-}
-
-function renderMcpTakeoverInstruction(packet, target = null) {
-  const client = target && target.id !== "auto" ? ` in ${target.title}` : "";
-  return [
-    `Use acb${client} to read this handoff before acting.`,
-    "",
-    `Call the ACB MCP tool read_handoff with id: ${packet.id}`,
-    "",
-    "After loading it, summarize the packet you read and continue from that context.",
-    "Do not assume hidden state beyond the ACB packet.",
-    "",
-  ].join("\n");
-}
-
 function printPacket(packet) {
   const acknowledgement = packetAcknowledgementSummary(packet);
   console.log(`id: ${packet.id}`);
@@ -6301,28 +6197,6 @@ function createAcknowledgement({ by, note = null }) {
     acknowledged_at: stamp,
     by: String(by || "unknown").trim() || "unknown",
     note: typeof note === "string" && note.trim() ? note.trim() : null,
-  };
-}
-
-function packetAcknowledgements(packet) {
-  if (!Array.isArray(packet?.acknowledgements)) return [];
-  return packet.acknowledgements
-    .filter((ack) => ack && typeof ack.acknowledged_at === "string" && typeof ack.by === "string")
-    .map((ack) => ({
-      id: typeof ack.id === "string" && ack.id ? ack.id : `ack_${String(ack.acknowledged_at).replace(/[^0-9]/g, "").slice(0, 14) || "legacy"}`,
-      acknowledged_at: ack.acknowledged_at,
-      by: ack.by,
-      note: typeof ack.note === "string" && ack.note.trim() ? ack.note : null,
-    }));
-}
-
-function packetAcknowledgementSummary(packet) {
-  const acknowledgements = packetAcknowledgements(packet);
-  const latest = acknowledgements[acknowledgements.length - 1] || null;
-  return {
-    acknowledged: acknowledgements.length > 0,
-    count: acknowledgements.length,
-    latest,
   };
 }
 

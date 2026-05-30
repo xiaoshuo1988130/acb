@@ -1,0 +1,113 @@
+# Agent Instructions / Agent 指令补丁
+
+ACB 最适合的用法是：接收端 coding agent 在改文件前，先主动检查本地 handoff 是否可用。
+
+这份文档提供可复制的指令补丁，适合粘贴到 MCP 客户端的 custom instructions、system prompt、project rules 或 agent profile instructions 中。ACB 不会自动修改第三方客户端配置。
+
+## 通用 MCP 指令
+
+适用于任何可以调用 ACB MCP tools 的客户端：
+
+```text
+When starting work in a workspace, check whether the ACB MCP tools are available.
+
+If ACB tools are available:
+1. Call check_latest_handoff_ready for the current workspace before editing files.
+2. If the result is needs_refresh or needs_review, stop and tell the user the blocker. Do not continue from stale or unsafe handoff context.
+3. If the handoff is ready, call read_latest_handoff or read_handoff_brief.
+4. Summarize the packet id, workspace, summary, freshness, safety, and next action before making changes.
+5. After you have read and summarized the packet, call acknowledge_handoff with the packet id and your agent name.
+
+Do not assume hidden state beyond the ACB packet. If ACB is unavailable or no packet exists, say that clearly and continue only with the user's visible instructions.
+```
+
+## Cline 和 Roo Code
+
+把下面这段粘贴到你已经控制的 client instructions 或 rules 区域。不要让 ACB 修改 VS Code extension storage 或第三方客户端私有数据库。
+
+```text
+Before editing files in a new task, check whether the ACB MCP server is available.
+
+If available, call check_latest_handoff_ready for this workspace.
+
+- If status is needs_refresh, stop and ask the user to refresh the ACB handoff.
+- If status is needs_review, stop and summarize the safety or context blocker.
+- If status is ready or ready_with_notes, call read_latest_handoff or read_handoff_brief.
+
+Before making changes, summarize:
+- packet id
+- workspace
+- summary/status
+- freshness status
+- safety level and warnings
+- intended next action
+
+After reading the handoff, call acknowledge_handoff with the packet id and the agent name.
+
+Do not edit files based on stale ACB context. Do not assume ACB silently injected context; only use what you explicitly read from ACB.
+```
+
+## Claude Desktop
+
+Claude Desktop 可以通过本地 MCP server 使用 ACB。添加 `acb` server 配置后，把下面这段粘贴到 project 或 chat instructions：
+
+```text
+At the beginning of this project chat, use the ACB MCP server if it is available.
+
+First call check_latest_handoff_ready for the current workspace.
+If the handoff is not ready, explain the blocker and ask whether the user wants to refresh it.
+If the handoff is ready, call read_latest_handoff.
+
+Before editing or proposing code changes, summarize the ACB packet id, workspace, summary, freshness, safety status, and any notes.
+
+After reading the packet, call acknowledge_handoff with the packet id and your client name.
+```
+
+## OpenCode
+
+OpenCode 可以走复制粘贴 handoff，也可以走 MCP pull。使用 MCP 时，给接收端 agent 这段指令：
+
+```text
+Use ACB before continuing this workspace.
+
+1. Call check_latest_handoff_ready.
+2. If the result is not ready, stop and explain the blocker.
+3. If ready, call read_latest_handoff.
+4. Summarize the handoff packet before editing files.
+5. Call acknowledge_handoff with the packet id after reading.
+
+Preserve user edits and do not publish, release, or push unless the user explicitly asks.
+```
+
+## Codex 或脚本客户端
+
+如果接收环境不能直接调用 MCP tools，可以用 CLI gate：
+
+```bash
+acb receive --latest
+```
+
+更短的接手消息：
+
+```bash
+acb receive --latest --brief
+```
+
+脚本读取：
+
+```bash
+acb ready --latest --json
+acb latest --json
+```
+
+## 为什么需要这段指令
+
+没有 instructions 时，MCP 工具可能只是“挂着”：客户端知道工具存在，但模型不知道什么时候应该调用。
+
+ACB 当前推荐的安全模式是：
+
+```text
+显式配置 -> readiness 检查 -> 显式读取 -> 复述摘要 -> acknowledgement
+```
+
+这样可以降低摩擦，同时避免隐藏 prompt 注入、自动修改客户端配置或后台 gateway。

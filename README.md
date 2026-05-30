@@ -209,6 +209,8 @@ Use acb to read the latest handoff for this workspace, then continue from it.
 
 For safer receiving agents, ask the client to check readiness after reading and stop if ACB reports `needs_refresh` or `needs_review`.
 
+For copyable client/system prompt patches that make receiving agents check ACB before editing, see [Agent instructions](docs/agent-instructions.md).
+
 The MCP server exposes:
 
 - `get_workspace_status`
@@ -275,6 +277,7 @@ This verifies the local recipe, handoff packet, brief, full resume prompt, MCP s
 - [Terminal demo transcript](docs/examples/terminal-demo.md)
 - [SDK and LangChain handoff](docs/examples/sdk-handoff.md)
 - [MCP client recipes](docs/recipes/mcp-clients.md)
+- [Agent instructions](docs/agent-instructions.md)
 - [FAQ](docs/faq.md)
 - [Brief mode](docs/brief.md)
 - [Dashboard](docs/dashboard.md)

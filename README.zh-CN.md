@@ -214,6 +214,8 @@ Use acb to read the latest handoff for this workspace, then continue from it.
 
 更稳妥的接收端流程是：读取 handoff 后先检查 readiness；如果 ACB 返回 `needs_refresh` 或 `needs_review`，就先停下并请用户刷新或检查。
 
+如果希望接收端 Agent 在新 session 里主动先查 ACB，可以复制 [Agent 指令补丁](docs/zh-CN/agent-instructions.md)。
+
 MCP server 暴露这些工具：
 
 - `get_workspace_status`
@@ -315,5 +317,6 @@ acb store backup --out ./acb-store.backup.json
 
 更短的中文上手说明见 [docs/zh-CN/quickstart.md](docs/zh-CN/quickstart.md)。
 常见问题见 [docs/zh-CN/faq.md](docs/zh-CN/faq.md)。
+Agent 指令补丁见 [docs/zh-CN/agent-instructions.md](docs/zh-CN/agent-instructions.md)。
 英文首次运行完整路径见 [docs/first-run.md](docs/first-run.md)。
 CLI 输出稳定性说明见 [docs/cli-contract.md](docs/cli-contract.md)，store schema 见 [docs/store-schema.md](docs/store-schema.md)。

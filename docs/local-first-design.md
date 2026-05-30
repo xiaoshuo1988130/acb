@@ -321,6 +321,8 @@ Initial tools:
 
 This keeps both export and ingestion explicit. An upstream agent must call `save_handoff`; a downstream agent must call a read tool. ACB does not silently inject context into the model request.
 
+MCP tools still need agent-side instructions to be useful at session start. Copyable client instruction patches live in [agent-instructions.md](agent-instructions.md); they tell receiving agents to check readiness, read the packet, summarize it, and acknowledge it before editing.
+
 Example MCP server config shape:
 
 Generate it:

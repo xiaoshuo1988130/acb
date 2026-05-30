@@ -1,6 +1,6 @@
 # MCP Client Recipes
 
-ACB is MCP-first, but it does not assume one client owns your workflow. The safest rule is:
+ACB is explicit-first, with MCP as a first-class pull mode. It does not assume one client owns your workflow. The safest rule is:
 
 1. Generate a local stdio config with ACB.
 2. Verify it locally.
@@ -47,6 +47,8 @@ acb dashboard --workspace .
 ```
 
 Use the dashboard when you want copy buttons for the setup checklist, recipe/config/verify commands, or a click-driven ACB-side workflow check.
+
+For copyable client/system prompt patches that teach receiving agents to check ACB before editing, see [../agent-instructions.md](../agent-instructions.md).
 
 Before a release or larger recipe change, run the whole ACB-side matrix:
 

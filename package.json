@@ -19,7 +19,7 @@
     "access": "public"
   },
   "scripts": {
-    "lint": "node --check bin/acb.js && node --check lib/runtime.js",
+    "lint": "node --check bin/acb.js && node --check lib/runtime.js && node --check lib/prompts.js",
     "test": "node --test",
     "verify": "npm run lint && npm test"
   },
