@@ -10,16 +10,16 @@ AgentContextBus 是一个 local-first 的编码 Agent 交接层。当前工具�
 
 ## 它给你什么
 
-> **保存交接**
+> **保存交接**<br>
 > `acb handoff --git` 记录 summary、workspace、Git 快照、watch 文件和可选 diff。
 
-> **带走终端失败现场**
+> **带走终端失败现场**<br>
 > `acb panic -- npm test` 保存命令、退出码、stdout、stderr、耗时和 repo 状态。
 
-> **让 Agent 主动拉取**
+> **让 Agent 主动拉取**<br>
 > MCP 客户端可以调用 `check_latest_handoff_ready`，读取 packet，复述摘要，并确认接收。
 
-> **保持可检查**
+> **保持可检查**<br>
 > `acb dashboard` 本地查看 packet、安全提示、freshness、ack 和客户端接入路径。
 
 ## 从这里开始

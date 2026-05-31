@@ -10,16 +10,16 @@ Use it when switching between Codex, OpenCode, Cline, Roo Code, Claude Desktop, 
 
 ## What You Get
 
-> **Save the handoff**
+> **Save the handoff**<br>
 > `acb handoff --git` captures summary, workspace, Git snapshot, watched files, and optional diff.
 
-> **Carry terminal failures**
+> **Carry terminal failures**<br>
 > `acb panic -- npm test` preserves the command, exit code, stdout, stderr, duration, and repo state.
 
-> **Let agents pull context**
+> **Let agents pull context**<br>
 > MCP clients can call `check_latest_handoff_ready`, read the packet, summarize it, and acknowledge receipt.
 
-> **Keep it inspectable**
+> **Keep it inspectable**<br>
 > `acb dashboard` shows packets, safety hints, freshness, acknowledgements, and client setup locally.
 
 ## Start Here
