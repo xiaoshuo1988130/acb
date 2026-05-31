@@ -10,43 +10,45 @@ Use it when switching between Codex, OpenCode, Cline, Roo Code, Claude Desktop, 
 
 ## What You Get
 
-<table>
-<tr>
-<td width="25%"><strong>Save the handoff</strong><br><code>acb handoff --git</code><br>Capture summary, workspace, Git snapshot, watched files, and optional diff.</td>
-<td width="25%"><strong>Carry terminal failures</strong><br><code>acb panic -- npm test</code><br>Preserve the command, exit code, stdout, stderr, duration, and repo state.</td>
-<td width="25%"><strong>Let agents pull context</strong><br><code>check_latest_handoff_ready</code><br>MCP clients can check readiness, read the packet, and acknowledge receipt.</td>
-<td width="25%"><strong>Keep it inspectable</strong><br><code>acb dashboard</code><br>Review packets, safety hints, freshness, acknowledgements, and client setup locally.</td>
-</tr>
-</table>
+> **Save the handoff**
+> `acb handoff --git` captures summary, workspace, Git snapshot, watched files, and optional diff.
+
+> **Carry terminal failures**
+> `acb panic -- npm test` preserves the command, exit code, stdout, stderr, duration, and repo state.
+
+> **Let agents pull context**
+> MCP clients can call `check_latest_handoff_ready`, read the packet, summarize it, and acknowledge receipt.
+
+> **Keep it inspectable**
+> `acb dashboard` shows packets, safety hints, freshness, acknowledgements, and client setup locally.
 
 ## Start Here
 
-<table>
-<tr>
-<th width="33%">Fast smoke test</th>
-<th width="33%">Visual demo</th>
-<th width="33%">Daily CLI</th>
-</tr>
-<tr>
-<td>
-<pre><code>npx @agentcontextbus/cli@latest verify first-run</code></pre>
-Uses a temporary local store. Nothing is written to your real ACB store unless you set <code>ACB_STORE</code>.
+### Fast smoke test
 
-</td>
-<td>
-<pre><code>npx @agentcontextbus/cli@latest demo
-npx @agentcontextbus/cli@latest dashboard --workspace .</code></pre>
-Creates a demo packet and opens the local dashboard. Try <code>Save</code>, <code>Safety</code>, <code>Verify</code>, and <code>Copy</code> in the first viewport.
+```bash
+npx @agentcontextbus/cli@latest verify first-run
+```
 
-</td>
-<td>
-<pre><code>npm install -g @agentcontextbus/cli
-acb quickstart --check</code></pre>
-Installs the short <code>acb</code> command and prints the next commands for your workspace.
+Uses a temporary local store. Nothing is written to your real ACB store unless you set `ACB_STORE`.
 
-</td>
-</tr>
-</table>
+### Visual demo
+
+```bash
+npx @agentcontextbus/cli@latest demo
+npx @agentcontextbus/cli@latest dashboard --workspace .
+```
+
+Creates a demo packet and opens the local dashboard. Try `Save`, `Safety`, `Verify`, and `Copy` in the first viewport.
+
+### Daily CLI
+
+```bash
+npm install -g @agentcontextbus/cli
+acb quickstart --check
+```
+
+Installs the short `acb` command and prints the next commands for your workspace.
 
 <details>
 <summary>Package name note</summary>
@@ -85,49 +87,55 @@ acb verify first-run
 
 ## Trust Boundary
 
-<table>
-<tr>
-<td width="50%"><strong>What ACB does</strong><br>Saves local packets, renders copyable prompts, exposes explicit MCP tools, checks freshness and safety hints, and records acknowledgements.</td>
-<td width="50%"><strong>What ACB does not do</strong><br>No hidden prompt injection, no traffic interception, no cloud sync, and no silent client-private-storage edits.</td>
-</tr>
-</table>
+> **What ACB does:** saves local packets, renders copyable prompts, exposes explicit MCP tools, checks freshness and safety hints, and records acknowledgements.
+
+> **What ACB does not do:** no hidden prompt injection, no traffic interception, no cloud sync, and no silent client-private-storage edits.
 
 Every save, read, recover, copy, and acknowledgement is an explicit local action.
 
 ## 60 Second Flow
 
-<table>
-<tr>
-<th>Step</th>
-<th>Command</th>
-<th>Result</th>
-</tr>
-<tr>
-<td>1. Save context</td>
-<td><code>acb handoff --from codex --summary "Ready for OpenCode to continue" --git</code></td>
-<td>Creates a local packet and copies a handoff prompt.</td>
-</tr>
-<tr>
-<td>2. Capture a failure</td>
-<td><code>acb panic -- npm test</code></td>
-<td>Stores the terminal command, exit code, stdout, stderr, duration, and optional Git state.</td>
-</tr>
-<tr>
-<td>3. Receive</td>
-<td><code>acb receive --latest</code><br><code>acb receive --latest --brief</code></td>
-<td>Checks readiness before copying a full or brief takeover prompt.</td>
-</tr>
-<tr>
-<td>4. Close the loop</td>
-<td><code>acb ack --latest --by opencode --note "Read packet and continuing from it."</code></td>
-<td>Records an explicit acknowledgement visible in CLI, JSON, MCP, and dashboard views.</td>
-</tr>
-<tr>
-<td>5. Check freshness</td>
-<td><code>acb freshness --latest</code><br><code>acb ready --latest</code></td>
-<td>Detects stale packets and summarizes freshness, safety, acknowledgement, and context-body signals.</td>
-</tr>
-</table>
+1. Save context:
+
+   ```bash
+   acb handoff --from codex --summary "Ready for OpenCode to continue" --git
+   ```
+
+   Creates a local packet and copies a handoff prompt.
+
+2. Capture a failing terminal moment:
+
+   ```bash
+   acb panic -- npm test
+   ```
+
+   Stores the command, exit code, stdout, stderr, duration, and optional Git state.
+
+3. Receive through a readiness gate:
+
+   ```bash
+   acb receive --latest
+   acb receive --latest --brief
+   ```
+
+   Checks freshness and safety before copying a full or brief takeover prompt.
+
+4. Close the loop:
+
+   ```bash
+   acb ack --latest --by opencode --note "Read packet and continuing from it."
+   ```
+
+   Records an explicit acknowledgement visible in CLI, JSON, MCP, and dashboard views.
+
+5. Check an older packet:
+
+   ```bash
+   acb freshness --latest
+   acb ready --latest
+   ```
+
+   Summarizes freshness, safety, acknowledgement, and context-body signals.
 
 For non-Git or ignored-but-important files, opt in explicitly with watched paths:
 

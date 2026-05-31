@@ -10,43 +10,45 @@ AgentContextBus 是一个 local-first 的编码 Agent 交接层。当前工具�
 
 ## 它给你什么
 
-<table>
-<tr>
-<td width="25%"><strong>保存交接</strong><br><code>acb handoff --git</code><br>记录 summary、workspace、Git 快照、watch 文件和可选 diff。</td>
-<td width="25%"><strong>带走终端失败现场</strong><br><code>acb panic -- npm test</code><br>保存命令、退出码、stdout、stderr、耗时和 repo 状态。</td>
-<td width="25%"><strong>让 Agent 主动拉取</strong><br><code>check_latest_handoff_ready</code><br>MCP 客户端可以检查 readiness、读取 packet，并确认接收。</td>
-<td width="25%"><strong>保持可检查</strong><br><code>acb dashboard</code><br>本地查看 packet、安全提示、freshness、ack 和客户端接入路径。</td>
-</tr>
-</table>
+> **保存交接**
+> `acb handoff --git` 记录 summary、workspace、Git 快照、watch 文件和可选 diff。
+
+> **带走终端失败现场**
+> `acb panic -- npm test` 保存命令、退出码、stdout、stderr、耗时和 repo 状态。
+
+> **让 Agent 主动拉取**
+> MCP 客户端可以调用 `check_latest_handoff_ready`，读取 packet，复述摘要，并确认接收。
+
+> **保持可检查**
+> `acb dashboard` 本地查看 packet、安全提示、freshness、ack 和客户端接入路径。
 
 ## 从这里开始
 
-<table>
-<tr>
-<th width="33%">最快 smoke test</th>
-<th width="33%">可视化 demo</th>
-<th width="33%">日常 CLI</th>
-</tr>
-<tr>
-<td>
-<pre><code>npx @agentcontextbus/cli@latest verify first-run --lang zh-CN</code></pre>
-使用临时本地 store。除非你自己设置 <code>ACB_STORE</code>，否则不会写入真实 ACB store。
+### 最快 smoke test
 
-</td>
-<td>
-<pre><code>npx @agentcontextbus/cli@latest demo --lang zh-CN
-npx @agentcontextbus/cli@latest dashboard --workspace . --lang zh-CN</code></pre>
-创建一条 demo packet，并打开本地 dashboard。进入首屏后，先试 <code>保存上下文</code>、<code>检查安全</code>、<code>验证流程</code>、<code>复制交接</code>。
+```bash
+npx @agentcontextbus/cli@latest verify first-run --lang zh-CN
+```
 
-</td>
-<td>
-<pre><code>npm install -g @agentcontextbus/cli
-acb quickstart --check --lang zh-CN</code></pre>
-安装短命令 <code>acb</code>，并打印适合当前 workspace 的下一步命令。
+使用临时本地 store。除非你自己设置 `ACB_STORE`，否则不会写入真实 ACB store。
 
-</td>
-</tr>
-</table>
+### 可视化 demo
+
+```bash
+npx @agentcontextbus/cli@latest demo --lang zh-CN
+npx @agentcontextbus/cli@latest dashboard --workspace . --lang zh-CN
+```
+
+创建一条 demo packet，并打开本地 dashboard。进入首屏后，先试 `保存上下文`、`检查安全`、`验证流程`、`复制交接`。
+
+### 日常 CLI
+
+```bash
+npm install -g @agentcontextbus/cli
+acb quickstart --check --lang zh-CN
+```
+
+安装短命令 `acb`，并打印适合当前 workspace 的下一步命令。
 
 <details>
 <summary>包名说明</summary>
@@ -97,49 +99,55 @@ acb verify first-run --lang zh-CN
 
 ## 信任边界
 
-<table>
-<tr>
-<td width="50%"><strong>ACB 会做什么</strong><br>保存本地 packet、生成可复制提示词、暴露显式 MCP 工具、检查 freshness 和 safety hints，并记录 acknowledgement。</td>
-<td width="50%"><strong>ACB 不会做什么</strong><br>不隐藏注入 prompt、不拦截流量、不同步到云端、不静默修改客户端私有存储。</td>
-</tr>
-</table>
+> **ACB 会做什么：** 保存本地 packet、生成可复制提示词、暴露显式 MCP 工具、检查 freshness 和 safety hints，并记录 acknowledgement。
+
+> **ACB 不会做什么：** 不隐藏注入 prompt、不拦截流量、不同步到云端、不静默修改客户端私有存储。
 
 每一次保存、读取、恢复、复制和确认接收，都是显式本地动作。
 
 ## 60 秒流程
 
-<table>
-<tr>
-<th>步骤</th>
-<th>命令</th>
-<th>结果</th>
-</tr>
-<tr>
-<td>1. 保存上下文</td>
-<td><code>acb handoff --from codex --summary "Ready for OpenCode to continue" --git</code></td>
-<td>创建本地 packet，并复制交接提示词。</td>
-</tr>
-<tr>
-<td>2. 捕获失败现场</td>
-<td><code>acb panic -- npm test</code></td>
-<td>保存终端命令、退出码、stdout、stderr、耗时和可选 Git 状态。</td>
-</tr>
-<tr>
-<td>3. 接收</td>
-<td><code>acb receive --latest</code><br><code>acb receive --latest --brief</code></td>
-<td>复制前先检查 readiness，然后复制完整或精简接手提示词。</td>
-</tr>
-<tr>
-<td>4. 闭环确认</td>
-<td><code>acb ack --latest --by opencode --note "已读取 packet，并会从这个上下文继续。"</code></td>
-<td>在 CLI、JSON、MCP 和 dashboard 中记录显式接收确认。</td>
-</tr>
-<tr>
-<td>5. 检查新鲜度</td>
-<td><code>acb freshness --latest</code><br><code>acb ready --latest</code></td>
-<td>发现过期 packet，并汇总 freshness、safety、ack 和上下文正文信号。</td>
-</tr>
-</table>
+1. 保存上下文：
+
+   ```bash
+   acb handoff --from codex --summary "Ready for OpenCode to continue" --git
+   ```
+
+   创建本地 packet，并复制交接提示词。
+
+2. 捕获失败现场：
+
+   ```bash
+   acb panic -- npm test
+   ```
+
+   保存终端命令、退出码、stdout、stderr、耗时和可选 Git 状态。
+
+3. 通过 readiness gate 接收：
+
+   ```bash
+   acb receive --latest
+   acb receive --latest --brief
+   ```
+
+   复制前先检查 freshness 和 safety，然后复制完整或精简接手提示词。
+
+4. 闭环确认：
+
+   ```bash
+   acb ack --latest --by opencode --note "已读取 packet，并会从这个上下文继续。"
+   ```
+
+   在 CLI、JSON、MCP 和 dashboard 中记录显式接收确认。
+
+5. 检查旧 packet：
+
+   ```bash
+   acb freshness --latest
+   acb ready --latest
+   ```
+
+   汇总 freshness、safety、ack 和上下文正文信号。
 
 如果有非 Git 文件、被 ignore 但确实影响交接的关键文件，可以显式 watch：
 
